@@ -63,4 +63,9 @@ export const api = {
       return request('/analyses', { method: 'POST', body: JSON.stringify(body) });
     },
   },
+  stats: {
+    get(): Promise<{ total: number; saved?: number; applied?: number; interview?: number; offer?: number; rejected?: number; ghosted?: number }> {
+      return request('/applications/stats');
+    },
+  },
 };

@@ -1,4 +1,5 @@
 import { Link, useRouter } from '@tanstack/react-router';
+import { useEffect, useState } from 'react';
 import {
   Sidebar,
   SidebarContent,
@@ -13,15 +14,23 @@ import {
 } from '@/components/ui/sidebar';
 import { BriefcaseIcon, SettingsIcon, LogOutIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
+import { api } from '@/lib/api';
 
 const navItems = [
   { to: '/', label: 'Candidatures', icon: BriefcaseIcon },
   { to: '/settings', label: 'Paramètres', icon: SettingsIcon },
 ];
 
+type Stats = { total: number; applied?: number; interview?: number; offer?: number };
+
 export function AppSidebar() {
   const router = useRouter();
   const pathname = router.state.location.pathname;
+  const [stats, setStats] = useState<Stats>({ total: 0 });
+
+  useEffect(() => {
+    api.stats.get().then(setStats).catch(() => {});
+  }, []);
 
   return (
     <Sidebar>
@@ -58,14 +67,14 @@ export function AppSidebar() {
 
         <SidebarGroup>
           <SidebarGroupContent>
-            <div className="px-2 py-2 flex flex-col gap-2">
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2">
+            <div className="px-2 py-2 flex flex-col gap-1">
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider px-2 mb-1">
                 Résumé
               </p>
-              <StatRow label="Total" value={0} />
-              <StatRow label="Postulées" value={0} variant="blue" />
-              <StatRow label="Entretiens" value={0} variant="purple" />
-              <StatRow label="Offres" value={0} variant="green" />
+              <StatRow label="Total" value={stats.total} />
+              <StatRow label="Postulées" value={stats.applied ?? 0} variant="blue" />
+              <StatRow label="Entretiens" value={stats.interview ?? 0} variant="purple" />
+              <StatRow label="Offres" value={stats.offer ?? 0} variant="green" />
             </div>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -75,13 +84,10 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <button
-                onClick={() => { window.location.href = '/api/auth/signout'; }}
-                className="w-full"
-              >
+              <a href="/api/auth/signout">
                 <LogOutIcon className="h-4 w-4" />
                 <span>Déconnexion</span>
-              </button>
+              </a>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>
@@ -101,7 +107,7 @@ function StatRow({ label, value, variant = 'default' }: { label: string; value: 
   };
 
   return (
-    <div className="flex items-center justify-between px-2 py-1 rounded-md hover:bg-muted/50">
+    <div className="flex items-center justify-between px-2 py-1 rounded-md">
       <span className="text-sm text-muted-foreground">{label}</span>
       <Badge variant="secondary" className={variantClass[variant]}>
         {value}
