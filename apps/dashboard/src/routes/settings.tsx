@@ -1,6 +1,8 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { CvManager } from '@/components/CvManager';
+import { NotificationSettings } from '@/components/NotificationSettings';
+import { AccountSettings } from '@/components/AccountSettings';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -20,10 +22,10 @@ function SettingsPage() {
           <CvManager />
         </TabsContent>
         <TabsContent value="notifications" className="mt-4">
-          <p className="text-sm text-muted-foreground">Notifications — à venir.</p>
+          <NotificationSettings />
         </TabsContent>
         <TabsContent value="account" className="mt-4">
-          <p className="text-sm text-muted-foreground">Gestion du compte — à venir.</p>
+          <AccountSettings />
         </TabsContent>
       </Tabs>
     </div>
