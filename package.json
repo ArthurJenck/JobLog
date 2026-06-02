@@ -1,0 +1,12 @@
+{
+  "name": "joblog",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev:dashboard": "pnpm --filter dashboard dev",
+    "dev:extension": "pnpm --filter extension dev",
+    "build:dashboard": "pnpm --filter dashboard build",
+    "build:extension": "pnpm --filter extension build"
+  },
+  "packageManager": "pnpm@10.31.0"
+}
