@@ -2,29 +2,49 @@ import { useEffect, useState } from 'react';
 
 const API_BASE = import.meta.env.VITE_API_URL ?? 'https://joblog.arthurjenck.com';
 
+interface RecentApp {
+  _id: string;
+  status: string;
+  jobPosting?: { title: string; company: string } | null;
+}
+
 export default function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean | null>(null);
+  const [authToken, setAuthToken] = useState<string | null | undefined>(undefined);
+  const [recent, setRecent] = useState<RecentApp[]>([]);
 
   useEffect(() => {
     browser.storage.local.get('auth_token').then(({ auth_token }) => {
-      setIsLoggedIn(!!auth_token);
+      setAuthToken((auth_token as string) ?? null);
     });
   }, []);
 
-  if (isLoggedIn === null) {
+  useEffect(() => {
+    if (!authToken) return;
+    fetch(`${API_BASE}/api/applications?limit=5`, {
+      headers: { Authorization: `Bearer ${authToken}` },
+      credentials: 'include',
+    })
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => data?.data && setRecent(data.data))
+      .catch(() => {});
+  }, [authToken]);
+
+  if (authToken === undefined) {
     return (
-      <div className="popup-container loading">
+      <div className="popup loading">
         <div className="spinner" />
       </div>
     );
   }
 
-  if (!isLoggedIn) {
+  if (!authToken) {
     return (
-      <div className="popup-container">
-        <div className="logo">JL</div>
-        <h1>JobLog</h1>
-        <p>Connecte-toi pour sauvegarder des offres.</p>
+      <div className="popup">
+        <div className="header">
+          <div className="logo">JL</div>
+          <span className="title">JobLog</span>
+        </div>
+        <p className="hint">Connecte-toi pour sauvegarder des offres.</p>
         <a href={`${API_BASE}/login`} target="_blank" rel="noreferrer" className="btn-primary">
           Se connecter
         </a>
@@ -33,19 +53,59 @@ export default function App() {
   }
 
   return (
-    <div className="popup-container">
-      <div className="popup-header">
+    <div className="popup">
+      <div className="header">
         <div className="logo">JL</div>
-        <span>JobLog</span>
-        <a href={`${API_BASE}`} target="_blank" rel="noreferrer" className="btn-icon" title="Ouvrir le dashboard">
+        <span className="title">JobLog</span>
+        <a
+          href={`${API_BASE}`}
+          target="_blank"
+          rel="noreferrer"
+          className="icon-link"
+          title="Ouvrir le dashboard"
+        >
           ↗
         </a>
       </div>
-      <div className="popup-body">
-        <p className="hint">Sur une offre supportée, un bouton apparaît sur la page.</p>
-        <a href={`${API_BASE}?add=manual`} target="_blank" rel="noreferrer" className="btn-secondary">
-          Ajouter manuellement
+
+      {recent.length > 0 && (
+        <div className="recent">
+          <p className="section-label">Récentes</p>
+          {recent.map((app) => (
+            <a
+              key={app._id}
+              href={`${API_BASE}`}
+              target="_blank"
+              rel="noreferrer"
+              className="recent-item"
+            >
+              <span className="recent-title">{app.jobPosting?.title ?? '—'}</span>
+              <span className="recent-company">{app.jobPosting?.company ?? '—'}</span>
+              <span className={`status-dot status-${app.status}`} />
+            </a>
+          ))}
+        </div>
+      )}
+
+      <div className="actions">
+        <p className="hint">Sur un site supporté, un bouton apparaît automatiquement.</p>
+        <a
+          href={`${API_BASE}?add=1`}
+          target="_blank"
+          rel="noreferrer"
+          className="btn-secondary"
+        >
+          + Ajouter manuellement
         </a>
+        <button
+          className="btn-ghost"
+          onClick={async () => {
+            await browser.storage.local.remove('auth_token');
+            setAuthToken(null);
+          }}
+        >
+          Déconnexion
+        </button>
       </div>
     </div>
   );
