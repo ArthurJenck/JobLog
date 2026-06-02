@@ -1,4 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { CvManager } from '@/components/CvManager';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -6,9 +8,24 @@ export const Route = createFileRoute('/settings')({
 
 function SettingsPage() {
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <h1 className="text-2xl font-semibold">Paramètres</h1>
-      <p className="text-muted-foreground">Paramètres en cours de construction…</p>
+    <div className="flex flex-col gap-6 p-6">
+      <h1 className="text-xl font-semibold">Paramètres</h1>
+      <Tabs defaultValue="cvs" className="w-full">
+        <TabsList>
+          <TabsTrigger value="cvs">CVs</TabsTrigger>
+          <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          <TabsTrigger value="account">Compte</TabsTrigger>
+        </TabsList>
+        <TabsContent value="cvs" className="mt-4">
+          <CvManager />
+        </TabsContent>
+        <TabsContent value="notifications" className="mt-4">
+          <p className="text-sm text-muted-foreground">Notifications — à venir.</p>
+        </TabsContent>
+        <TabsContent value="account" className="mt-4">
+          <p className="text-sm text-muted-foreground">Gestion du compte — à venir.</p>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 }

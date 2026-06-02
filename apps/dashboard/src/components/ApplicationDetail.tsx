@@ -11,6 +11,7 @@ import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from './StatusBadge';
 import { SourceBadge } from './SourceBadge';
 import { EventTimeline } from './EventTimeline';
+import { AnalyzePanel } from './AnalyzePanel';
 import { api } from '@/lib/api';
 import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationWithJob, type EventType, type Cv } from '@joblog/shared';
 import { ExternalLinkIcon, BuildingIcon } from 'lucide-react';
@@ -147,6 +148,13 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 ))}
               </SelectContent>
             </Select>
+          </section>
+
+          <Separator />
+
+          <section className="flex flex-col gap-3">
+            <span className="text-sm font-medium">Analyse IA</span>
+            <AnalyzePanel applicationId={application._id} cvId={application.cvId} />
           </section>
 
           <Separator />
