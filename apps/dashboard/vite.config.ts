@@ -15,4 +15,17 @@ export default defineConfig({
       '@': path.resolve(__dirname, './src'),
     },
   },
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id: string) {
+          if (id.includes('pdfjs-dist')) return 'vendor-pdf';
+          if (id.includes('@radix-ui')) return 'vendor-radix';
+          if (id.includes('@tanstack/react-table')) return 'vendor-table';
+          if (id.includes('@tanstack/react-router') || id.includes('@tanstack/router')) return 'vendor-router';
+          if (id.includes('node_modules/react/') || id.includes('node_modules/react-dom/')) return 'vendor-react';
+        },
+      },
+    },
+  },
 });

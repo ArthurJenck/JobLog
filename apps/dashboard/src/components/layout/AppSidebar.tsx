@@ -84,6 +84,13 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
+              <Link to="/privacy">
+                <span className="text-xs text-muted-foreground">Confidentialité</span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton asChild>
               <a href="/api/auth/signout">
                 <LogOutIcon className="h-4 w-4" />
                 <span>Déconnexion</span>
