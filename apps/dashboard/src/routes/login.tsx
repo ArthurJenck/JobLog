@@ -10,22 +10,49 @@ export const Route = createFileRoute('/login')({
   component: LoginPage,
 });
 
-function LoginPage() {
+export function LoginPage() {
   const [email, setEmail] = useState('');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleGoogleLogin() {
-    window.location.href = '/api/auth/signin/google';
+  async function handleGoogleLogin() {
+    setError(null);
+    const res = await fetch('/api/auth/sign-in/social', {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider: 'google', callbackURL: '/' }),
+    });
+
+    if (!res.ok) {
+      setError('Connexion Google indisponible pour le moment.');
+      return;
+    }
+
+    const data = (await res.json()) as { url?: string };
+    if (data.url) {
+      window.location.href = data.url;
+      return;
+    }
+
+    setError('Redirection Google introuvable.');
   }
 
   async function handleMagicLink(e: React.FormEvent) {
     e.preventDefault();
-    const res = await fetch('/api/auth/signin/magic-link', {
+    setError(null);
+    const res = await fetch('/api/auth/sign-in/magic-link', {
       method: 'POST',
+      credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, callbackURL: '/' }),
     });
-    if (res.ok) setMagicLinkSent(true);
+    if (res.ok) {
+      setMagicLinkSent(true);
+      return;
+    }
+
+    setError("Impossible d'envoyer le lien de connexion.");
   }
 
   return (
@@ -63,6 +90,8 @@ function LoginPage() {
             <span className="text-xs text-muted-foreground">ou</span>
             <Separator className="flex-1" />
           </div>
+
+          {error ? <p className="text-center text-sm text-destructive">{error}</p> : null}
 
           {magicLinkSent ? (
             <p className="text-center text-sm text-muted-foreground">

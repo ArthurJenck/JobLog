@@ -8,7 +8,7 @@ export const Route = createFileRoute('/settings')({
   component: SettingsPage,
 });
 
-function SettingsPage() {
+export function SettingsPage() {
   return (
     <div className="flex flex-col gap-6 p-6">
       <h1 className="text-xl font-semibold">Paramètres</h1>

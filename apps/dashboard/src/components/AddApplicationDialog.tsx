@@ -100,7 +100,6 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
           <Select value={form.contract_type} onValueChange={(v) => set('contract_type', v)}>
             <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">—</SelectItem>
               {CONTRACT_TYPES.map((c) => <SelectItem key={c} value={c}>{c.toUpperCase()}</SelectItem>)}
             </SelectContent>
           </Select>
@@ -110,7 +109,6 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
           <Select value={form.remote} onValueChange={(v) => set('remote', v)}>
             <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="">—</SelectItem>
               {REMOTE_TYPES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
             </SelectContent>
           </Select>

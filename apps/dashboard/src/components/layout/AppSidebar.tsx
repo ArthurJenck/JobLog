@@ -90,11 +90,17 @@ export function AppSidebar() {
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>
-            <SidebarMenuButton asChild>
-              <a href="/api/auth/signout">
-                <LogOutIcon className="h-4 w-4" />
-                <span>Déconnexion</span>
-              </a>
+            <SidebarMenuButton
+              onClick={async () => {
+                await fetch('/api/auth/sign-out', {
+                  method: 'POST',
+                  credentials: 'include',
+                });
+                router.navigate({ to: '/login' });
+              }}
+            >
+              <LogOutIcon className="h-4 w-4" />
+              <span>Déconnexion</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
         </SidebarMenu>

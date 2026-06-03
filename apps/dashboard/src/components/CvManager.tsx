@@ -21,7 +21,20 @@ export function CvManager() {
     }
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    let active = true;
+    api.cvs
+      .list()
+      .then(({ data }) => {
+        if (active) setCvs(data);
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   async function deleteCv(id: string) {
     if (!confirm('Supprimer ce CV ?')) return;

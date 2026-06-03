@@ -24,7 +24,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const cached = await col.findOne({ url_hash });
   if (cached) return res.status(200).json({ ...cached, _id: cached._id.toString(), cached: true });
 
-  let html = '';
+  let html: string;
   try {
     const fetchRes = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobLog/1.0)' },
@@ -35,7 +35,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(422).json({ error: 'Impossible de récupérer l\'URL' });
   }
 
-  const extracted = extractWithCheerio(html, url);
+  const extracted = extractWithCheerio(html);
   const incomplete = !extracted.title || !extracted.company;
 
   let scrape_method: 'cheerio' | 'gemini' | 'manual' = 'cheerio';
@@ -81,7 +81,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(201).json({ ...doc, _id: result.insertedId.toString(), cached: false });
 }
 
-function extractWithCheerio(html: string, url: string) {
+function extractWithCheerio(html: string) {
   const $ = cheerio.load(html);
 
   const ogTitle = $('meta[property="og:title"]').attr('content')?.trim();

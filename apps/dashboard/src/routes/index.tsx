@@ -10,7 +10,7 @@ export const Route = createFileRoute('/')({
   component: IndexPage,
 });
 
-function IndexPage() {
+export function IndexPage() {
   const navigate = useNavigate();
   const [applications, setApplications] = useState<ApplicationWithJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -32,7 +32,31 @@ function IndexPage() {
     }
   }, [navigate]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    api.applications
+      .list()
+      .then(({ data }) => {
+        if (active) setApplications(data);
+      })
+      .catch((err) => {
+        if (
+          active &&
+          err &&
+          typeof err === "object" &&
+          "status" in err &&
+          (err as { status: number }).status === 401
+        ) {
+          navigate({ to: "/login" });
+        }
+      })
+      .finally(() => {
+        if (active) setIsLoading(false);
+      });
+    return () => {
+      active = false;
+    };
+  }, [navigate]);
 
   function openDetail(app: ApplicationWithJob) {
     setSelectedApp(app);

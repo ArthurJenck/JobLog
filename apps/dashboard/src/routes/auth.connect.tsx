@@ -6,7 +6,7 @@ export const Route = createFileRoute('/auth/connect')({
   component: ConnectPage,
 });
 
-function ConnectPage() {
+export function ConnectPage() {
   const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
 
   useEffect(() => {

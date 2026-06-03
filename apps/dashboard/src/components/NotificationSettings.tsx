@@ -74,7 +74,10 @@ export function NotificationSettings() {
         label="Notifications push"
         description="Reçois une notification navigateur (en plus de l'email)."
         enabled={settings.push}
-        onChange={(v) => { v ? subscribePush() : unsubscribePush(); }}
+        onChange={(v) => {
+          if (v) void subscribePush();
+          else void unsubscribePush();
+        }}
         disabled={isSaving || !VAPID_PUBLIC_KEY}
       />
 

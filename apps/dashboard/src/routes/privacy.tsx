@@ -4,7 +4,7 @@ export const Route = createFileRoute('/privacy')({
   component: PrivacyPage,
 });
 
-function PrivacyPage() {
+export function PrivacyPage() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-6 py-12">
@@ -63,7 +63,7 @@ function PrivacyPage() {
           <section>
             <h2 className="text-base font-medium text-foreground mb-2">Contact</h2>
             <p>
-              Pour toute question : <a href="mailto:arthur@arthurjenck.com" className="text-foreground underline">arthur@arthurjenck.com</a>
+              Pour toute question : <a href="mailto:contact@arthurjenck.com" className="text-foreground underline">contact@arthurjenck.com</a>
             </p>
           </section>
         </div>

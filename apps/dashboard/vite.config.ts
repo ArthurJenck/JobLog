@@ -3,13 +3,21 @@ import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
 import { TanStackRouterVite } from '@tanstack/router-plugin/vite';
 import path from 'path';
-
+import { apiDevPlugin } from './dev-api-plugin';
 export default defineConfig({
   plugins: [
+    apiDevPlugin(),
     TanStackRouterVite({ routesDirectory: './src/routes' }),
     react(),
     tailwindcss(),
   ],
+  server: {
+    port: 3000,
+    strictPort: true,
+  },
+  optimizeDeps: {
+    exclude: ['better-auth'],
+  },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

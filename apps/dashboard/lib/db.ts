@@ -1,11 +1,12 @@
 import { MongoClient, Db } from 'mongodb';
+import { requireEnv } from './env.js';
 
 let client: MongoClient | null = null;
 let db: Db | null = null;
 
 export async function getDb(): Promise<Db> {
   if (db) return db;
-  client = new MongoClient(process.env.MONGODB_URI!);
+  client = new MongoClient(requireEnv('MONGODB_URI'));
   await client.connect();
   db = client.db();
   return db;

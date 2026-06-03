@@ -18,5 +18,16 @@ export default defineConfig([
     languageOptions: {
       globals: globals.browser,
     },
+    rules: {
+      'react-refresh/only-export-components': [
+        'error',
+        {
+          allowConstantExport: true,
+          allowExportNames: ['Route', 'useSidebar', 'badgeVariants', 'buttonVariants'],
+          extraHOCs: ['createFileRoute', 'createRootRoute'],
+        },
+      ],
+      'react-hooks/incompatible-library': 'off',
+    },
   },
 ])

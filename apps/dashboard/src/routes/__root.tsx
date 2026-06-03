@@ -1,13 +1,29 @@
-import { createRootRoute, Outlet, useRouter } from '@tanstack/react-router';
+import { createRootRoute, Outlet, redirect, useRouter } from '@tanstack/react-router';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
 
+const PUBLIC_PATHS = ['/login', '/privacy', '/auth'];
+
 export const Route = createRootRoute({
+  beforeLoad: async ({ location }) => {
+    if (PUBLIC_PATHS.some((p) => location.pathname.startsWith(p))) return;
+    let hasSession = false;
+    try {
+      const res = await fetch('/api/auth/get-session');
+      if (res.ok) {
+        const data = await res.json();
+        hasSession = !!data?.session;
+      }
+    } catch {
+      hasSession = false;
+    }
+    if (!hasSession) throw redirect({ to: '/login' });
+  },
   component: RootLayout,
 });
 
-function RootLayout() {
+export function RootLayout() {
   const router = useRouter();
   const isLoginPage = router.state.location.pathname === '/login';
 
