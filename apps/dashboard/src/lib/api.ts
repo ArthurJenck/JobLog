@@ -59,7 +59,7 @@ export const api = {
     },
   },
   analyses: {
-    create(body: { cvId: string; applicationId: string }): Promise<{ keywords_matched: string[]; keywords_missing: string[]; insights: string }> {
+    create(body: { cvId: string; applicationId: string; force?: boolean }): Promise<{ keywords_matched: string[]; keywords_missing: string[]; insights: string; cached?: boolean }> {
       return request('/analyses', { method: 'POST', body: JSON.stringify(body) });
     },
   },

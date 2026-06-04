@@ -3,6 +3,7 @@ import { mongodbAdapter } from 'better-auth/adapters/mongodb';
 import { magicLink } from 'better-auth/plugins';
 import { getDb } from './db.js';
 import { getEnv, requireEnv } from './env.js';
+import { sendEmail } from './resend.js';
 
 let _auth: ReturnType<typeof betterAuth> | null = null;
 
@@ -51,10 +52,11 @@ export async function getAuth() {
     plugins: [
       magicLink({
         sendMagicLink: async ({ email, url }) => {
-          const { Resend } = await import('resend');
-          const resend = new Resend(requireEnv('RESEND_API_KEY'));
-          await resend.emails.send({
-            from: 'JobLog <noreply@arthurjenck.com>',
+          await sendEmail({
+            from:
+              getEnv('RESEND_AUTH_FROM') ??
+              getEnv('RESEND_FROM') ??
+              'JobLog <noreply@arthurjenck.com>',
             to: email,
             subject: 'Connexion à JobLog',
             html: `<p>Clique sur ce lien pour te connecter : <a href="${url}">${url}</a></p><p>Ce lien expire dans 10 minutes.</p>`,

@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { CONTRACT_TYPES, REMOTE_TYPES } from '@joblog/shared';
 
@@ -23,10 +33,14 @@ export function AddApplicationDialog({ open, onClose, onCreated }: Props) {
         <DialogHeader>
           <DialogTitle>Ajouter une candidature</DialogTitle>
         </DialogHeader>
-        <Tabs defaultValue="manual">
+        <Tabs defaultValue="url">
           <TabsList className="w-full">
-            <TabsTrigger value="manual" className="flex-1">Saisie manuelle</TabsTrigger>
-            <TabsTrigger value="url" className="flex-1">Coller une URL</TabsTrigger>
+            <TabsTrigger value="url" className="flex-1">
+              Coller une URL
+            </TabsTrigger>
+            <TabsTrigger value="manual" className="flex-1">
+              Saisie manuelle
+            </TabsTrigger>
           </TabsList>
           <TabsContent value="manual">
             <ManualForm onCreated={onCreated} />
@@ -69,7 +83,9 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
         remote: form.remote || null,
         scrape_method: 'manual',
       });
-      const appRes = await api.applications.create({ jobPostingId: jpRes.jobPostingId });
+      const appRes = await api.applications.create({
+        jobPostingId: jpRes.jobPostingId,
+      });
       onCreated(appRes.applicationId);
     } finally {
       setIsLoading(false);
@@ -81,35 +97,69 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
       <div className="grid grid-cols-2 gap-3">
         <div className="flex flex-col gap-1.5">
           <Label>Poste *</Label>
-          <Input value={form.title} onChange={(e) => set('title', e.target.value)} required placeholder="Développeur Frontend" />
+          <Input
+            value={form.title}
+            onChange={(e) => set('title', e.target.value)}
+            required
+            placeholder="Développeur Frontend"
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Entreprise *</Label>
-          <Input value={form.company} onChange={(e) => set('company', e.target.value)} required placeholder="Acme Corp" />
+          <Input
+            value={form.company}
+            onChange={(e) => set('company', e.target.value)}
+            required
+            placeholder="Acme Corp"
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Lieu</Label>
-          <Input value={form.location} onChange={(e) => set('location', e.target.value)} placeholder="Paris, France" />
+          <Input
+            value={form.location}
+            onChange={(e) => set('location', e.target.value)}
+            placeholder="Paris, France"
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>URL de l'offre</Label>
-          <Input value={form.url} onChange={(e) => set('url', e.target.value)} placeholder="https://…" type="url" />
+          <Input
+            value={form.url}
+            onChange={(e) => set('url', e.target.value)}
+            placeholder="https://…"
+            type="url"
+          />
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Contrat</Label>
-          <Select value={form.contract_type} onValueChange={(v) => set('contract_type', v)}>
-            <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
+          <Select
+            value={form.contract_type}
+            onValueChange={(v) => set('contract_type', v)}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Choisir…" />
+            </SelectTrigger>
             <SelectContent>
-              {CONTRACT_TYPES.map((c) => <SelectItem key={c} value={c}>{c.toUpperCase()}</SelectItem>)}
+              {CONTRACT_TYPES.map((c) => (
+                <SelectItem key={c} value={c}>
+                  {c.toUpperCase()}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Remote</Label>
           <Select value={form.remote} onValueChange={(v) => set('remote', v)}>
-            <SelectTrigger><SelectValue placeholder="Choisir…" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Choisir…" />
+            </SelectTrigger>
             <SelectContent>
-              {REMOTE_TYPES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+              {REMOTE_TYPES.map((r) => (
+                <SelectItem key={r} value={r}>
+                  {r}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -132,11 +182,13 @@ function UrlForm({ onCreated }: { onCreated: (id: string) => void }) {
     setIsLoading(true);
     try {
       const jp = await api.jobPostings.fromUrl(url);
-      const jobPostingId = jp._id as string ?? jp.jobPostingId as string;
+      const jobPostingId = (jp._id as string) ?? (jp.jobPostingId as string);
       const appRes = await api.applications.create({ jobPostingId });
       onCreated(appRes.applicationId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+      const message = err instanceof Error ? err.message : 'Erreur inconnue';
+      setError(message);
+      toast.error('Récupération impossible', { description: message });
     } finally {
       setIsLoading(false);
     }
@@ -156,7 +208,7 @@ function UrlForm({ onCreated }: { onCreated: (id: string) => void }) {
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" disabled={isLoading} className="w-full">
-        {isLoading ? 'Analyse en cours…' : 'Récupérer l\'offre'}
+        {isLoading ? 'Analyse en cours…' : "Récupérer l'offre"}
       </Button>
     </form>
   );

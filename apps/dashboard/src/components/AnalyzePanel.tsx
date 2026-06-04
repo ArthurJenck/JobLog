@@ -21,12 +21,13 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  async function analyze() {
+  async function analyze(options?: { force?: boolean }) {
     if (!cvId) return;
     setIsLoading(true);
     setError('');
+    if (options?.force) setResult(null);
     try {
-      const data = await api.analyses.create({ cvId, applicationId });
+      const data = await api.analyses.create({ cvId, applicationId, force: options?.force });
       setResult(data);
     } catch (e) {
       if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 503) {
@@ -56,7 +57,7 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
         <Button
           variant="outline"
           size="sm"
-          onClick={analyze}
+          onClick={() => { void analyze(); }}
           disabled={!cvId}
           title={!cvId ? 'Sélectionne un CV pour analyser' : undefined}
           className="w-fit"
@@ -97,7 +98,7 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
         <div className="flex flex-col gap-2">
           <p className="text-sm font-medium flex items-center gap-1.5 text-red-700 dark:text-red-400">
             <XCircleIcon className="h-4 w-4" />
-            Compétences manquantes
+            À ajouter ou expliciter
           </p>
           <div className="flex flex-wrap gap-1.5">
             {result.keywords_missing.map((kw) => (
@@ -122,7 +123,7 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
       <Button
         variant="ghost"
         size="sm"
-        onClick={() => { setResult(null); analyze(); }}
+        onClick={() => { void analyze({ force: true }); }}
         className="w-fit text-xs text-muted-foreground"
       >
         Relancer l'analyse

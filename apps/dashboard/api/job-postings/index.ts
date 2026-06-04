@@ -40,6 +40,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const existing = await col.findOne({ url_hash });
     if (existing) {
+      if (isBlockedOrErrorJobPosting(existing)) {
+        const now = new Date();
+        await col.updateOne(
+          { _id: existing._id },
+          {
+            $set: {
+              source: data.source,
+              title: data.title,
+              company: data.company,
+              location: data.location ?? null,
+              description: data.description ?? null,
+              contract_type: data.contract_type ?? null,
+              remote: data.remote ?? null,
+              salary: data.salary ?? null,
+              requirements: data.requirements ?? null,
+              keywords: data.keywords ?? null,
+              company_website: data.company_website ?? null,
+              scrape_method: data.scrape_method ?? 'manual',
+              scraped_at: now,
+              updated_at: now,
+            },
+          }
+        );
+
+        return res.status(200).json({
+          jobPostingId: existing._id.toString(),
+          cached: false,
+          repaired: true,
+        });
+      }
+
       return res.status(200).json({ jobPostingId: existing._id.toString(), cached: true });
     }
 
@@ -69,4 +100,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   return res.status(405).json({ error: 'Method not allowed' });
+}
+
+function isBlockedOrErrorJobPosting(jobPosting: Record<string, unknown>) {
+  const title = String(jobPosting.title ?? '').trim().toLowerCase();
+  const company = String(jobPosting.company ?? '').trim();
+  const description = String(jobPosting.description ?? '').toLowerCase();
+
+  if (title === '403 error') return true;
+  if (title.includes('403 error') && !company) return true;
+  if (description.includes('not a robot')) return true;
+  if (description.includes('javascript is disabled')) return true;
+
+  return false;
 }

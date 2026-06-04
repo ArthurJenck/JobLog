@@ -30,16 +30,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   let sent = 0;
   let failed = 0;
+  let skipped = 0;
+  const errors: string[] = [];
 
   for (const app of due) {
     try {
+      const frequencyDays = normalizeFrequencyDays(app.reminder?.frequencyDays as number | undefined);
       const [user, jp, notifSettings] = await Promise.all([
         userCol.findOne({ _id: new ObjectId(String(app.userId)) }),
         jpCol.findOne({ _id: new ObjectId(String(app.jobPostingId)) }),
         notifCol.findOne({ userId: String(app.userId) }),
       ]);
 
-      if (!user || !jp) continue;
+      if (!user || !jp) {
+        skipped++;
+        errors.push(`${app._id.toString()}: missing ${!user ? 'user' : 'job posting'}`);
+        continue;
+      }
 
       const emailEnabled = notifSettings?.email !== false;
       const pushEnabled = notifSettings?.push === true;
@@ -51,6 +58,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           userId: String(app.userId),
           jobTitle: String(jp.title ?? ''),
           company: String(jp.company ?? ''),
+          frequencyDays,
         });
       }
 
@@ -62,7 +70,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         });
       }
 
-      const frequencyDays = (app.reminder?.frequencyDays as number) ?? 7;
       const nextAt = new Date(now.getTime() + frequencyDays * 24 * 60 * 60 * 1000);
 
       await appCol.updateOne(
@@ -74,12 +81,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       );
 
       sent++;
-    } catch {
+    } catch (error) {
       failed++;
+      errors.push(
+        `${app._id.toString()}: ${error instanceof Error ? error.message : String(error)}`
+      );
     }
   }
 
-  return res.status(200).json({ processed: due.length, sent, failed });
+  return res.status(200).json({
+    processed: due.length,
+    sent,
+    failed,
+    skipped,
+    errors: errors.slice(0, 10),
+  });
+}
+
+function normalizeFrequencyDays(value: number | undefined) {
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 7;
 }
 
 interface PushSubscription {

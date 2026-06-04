@@ -1,8 +1,39 @@
-import { Resend } from 'resend';
+import { sendEmail } from './resend.js';
+import { getEnv } from './env.js';
 import { signSnoozeToken } from './snooze.js';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-const APP_URL = process.env.PUBLIC_APP_URL ?? 'https://joblog.arthurjenck.com';
+function getAppUrl() {
+  return getEnv('PUBLIC_APP_URL') ?? 'https://joblog.arthurjenck.com';
+}
+
+function buildAppUrl(params: Record<string, string>) {
+  const url = new URL('/', getAppUrl());
+  for (const [key, value] of Object.entries(params)) {
+    url.searchParams.set(key, value);
+  }
+  return url.toString();
+}
+
+function escapeHtml(value: string) {
+  return value.replace(/[&<>"']/g, (char) => {
+    const entities: Record<string, string> = {
+      '&': '&amp;',
+      '<': '&lt;',
+      '>': '&gt;',
+      '"': '&quot;',
+      "'": '&#39;',
+    };
+    return entities[char];
+  });
+}
+
+function normalizeFrequencyDays(value: number | undefined) {
+  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 7;
+}
+
+function formatSnoozeDelay(days: number) {
+  return days === 1 ? 'demain' : `dans ${days} jours`;
+}
 
 export async function sendReminderEmail({
   to,
@@ -10,47 +41,76 @@ export async function sendReminderEmail({
   userId,
   jobTitle,
   company,
+  frequencyDays,
 }: {
   to: string;
   applicationId: string;
   userId: string;
   jobTitle: string;
   company: string;
+  frequencyDays?: number;
 }) {
+  const snoozeDays = normalizeFrequencyDays(frequencyDays);
   const snoozeToken = signSnoozeToken(applicationId, userId);
-  const dashboardUrl = `${APP_URL}/`;
-  const snoozeUrl = `${APP_URL}/api/snooze?token=${snoozeToken}`;
+  const dashboardUrl = buildAppUrl({ applicationId });
+  const snoozeUrl = new URL('/api/snooze', getAppUrl());
+  snoozeUrl.searchParams.set('token', snoozeToken);
+  const safeJobTitle = escapeHtml(jobTitle);
+  const safeCompany = escapeHtml(company);
+  const snoozeLabel = escapeHtml(formatSnoozeDelay(snoozeDays));
 
-  await resend.emails.send({
-    from: 'JobLog <relances@arthurjenck.com>',
+  return sendEmail({
+    from:
+      getEnv('RESEND_REMINDER_FROM') ??
+      getEnv('RESEND_FROM') ??
+      'JobLog <noreply@arthurjenck.com>',
     to,
     subject: `Relance — ${jobTitle} chez ${company}`,
     html: `
 <!DOCTYPE html>
 <html lang="fr">
-<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
-<body style="font-family:system-ui,sans-serif;background:#f9fafb;margin:0;padding:24px">
-  <div style="max-width:480px;margin:0 auto;background:#fff;border-radius:12px;padding:32px;border:1px solid #e5e7eb">
-    <div style="display:flex;align-items:center;gap:10px;margin-bottom:24px">
-      <div style="width:32px;height:32px;background:#0f0f0f;border-radius:8px;display:flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:12px">JL</div>
-      <span style="font-weight:600;font-size:16px">JobLog</span>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+</head>
+<body style="margin:0;background:#f3f1ec;padding:32px 18px;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#171717">
+  <div style="max-width:560px;margin:0 auto">
+    <div style="background:#fffdf8;border:1px solid #ded8cd;border-radius:18px;overflow:hidden;box-shadow:0 24px 60px rgba(38,31,23,0.10)">
+      <div style="height:6px;background:#171717"></div>
+      <div style="padding:34px 34px 30px">
+        <h1 style="margin:0;color:#171717;font-size:26px;line-height:1.15;font-weight:650;letter-spacing:-0.02em">
+          Il est temps de reprendre contact.
+        </h1>
+
+        <div style="margin:26px 0;padding:20px;border-radius:14px;background:#f7f3ea;border:1px solid #e7dece">
+          <p style="margin:0 0 8px;color:#73685d;font-size:13px">Candidature suivie</p>
+          <p style="margin:0;color:#171717;font-size:18px;line-height:1.35;font-weight:650">
+            ${safeJobTitle}
+          </p>
+          <p style="margin:7px 0 0;color:#5f574f;font-size:15px">
+            ${safeCompany}
+          </p>
+        </div>
+
+        <p style="margin:0 0 24px;color:#4a4540;font-size:15px;line-height:1.7">
+          Ne te fais pas oublier ! Prépare une relance pour augmenter tes chances de recevoir une réponse.
+        </p>
+
+        <div style="margin:0 0 22px">
+          <a href="${dashboardUrl}" style="display:inline-block;background:#171717;color:#fff;text-decoration:none;padding:13px 18px;border-radius:10px;font-size:14px;font-weight:650">
+            Voir la candidature
+          </a>
+        </div>
+
+        <a href="${snoozeUrl.toString()}" style="color:#7b6f62;font-size:13px;text-decoration:underline;text-underline-offset:3px">
+          Me rappeler ${snoozeLabel}
+        </a>
+      </div>
     </div>
-    <h2 style="font-size:18px;font-weight:600;margin:0 0 8px;color:#111">Il est temps de relancer</h2>
-    <p style="color:#555;font-size:14px;line-height:1.6;margin:0 0 20px">
-      Tu as candidaté pour le poste <strong>${jobTitle}</strong> chez <strong>${company}</strong>.<br>
-      Tu n'as pas encore eu de réponse — veux-tu envoyer une relance ?
-    </p>
-    <a href="${dashboardUrl}" style="display:inline-block;background:#0f0f0f;color:#fff;text-decoration:none;padding:10px 20px;border-radius:8px;font-size:14px;font-weight:500;margin-bottom:12px">
-      Voir ma candidature
-    </a>
-    <br>
-    <a href="${snoozeUrl}" style="color:#888;font-size:13px;text-decoration:none">
-      Me rappeler dans 7 jours
-    </a>
-    <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0">
-    <p style="color:#aaa;font-size:12px;margin:0">
-      Tu reçois cet email car tu utilises JobLog.
-      <a href="${APP_URL}/settings" style="color:#aaa">Gérer mes préférences</a>
+
+    <p style="margin:18px 6px 0;color:#968b7e;font-size:12px;line-height:1.6">
+      Tu reçois cet email car un rappel est actif dans JobLog.
+      <a href="${new URL('/settings', getAppUrl()).toString()}" style="color:#756a5f">Gérer mes préférences</a>
     </p>
   </div>
 </body>

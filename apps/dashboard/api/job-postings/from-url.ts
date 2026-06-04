@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import * as cheerio from 'cheerio';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
+import { getEnv } from '../../lib/env.js';
 import { requireSession } from '../../lib/session.js';
 import { sha256 } from '../../lib/hash.js';
 import { GEMINI_DAILY_QUOTA, GEMINI_SCRAPE_RESERVE, GEMINI_MODEL } from '@joblog/shared';
@@ -22,7 +23,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const col = await getCollection('job_postings');
 
   const cached = await col.findOne({ url_hash });
-  if (cached) return res.status(200).json({ ...cached, _id: cached._id.toString(), cached: true });
+  if (cached) {
+    if (isBlockedOrErrorPage({
+      title: String(cached.title ?? ''),
+      company: String(cached.company ?? ''),
+      html: String(cached.description ?? ''),
+      status: null,
+    })) {
+      return res.status(422).json({ error: blockedScrapeMessage(url) });
+    }
+
+    return res.status(200).json({ ...cached, _id: cached._id.toString(), cached: true });
+  }
 
   let html: string;
   try {
@@ -31,6 +43,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       signal: AbortSignal.timeout(10_000),
     });
     html = await fetchRes.text();
+    if (isBlockedOrErrorPage({ title: '', company: '', html, status: fetchRes.status })) {
+      return res.status(422).json({ error: blockedScrapeMessage(url) });
+    }
   } catch {
     return res.status(422).json({ error: 'Impossible de récupérer l\'URL' });
   }
@@ -116,8 +131,36 @@ function extractWithCheerio(html: string) {
   return { title, company, location, description };
 }
 
+function isBlockedOrErrorPage(input: {
+  title: string;
+  company: string;
+  html: string;
+  status: number | null;
+}) {
+  const text = `${input.title} ${input.company} ${input.html}`.toLowerCase();
+
+  if (input.status !== null && input.status >= 400) return true;
+  if (input.title.trim().toLowerCase() === '403 error') return true;
+  if (text.includes('403 error')) return true;
+  if (text.includes('not a robot')) return true;
+  if (text.includes('verify that you\'re not a robot')) return true;
+  if (text.includes('javascript is disabled')) return true;
+  if (text.includes('enable javascript and then reload the page')) return true;
+
+  return false;
+}
+
+function blockedScrapeMessage(url: string) {
+  if (url.includes('welcometothejungle.com')) {
+    return 'Welcome to the Jungle bloque la récupération depuis le dashboard. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension.';
+  }
+
+  return 'Le site bloque la récupération automatique. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension.';
+}
+
 async function extractWithGemini(html: string, url: string) {
   try {
+    const model = getEnv('GEMINI_MODEL') ?? GEMINI_MODEL;
     const truncated = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
       .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
       .replace(/<[^>]+>/g, ' ')
@@ -128,7 +171,7 @@ async function extractWithGemini(html: string, url: string) {
     await incrementGeminiQuota();
 
     const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${process.env.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

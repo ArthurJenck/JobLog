@@ -11,7 +11,7 @@ export async function saveJobPosting(draft: JobPostingDraft): Promise<void> {
     method: 'POST',
     headers,
     credentials: 'include',
-    body: JSON.stringify(draft),
+    body: JSON.stringify({ ...draft, scrape_method: 'extension' }),
   });
   if (!jpRes.ok) throw new Error(`job-postings: ${jpRes.status}`);
   const { jobPostingId } = await jpRes.json() as { jobPostingId: string };

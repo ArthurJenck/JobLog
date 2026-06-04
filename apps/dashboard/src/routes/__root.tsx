@@ -2,6 +2,7 @@ import { createRootRoute, Outlet, redirect, useRouter } from '@tanstack/react-ro
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { Toaster } from '@/components/ui/sonner';
 
 const PUBLIC_PATHS = ['/login', '/privacy', '/auth'];
 
@@ -31,6 +32,7 @@ export function RootLayout() {
     return (
       <TooltipProvider>
         <Outlet />
+        <Toaster />
       </TooltipProvider>
     );
   }
@@ -43,6 +45,7 @@ export function RootLayout() {
           <Outlet />
         </SidebarInset>
       </SidebarProvider>
+      <Toaster />
     </TooltipProvider>
   );
 }

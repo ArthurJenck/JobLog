@@ -1,17 +1,46 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ApplicationsTable } from '@/components/ApplicationsTable';
 import { ApplicationDetail } from '@/components/ApplicationDetail';
 import { AddApplicationDialog } from '@/components/AddApplicationDialog';
+import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { ApplicationWithJob } from '@joblog/shared';
 
+type IndexSearch = {
+  applicationId?: string;
+  snoozeDays?: number;
+  toast?: string;
+};
+
 export const Route = createFileRoute('/')({
+  validateSearch: (search): IndexSearch => ({
+    applicationId: typeof search.applicationId === 'string' ? search.applicationId : undefined,
+    snoozeDays:
+      typeof search.snoozeDays === 'string' && Number.isFinite(Number(search.snoozeDays))
+        ? Number(search.snoozeDays)
+        : undefined,
+    toast: typeof search.toast === 'string' ? search.toast : undefined,
+  }),
   component: IndexPage,
 });
 
+function clearSearchKeys(keys: string[]) {
+  const url = new URL(window.location.href);
+  for (const key of keys) url.searchParams.delete(key);
+  window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
+}
+
+function formatSnoozeToastDelay(days?: number) {
+  if (!days || days < 1) return 'selon la fréquence définie.';
+  return days === 1 ? 'demain.' : `dans ${Math.trunc(days)} jours.`;
+}
+
 export function IndexPage() {
   const navigate = useNavigate();
+  const search = Route.useSearch();
+  const openedSearchAppId = useRef<string | null>(null);
+  const shownToast = useRef<string | null>(null);
   const [applications, setApplications] = useState<ApplicationWithJob[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedApp, setSelectedApp] = useState<ApplicationWithJob | null>(null);
@@ -58,9 +87,59 @@ export function IndexPage() {
     };
   }, [navigate]);
 
+  useEffect(() => {
+    const toastKey = `${search.toast ?? ''}:${search.applicationId ?? ''}:${search.snoozeDays ?? ''}`;
+    if (search.toast !== 'reminder-snoozed' || shownToast.current === toastKey) return;
+
+    shownToast.current = toastKey;
+    toast.success('Rappel snoozé', {
+      description: `On te le rappellera ${formatSnoozeToastDelay(search.snoozeDays)}`,
+    });
+    clearSearchKeys(['toast', 'snoozeDays']);
+  }, [search.applicationId, search.snoozeDays, search.toast]);
+
+  useEffect(() => {
+    const applicationId = search.applicationId;
+    if (typeof applicationId !== 'string' || isLoading || openedSearchAppId.current === applicationId) return;
+    const targetApplicationId = applicationId;
+
+    let active = true;
+
+    async function openFromSearch() {
+      try {
+        const fromList = applications.find((app) => app._id === targetApplicationId);
+        const app = fromList ?? await api.applications.get(targetApplicationId);
+        if (!active) return;
+
+        openedSearchAppId.current = targetApplicationId;
+        setSelectedApp(app);
+        setDetailOpen(true);
+      } catch {
+        if (!active) return;
+
+        toast.error('Candidature introuvable', {
+          description: "Le lien ne correspond plus à une candidature accessible.",
+        });
+        clearSearchKeys(['applicationId']);
+      }
+    }
+
+    openFromSearch();
+    return () => {
+      active = false;
+    };
+  }, [applications, isLoading, search.applicationId]);
+
   function openDetail(app: ApplicationWithJob) {
     setSelectedApp(app);
     setDetailOpen(true);
+  }
+
+  function closeDetail() {
+    setDetailOpen(false);
+    setSelectedApp(null);
+    openedSearchAppId.current = null;
+    clearSearchKeys(['applicationId']);
   }
 
   async function refreshDetail() {
@@ -94,7 +173,7 @@ export function IndexPage() {
       <ApplicationDetail
         application={selectedApp}
         open={detailOpen}
-        onClose={() => setDetailOpen(false)}
+        onClose={closeDetail}
         onUpdated={refreshDetail}
       />
 

@@ -48,6 +48,10 @@ const PatchJobPostingSchema = z.object({
   company_website: z.string().nullable().optional(),
 }).strict();
 
+function toDateOrNull(value: string | null) {
+  return value === null ? null : new Date(value);
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireSession(req, res);
   if (!session) return;
@@ -106,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { reminder, ...rest } = parsed.data;
 
     for (const [k, v] of Object.entries(rest)) {
-      if (v !== undefined) updates[k] = v;
+      if (v !== undefined) updates[k] = k === 'appliedAt' ? toDateOrNull(v as string | null) : v;
     }
 
     if (parsed.data.status === 'applied' && !parsed.data.appliedAt) {
@@ -115,7 +119,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (reminder) {
       for (const [k, v] of Object.entries(reminder)) {
-        if (v !== undefined) updates[`reminder.${k}`] = v;
+        if (v !== undefined) {
+          updates[`reminder.${k}`] =
+            k === 'at' || k === 'snoozedUntil' ? toDateOrNull(v as string | null) : v;
+        }
       }
     }
 
