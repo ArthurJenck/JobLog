@@ -11,26 +11,27 @@ interface Props {
 }
 
 export function AnalyzePanel({ applicationId, cvId }: Props) {
+  return (
+    <AnalyzePanelInner
+      key={`${applicationId}:${cvId ?? ''}`}
+      applicationId={applicationId}
+      cvId={cvId}
+    />
+  );
+}
+
+function AnalyzePanelInner({ applicationId, cvId }: Props) {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingCache, setIsCheckingCache] = useState(false);
+  const [isCheckingCache, setIsCheckingCache] = useState(() => Boolean(cvId));
   const [error, setError] = useState('');
   const [needsJobDescription, setNeedsJobDescription] = useState(false);
   const [jobDescription, setJobDescription] = useState('');
 
   useEffect(() => {
-    setResult(null);
-    setError('');
-    setNeedsJobDescription(false);
-    setJobDescription('');
-
-    if (!cvId) {
-      setIsCheckingCache(false);
-      return;
-    }
+    if (!cvId) return;
 
     let isCancelled = false;
-    setIsCheckingCache(true);
 
     api.analyses
       .getCached({ cvId, applicationId })

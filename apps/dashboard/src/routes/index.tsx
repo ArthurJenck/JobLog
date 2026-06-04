@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { ApplicationsTable } from '@/components/ApplicationsTable';
 import { ApplicationDetail } from '@/components/ApplicationDetail';
 import { AddApplicationDialog } from '@/components/AddApplicationDialog';
@@ -99,13 +99,12 @@ export function IndexPage() {
     return () => window.clearTimeout(t);
   }, [searchText]);
 
-  const buildParams = useCallback(() => {
-    const statusParam =
-      statuses.size === 0 || statuses.size === APPLICATION_STATUSES.length
-        ? undefined
-        : [...statuses].join(',');
-    return {
-      status: statusParam,
+  const listParams = useMemo(
+    () => ({
+      status:
+        statuses.size === 0 || statuses.size === APPLICATION_STATUSES.length
+          ? undefined
+          : [...statuses].join(','),
       search: debouncedSearch || undefined,
       dateFrom: dateFrom || undefined,
       dateTo: dateTo || undefined,
@@ -113,13 +112,22 @@ export function IndexPage() {
       dir: (sortDesc ? 'desc' : 'asc') as 'asc' | 'desc',
       page,
       pageSize: PAGE_SIZE,
-    };
-  }, [statuses, debouncedSearch, dateFrom, dateTo, sortId, sortDesc, page]);
+    }),
+    [statuses, debouncedSearch, dateFrom, dateTo, sortId, sortDesc, page],
+  );
+  const listParamsKey = JSON.stringify(listParams);
+
+  const [trackedListParamsKey, setTrackedListParamsKey] =
+    useState(listParamsKey);
+  if (listParamsKey !== trackedListParamsKey) {
+    setTrackedListParamsKey(listParamsKey);
+    setIsLoading(true);
+  }
 
   const fetchApplications = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data, total: t } = await api.applications.list(buildParams());
+      const { data, total: t } = await api.applications.list(listParams);
       setApplications(data);
       setTotal(t);
     } catch (err) {
@@ -134,11 +142,36 @@ export function IndexPage() {
     } finally {
       setIsLoading(false);
     }
-  }, [buildParams, navigate]);
+  }, [listParams, navigate]);
 
   useEffect(() => {
-    fetchApplications();
-  }, [fetchApplications]);
+    let cancelled = false;
+
+    void (async () => {
+      try {
+        const { data, total: t } = await api.applications.list(listParams);
+        if (cancelled) return;
+        setApplications(data);
+        setTotal(t);
+      } catch (err) {
+        if (cancelled) return;
+        if (
+          err &&
+          typeof err === 'object' &&
+          'status' in err &&
+          (err as { status: number }).status === 401
+        ) {
+          navigate({ to: '/login' });
+        }
+      } finally {
+        if (!cancelled) setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [listParamsKey, listParams, navigate]);
 
   useEffect(() => {
     const snoozeToast = readSnoozeToastFromUrl();
