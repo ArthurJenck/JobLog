@@ -5,6 +5,8 @@ export const JOB_SOURCES = [
     'indeed',
     'glassdoor',
     'jobteaser',
+    'jobijoba',
+    'meteojob',
     'paste',
     'manual',
 ] as const
@@ -17,6 +19,7 @@ export const APPLICATION_STATUSES = [
     'offer',
     'rejected',
     'ghosted',
+    'cancelled',
 ] as const
 export type ApplicationStatus = (typeof APPLICATION_STATUSES)[number]
 
@@ -27,7 +30,11 @@ export const STATUS_LABELS: Record<ApplicationStatus, string> = {
     offer: 'Offre',
     rejected: 'Refusée',
     ghosted: 'Ghostée',
+    cancelled: 'Annulée',
 }
+
+export const ACTIVE_STATUSES: ApplicationStatus[] = ['saved', 'applied', 'interview', 'offer']
+export const TERMINAL_STATUSES: ApplicationStatus[] = ['rejected', 'ghosted', 'cancelled']
 
 export const CONTRACT_TYPES = [
     'cdi',
@@ -68,7 +75,7 @@ export const EVENT_TYPES = [
     'offer_declined',
     'rejected',
     'ghosted',
-    'note',
+    'custom',
 ] as const
 export type EventType = (typeof EVENT_TYPES)[number]
 
@@ -85,8 +92,32 @@ export const EVENT_LABELS: Record<EventType, string> = {
     offer_declined: 'Offre déclinée',
     rejected: 'Refusée',
     ghosted: 'Ghostée',
-    note: 'Note',
+    custom: 'Note personnalisée',
 }
+
+export const EVENT_AUTO_STATUS: Partial<Record<EventType, ApplicationStatus>> = {
+    offer_declined: 'rejected',
+    rejected: 'rejected',
+    ghosted: 'ghosted',
+}
+
+export const STATUS_EVENT: Partial<Record<ApplicationStatus, EventType>> = {
+    applied: 'applied',
+    interview: 'interview_scheduled',
+    offer: 'offer_received',
+    rejected: 'rejected',
+    ghosted: 'ghosted',
+}
+
+export const EVENT_PIPELINE: EventType[] = [
+    'created',
+    'applied',
+    'response_received',
+    'interview_scheduled',
+    'interview_done',
+    'offer_received',
+    'offer_accepted',
+]
 
 export const SCRAPE_METHODS = [
     'extension',

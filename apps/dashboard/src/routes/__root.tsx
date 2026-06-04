@@ -26,9 +26,9 @@ export const Route = createRootRoute({
 
 export function RootLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isLoginPage = pathname === '/login';
+  const isStandalonePublicPage = pathname === '/login' || pathname === '/privacy' || pathname.startsWith('/auth');
 
-  if (isLoginPage) {
+  if (isStandalonePublicPage) {
     return (
       <TooltipProvider>
         <Outlet />
@@ -42,7 +42,7 @@ export function RootLayout() {
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
-          <div className="flex items-center gap-2 px-4 py-3 border-b md:hidden">
+          <div className="flex items-center gap-2 px-4 py-3 border-b lg:hidden">
             <SidebarTrigger />
             <span className="font-semibold text-sm">JobLog</span>
           </div>

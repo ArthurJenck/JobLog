@@ -11,10 +11,16 @@ export function ConnectPage() {
 
   useEffect(() => {
     fetch('/api/auth/extension-token', { method: 'POST', credentials: 'include' })
-      .then((r) => r.json())
-      .then(({ token }) => {
-        if (!token) { setStatus('error'); return; }
-        window.postMessage({ type: 'JOBLOG_AUTH_TOKEN', token }, '*');
+      .then((r) => {
+        if (r.status === 401) {
+          window.location.href = `/login?callbackURL=${encodeURIComponent('/auth/connect')}`;
+          return null;
+        }
+        return r.ok ? r.json() : null;
+      })
+      .then((data) => {
+        if (!data?.token) { setStatus('error'); return; }
+        window.postMessage({ type: 'JOBLOG_AUTH_TOKEN', token: data.token }, '*');
         setStatus('success');
       })
       .catch(() => setStatus('error'));

@@ -2,7 +2,12 @@ import type { JobPostingDraft } from '@joblog/shared';
 import { extractCompanyWebsite, injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
 
 export default defineContentScript({
-  matches: ['https://www.glassdoor.*/job-listing/*', 'https://www.glassdoor.*/Jobs/*'],
+  matches: [
+    'https://*.glassdoor.com/job-listing/*',
+    'https://*.glassdoor.com/Jobs/*',
+    'https://*.glassdoor.fr/job-listing/*',
+    'https://*.glassdoor.fr/Jobs/*',
+  ],
   main() {
     injectSaveButton(extract);
   },

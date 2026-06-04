@@ -1,33 +1,60 @@
 import type { JobPostingDraft } from '@joblog/shared';
 
-const API_BASE = import.meta.env.VITE_API_URL ?? 'https://joblog.arthurjenck.com';
+type SaveJobResponse = { ok: true } | { ok: false; error?: string };
 
 export async function saveJobPosting(draft: JobPostingDraft): Promise<void> {
-  const { auth_token } = await browser.storage.local.get('auth_token');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (auth_token) headers['Authorization'] = `Bearer ${auth_token}`;
+  const response = await browser.runtime.sendMessage({
+    type: 'JOBLOG_SAVE_JOB',
+    draft,
+  }) as SaveJobResponse | undefined;
 
-  const jpRes = await fetch(`${API_BASE}/api/job-postings`, {
-    method: 'POST',
-    headers,
-    credentials: 'include',
-    body: JSON.stringify({ ...draft, scrape_method: 'extension' }),
-  });
-  if (!jpRes.ok) throw new Error(`job-postings: ${jpRes.status}`);
-  const { jobPostingId } = await jpRes.json() as { jobPostingId: string };
-
-  const appRes = await fetch(`${API_BASE}/api/applications`, {
-    method: 'POST',
-    headers,
-    credentials: 'include',
-    body: JSON.stringify({ jobPostingId, status: 'saved' }),
-  });
-  if (!appRes.ok) throw new Error(`applications: ${appRes.status}`);
+  if (!response?.ok) throw new Error(response?.error ?? 'Erreur de sauvegarde');
 }
 
-export function injectSaveButton(extractor: () => JobPostingDraft): void {
-  if (document.getElementById('joblog-save-btn')) return;
+export function injectSaveButton(extractor: () => JobPostingDraft, shouldShow = () => true): void {
+  const syncButton = () => {
+    const existing = document.getElementById('joblog-save-btn');
 
+    if (!shouldShow()) {
+      existing?.remove();
+      return;
+    }
+
+    if (existing || !document.body) return;
+
+    document.body.appendChild(createSaveButton(extractor));
+  };
+
+  let pending = false;
+  const scheduleSync = () => {
+    if (pending) return;
+    pending = true;
+    window.setTimeout(() => {
+      pending = false;
+      syncButton();
+    }, 150);
+  };
+
+  syncButton();
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', syncButton, { once: true });
+  }
+
+  let previousUrl = window.location.href;
+  window.setInterval(() => {
+    if (previousUrl === window.location.href) return;
+    previousUrl = window.location.href;
+    scheduleSync();
+  }, 500);
+
+  new MutationObserver(scheduleSync).observe(document.documentElement, {
+    childList: true,
+    subtree: true,
+  });
+}
+
+function createSaveButton(extractor: () => JobPostingDraft): HTMLButtonElement {
   const btn = document.createElement('button');
   btn.id = 'joblog-save-btn';
   btn.textContent = '💼 Sauver dans JobLog';
@@ -55,14 +82,22 @@ export function injectSaveButton(extractor: () => JobPostingDraft): void {
       await saveJobPosting(extractor());
       btn.textContent = '✓ Sauvegardé';
       setTimeout(() => btn.remove(), 2000);
-    } catch {
-      btn.textContent = '✗ Erreur';
+    } catch (error) {
+      btn.textContent = formatButtonError(error);
       btn.disabled = false;
       setTimeout(() => { btn.textContent = '💼 Sauver dans JobLog'; }, 2000);
     }
   });
 
-  document.body.appendChild(btn);
+  return btn;
+}
+
+function formatButtonError(error: unknown) {
+  const message = error instanceof Error ? error.message : '';
+  if (message.includes('Connectez-vous')) return '✗ Connecte-toi';
+  if (message.includes('HTTP 401')) return '✗ Connecte-toi';
+  if (message.includes('HTTP 403')) return '✗ Non autorisé';
+  return '✗ Erreur';
 }
 
 export function parseContractType(raw: string) {

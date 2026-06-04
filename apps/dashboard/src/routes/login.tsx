@@ -7,10 +7,20 @@ import { Separator } from '@/components/ui/separator';
 import { useState } from 'react';
 
 export const Route = createFileRoute('/login')({
+  validateSearch: (search): { callbackURL?: string } => ({
+    callbackURL: getSafeCallbackURL(search.callbackURL),
+  }),
   component: LoginPage,
 });
 
+function getSafeCallbackURL(value: unknown) {
+  if (typeof value !== 'string') return undefined;
+  if (!value.startsWith('/') || value.startsWith('//')) return undefined;
+  return value;
+}
+
 export function LoginPage() {
+  const { callbackURL = '/' } = Route.useSearch();
   const [email, setEmail] = useState('');
   const [magicLinkSent, setMagicLinkSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -21,7 +31,7 @@ export function LoginPage() {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ provider: 'google', callbackURL: '/' }),
+      body: JSON.stringify({ provider: 'google', callbackURL }),
     });
 
     if (!res.ok) {
@@ -45,7 +55,7 @@ export function LoginPage() {
       method: 'POST',
       credentials: 'include',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, callbackURL: '/' }),
+      body: JSON.stringify({ email, callbackURL }),
     });
     if (res.ok) {
       setMagicLinkSent(true);

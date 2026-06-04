@@ -2,6 +2,9 @@ import { useState, useEffect } from 'react';
 import {
   Sheet, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
+} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -12,10 +15,19 @@ import { StatusBadge } from './StatusBadge';
 import { SourceBadge } from './SourceBadge';
 import { EventTimeline } from './EventTimeline';
 import { AnalyzePanel } from './AnalyzePanel';
+import { EditJobPostingDialog } from './EditJobPostingDialog';
 import { api } from '@/lib/api';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
-import { APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS, STATUS_EVENT, type ApplicationStatus, type ApplicationWithJob, type ContractType, type RemoteType, type EventType, type Cv } from '@joblog/shared';
-import { ExternalLinkIcon, BuildingIcon, SendIcon, CalendarIcon, TrophyIcon, XCircleIcon, GhostIcon } from 'lucide-react';
+import {
+  APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS,
+  STATUS_EVENT, TERMINAL_STATUSES,
+  type ApplicationStatus, type ApplicationWithJob, type ContractType, type RemoteType,
+  type EventType, type Cv,
+} from '@joblog/shared';
+import {
+  ExternalLinkIcon, BuildingIcon, SendIcon, CalendarIcon, TrophyIcon,
+  XCircleIcon, GhostIcon, BanIcon, PencilIcon,
+} from 'lucide-react';
 
 interface Props {
   application: ApplicationWithJob | null;
@@ -27,6 +39,8 @@ interface Props {
 export function ApplicationDetail({ application, open, onClose, onUpdated }: Props) {
   const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [cancelAllOpen, setCancelAllOpen] = useState(false);
+  const [editJobOpen, setEditJobOpen] = useState(false);
 
   useEffect(() => {
     if (open) {
@@ -49,9 +63,10 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
     }
   }
 
-  async function addEvent(type: EventType) {
-    await api.applications.addEvent(application!._id, { type, at: new Date().toISOString() });
+  async function addEvent(type: EventType, meta?: Record<string, unknown>) {
+    await api.applications.addEvent(application!._id, { type, at: new Date().toISOString(), meta });
     onUpdated();
+    if (type === 'offer_accepted') setCancelAllOpen(true);
   }
 
   async function deleteEvent(type: EventType, at: string) {
@@ -75,6 +90,38 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
   }
 
   return (
+    <>
+    <Dialog open={cancelAllOpen} onOpenChange={setCancelAllOpen}>
+      <DialogContent className="max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Félicitations !</DialogTitle>
+          <DialogDescription>
+            Vous avez accepté une offre. Voulez-vous annuler toutes vos autres candidatures actives ?
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" size="sm" onClick={() => setCancelAllOpen(false)}>
+            Non, garder
+          </Button>
+          <Button
+            size="sm"
+            onClick={async () => {
+              await api.applications.cancelAll(application._id);
+              setCancelAllOpen(false);
+              onUpdated();
+            }}
+          >
+            Oui, tout annuler
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+    <EditJobPostingDialog
+      application={application}
+      open={editJobOpen}
+      onClose={() => setEditJobOpen(false)}
+      onSaved={onUpdated}
+    />
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 py-4 border-b">
@@ -94,7 +141,17 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <SheetTitle className="text-base leading-tight">{jp?.title ?? '—'}</SheetTitle>
+              <div className="flex items-start gap-1.5">
+                <SheetTitle className="text-base leading-tight flex-1 min-w-0">{jp?.title ?? '—'}</SheetTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-foreground"
+                  onClick={() => setEditJobOpen(true)}
+                >
+                  <PencilIcon className="h-3.5 w-3.5" />
+                </Button>
+              </div>
               <p className="text-sm text-muted-foreground mt-0.5">{jp?.company ?? '—'}</p>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {jp?.source && <SourceBadge source={jp.source} />}
@@ -152,6 +209,10 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                   <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
                   Ghostée
                 </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'cancelled' })}>
+                  <BanIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Annuler
+                </Button>
               </div>
             )}
             {application.status === 'applied' && (
@@ -167,6 +228,10 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
                   <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
                   Ghostée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'cancelled' })}>
+                  <BanIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Annuler
                 </Button>
               </div>
             )}
@@ -187,6 +252,10 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
                   <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
                   Ghostée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'cancelled' })}>
+                  <BanIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Annuler
                 </Button>
               </div>
             )}
@@ -267,7 +336,13 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
           <section className="flex flex-col gap-3">
             <span className="text-sm font-medium">Relances</span>
-            <ReminderFields reminder={application.reminder} onSave={(r) => patch({ reminder: r })} />
+            <ReminderFields
+              reminder={application.reminder}
+              status={application.status}
+              events={application.events}
+              appliedAt={application.appliedAt}
+              onSave={(r) => patch({ reminder: r })}
+            />
           </section>
 
           <Separator />
@@ -290,6 +365,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
         </div>
       </SheetContent>
     </Sheet>
+    </>
   );
 }
 
@@ -344,34 +420,95 @@ function NotesField({ value, onSave }: { value: string; onSave: (v: string) => v
   );
 }
 
+function computeNextAt(baseIso: string | null, frequencyDays: number): string {
+  const base = baseIso ? new Date(baseIso) : new Date();
+  const next = new Date(base.getTime() + frequencyDays * 24 * 60 * 60 * 1000);
+  return next.toISOString();
+}
+
 function ReminderFields({
   reminder,
+  status,
+  events,
+  appliedAt,
   onSave,
 }: {
   reminder: ApplicationWithJob['reminder'];
+  status: ApplicationStatus;
+  events: ApplicationWithJob['events'];
+  appliedAt: ApplicationWithJob['appliedAt'];
   onSave: (r: Partial<ApplicationWithJob['reminder']>) => void;
 }) {
+  const [frequencyDays, setFrequencyDays] = useState(reminder.frequencyDays);
+  const [at, setAt] = useState(reminder.at ?? null);
+
+  const isTerminal = TERMINAL_STATUSES.includes(status);
+
+  const followupEvents = events
+    .filter((e) => e.type === 'followup_sent')
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  const hasFollowup = followupEvents.length > 0;
+  const lastFollowupAt = hasFollowup ? followupEvents[0].at : null;
+
+  function handleFrequencyBlur(value: number) {
+    const days = value || 7;
+    setFrequencyDays(days);
+    const base = lastFollowupAt ?? appliedAt ?? null;
+    const nextAt = computeNextAt(base, days);
+    setAt(nextAt);
+    onSave({ frequencyDays: days, at: nextAt });
+  }
+
+  function handleLastFollowupChange(dateValue: string) {
+    if (!dateValue) return;
+    const newBase = new Date(dateValue + 'T12:00:00').toISOString();
+    const nextAt = computeNextAt(newBase, frequencyDays);
+    setAt(nextAt);
+    onSave({ at: nextAt });
+  }
+
   return (
-    <div className="grid grid-cols-2 gap-3">
-      <div className="flex flex-col gap-1.5">
-        <Label className="text-xs">Date de relance</Label>
-        <Input
-          type="date"
-          defaultValue={reminder.at ? new Date(reminder.at).toISOString().slice(0, 10) : ''}
-          onChange={(e) => onSave({ at: e.target.value ? new Date(e.target.value).toISOString() : null })}
-          className="h-8 text-sm"
-        />
+    <div className={`flex flex-col gap-3 ${isTerminal ? 'opacity-50 pointer-events-none' : ''}`}>
+      {isTerminal && (
+        <p className="text-xs text-muted-foreground">Les relances sont désactivées pour ce statut.</p>
+      )}
+      <div className="grid grid-cols-2 gap-3">
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Fréquence (jours)</Label>
+          <Input
+            type="number"
+            min={1}
+            value={frequencyDays}
+            onChange={(e) => setFrequencyDays(Number(e.target.value) || 7)}
+            onBlur={(e) => handleFrequencyBlur(Number(e.target.value) || 7)}
+            className="h-8 text-sm"
+          />
+        </div>
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Prochaine relance</Label>
+          <Input
+            type="date"
+            value={at ? new Date(at).toISOString().slice(0, 10) : ''}
+            onChange={(e) => {
+              const iso = e.target.value ? new Date(e.target.value + 'T12:00:00').toISOString() : null;
+              setAt(iso);
+              onSave({ at: iso });
+            }}
+            className="h-8 text-sm"
+          />
+        </div>
       </div>
-      <div className="flex flex-col gap-1.5">
-        <Label className="text-xs">Fréquence (jours)</Label>
-        <Input
-          type="number"
-          min={1}
-          defaultValue={reminder.frequencyDays}
-          onBlur={(e) => onSave({ frequencyDays: Number(e.target.value) || 7 })}
-          className="h-8 text-sm"
-        />
-      </div>
+      {hasFollowup && (
+        <div className="flex flex-col gap-1.5">
+          <Label className="text-xs">Dernière relance envoyée</Label>
+          <Input
+            type="date"
+            defaultValue={lastFollowupAt ? new Date(lastFollowupAt).toISOString().slice(0, 10) : ''}
+            onChange={(e) => handleLastFollowupChange(e.target.value)}
+            className="h-8 text-sm"
+          />
+        </div>
+      )}
     </div>
   );
 }

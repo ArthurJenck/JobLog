@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
-
-const API_BASE = import.meta.env.VITE_API_URL ?? 'https://joblog.arthurjenck.com';
+import { API_BASE } from '../../utils/api-base';
 
 interface RecentApp {
   _id: string;
@@ -53,7 +52,7 @@ export default function App() {
           <span className="title">JobLog</span>
         </div>
         <p className="hint">Connecte-toi pour sauvegarder des offres.</p>
-        <a href={`${API_BASE}`} target="_blank" rel="noreferrer" className="btn-primary">
+        <a href={`${API_BASE}/auth/connect`} target="_blank" rel="noreferrer" className="btn-primary">
           Se connecter
         </a>
       </div>

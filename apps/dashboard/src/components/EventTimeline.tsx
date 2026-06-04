@@ -29,7 +29,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-const EVENT_ICONS: Record<EventType, React.ElementType> = {
+const EVENT_ICONS: Partial<Record<EventType, React.ElementType>> & { _fallback: React.ElementType } = {
   created: PlusCircleIcon,
   applied: SendIcon,
   response_received: MessageSquareIcon,
@@ -42,10 +42,11 @@ const EVENT_ICONS: Record<EventType, React.ElementType> = {
   offer_declined: ThumbsDownIcon,
   rejected: XCircleIcon,
   ghosted: GhostIcon,
-  note: StickyNoteIcon,
+  custom: StickyNoteIcon,
+  _fallback: StickyNoteIcon,
 };
 
-const EVENT_COLORS: Record<EventType, string> = {
+const EVENT_COLORS: Partial<Record<EventType, string>> = {
   created: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
   applied: 'text-blue-600 bg-blue-100 dark:bg-blue-900/40',
   response_received: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/40',
@@ -58,8 +59,10 @@ const EVENT_COLORS: Record<EventType, string> = {
   offer_declined: 'text-red-600 bg-red-100 dark:bg-red-900/40',
   rejected: 'text-red-600 bg-red-100 dark:bg-red-900/40',
   ghosted: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800',
-  note: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
+  custom: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
 };
+
+const FALLBACK_COLOR = 'text-slate-500 bg-slate-100 dark:bg-slate-800';
 
 const TERMINAL_STATUSES = new Set<ApplicationStatus>(['rejected', 'ghosted']);
 
@@ -72,7 +75,7 @@ interface EventItem {
 interface Props {
   events: EventItem[];
   currentStatus: ApplicationStatus;
-  onAddEvent: (type: EventType) => void;
+  onAddEvent: (type: EventType, meta?: Record<string, unknown>) => void;
   onDeleteEvent: (type: EventType, at: string) => void;
   onConfirmFuture: (type: EventType) => void;
   onUpdateEventDate: (type: EventType, at: string, newAt: string) => void;
@@ -90,7 +93,7 @@ const ADDABLE_EVENTS: EventType[] = [
   'offer_declined',
   'rejected',
   'ghosted',
-  'note',
+  'custom',
 ];
 
 function getNextPipelineEvent(
@@ -99,6 +102,20 @@ function getNextPipelineEvent(
 ): EventType | null {
   if (TERMINAL_STATUSES.has(currentStatus)) return null;
   const existing = new Set(events.map((e) => e.type));
+
+  if (existing.has('interview_scheduled') && !existing.has('interview_done')) {
+    return 'interview_done';
+  }
+  if (existing.has('interview_done') && !existing.has('thank_you_sent')) {
+    return 'thank_you_sent';
+  }
+  if (existing.has('thank_you_sent') && !existing.has('followup_sent')) {
+    return 'followup_sent';
+  }
+  if (existing.has('followup_sent') && !existing.has('response_received')) {
+    return 'response_received';
+  }
+
   for (const step of EVENT_PIPELINE) {
     if (!existing.has(step)) return step;
   }
@@ -147,6 +164,13 @@ function EditableEventDate({
   );
 }
 
+function getEventLabel(event: EventItem): string {
+  if (event.type === 'custom') {
+    return typeof event.meta?.label === 'string' ? event.meta.label : 'Note personnalisée';
+  }
+  return EVENT_LABELS[event.type] ?? (typeof event.meta?.label === 'string' ? event.meta.label : event.type);
+}
+
 export function EventTimeline({
   events,
   currentStatus,
@@ -156,10 +180,22 @@ export function EventTimeline({
   onUpdateEventDate,
 }: Props) {
   const [open, setOpen] = useState(false);
+  const [addingCustom, setAddingCustom] = useState(false);
+  const [customDraft, setCustomDraft] = useState('');
+
   const sorted = [...events].sort(
     (a, b) => new Date(b.at).getTime() - new Date(a.at).getTime(),
   );
   const futureType = getNextPipelineEvent(events, currentStatus);
+
+  function commitCustom() {
+    const label = customDraft.trim();
+    if (label) {
+      onAddEvent('custom', { label });
+    }
+    setAddingCustom(false);
+    setCustomDraft('');
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -177,16 +213,39 @@ export function EventTimeline({
               <DropdownMenuItem
                 key={type}
                 onClick={() => {
-                  onAddEvent(type);
+                  if (type === 'custom') {
+                    setAddingCustom(true);
+                    setCustomDraft('');
+                  } else {
+                    onAddEvent(type);
+                  }
                   setOpen(false);
                 }}
               >
-                {EVENT_LABELS[type]}
+                {EVENT_LABELS[type] ?? type}
               </DropdownMenuItem>
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
       </div>
+
+      {addingCustom && (
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={customDraft}
+            onChange={(e) => setCustomDraft(e.target.value)}
+            placeholder="Libellé de la note…"
+            className="flex-1 h-8 text-sm px-3 border rounded-md bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') commitCustom();
+              if (e.key === 'Escape') { setAddingCustom(false); setCustomDraft(''); }
+            }}
+            onBlur={commitCustom}
+          />
+        </div>
+      )}
 
       <div className="flex flex-col gap-0">
         {futureType && (
@@ -197,7 +256,7 @@ export function EventTimeline({
             <div className="flex flex-col items-center">
               <div className="flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 border-2 border-dashed border-muted-foreground/40 bg-muted">
                 {(() => {
-                  const Icon = EVENT_ICONS[futureType];
+                  const Icon = EVENT_ICONS[futureType] ?? EVENT_ICONS._fallback;
                   return <Icon className="h-3.5 w-3.5 text-muted-foreground" />;
                 })()}
               </div>
@@ -207,14 +266,17 @@ export function EventTimeline({
             </div>
             <div className="pb-4 pt-0.5">
               <p className="text-sm font-medium leading-tight text-muted-foreground">
-                {EVENT_LABELS[futureType]}
+                {EVENT_LABELS[futureType] ?? futureType}
               </p>
             </div>
           </div>
         )}
         {sorted.map((event, i) => {
-          const Icon = EVENT_ICONS[event.type];
-          const colorClass = EVENT_COLORS[event.type];
+          const Icon = EVENT_ICONS[event.type] ?? EVENT_ICONS._fallback;
+          const colorClass = EVENT_COLORS[event.type] ?? FALLBACK_COLOR;
+          const extraMeta = event.meta
+            ? Object.entries(event.meta).filter(([k]) => k !== 'label')
+            : [];
           return (
             <div key={i} className="flex gap-3 group">
               <div className="flex flex-col items-center">
@@ -230,7 +292,7 @@ export function EventTimeline({
               <div className="pb-4 pt-0.5 flex-1">
                 <div className="flex items-start justify-between gap-2">
                   <p className="text-sm font-medium leading-tight">
-                    {EVENT_LABELS[event.type]}
+                    {getEventLabel(event)}
                   </p>
                   {event.type !== 'created' && (
                     <button
@@ -245,11 +307,9 @@ export function EventTimeline({
                   at={event.at}
                   onUpdate={(newAt) => onUpdateEventDate(event.type, event.at, newAt)}
                 />
-                {event.meta && Object.keys(event.meta).length > 0 && (
+                {extraMeta.length > 0 && (
                   <p className="text-xs text-muted-foreground mt-0.5">
-                    {Object.entries(event.meta)
-                      .map(([k, v]) => `${k}: ${v}`)
-                      .join(' · ')}
+                    {extraMeta.map(([k, v]) => `${k}: ${v}`).join(' · ')}
                   </p>
                 )}
               </div>

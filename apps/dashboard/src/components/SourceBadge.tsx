@@ -8,6 +8,8 @@ const SOURCE_LABELS: Record<JobSource, string> = {
   indeed:    'Indeed',
   glassdoor: 'Glassdoor',
   jobteaser: 'Jobteaser',
+  jobijoba:  'Jobijoba',
+  meteojob:  'Meteojob',
   paste:     'URL',
   manual:    'Manuel',
 };

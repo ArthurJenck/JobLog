@@ -11,11 +11,18 @@ import {
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { StatusBadge } from './StatusBadge';
 import { SourceBadge } from './SourceBadge';
-import { PlusIcon, ArrowUpDownIcon, ArrowUpIcon, ArrowDownIcon } from 'lucide-react';
+import { PlusIcon, ArrowUpDownIcon, ArrowUpIcon, ArrowDownIcon, ChevronDownIcon } from 'lucide-react';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
-import type { ApplicationWithJob, ApplicationStatus, JobSource } from '@joblog/shared';
+import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationWithJob, type ApplicationStatus, type JobSource } from '@joblog/shared';
 
 interface Props {
   data: ApplicationWithJob[];
@@ -24,15 +31,45 @@ interface Props {
   isLoading?: boolean;
 }
 
+const DEFAULT_STATUSES = new Set<ApplicationStatus>(['saved', 'applied', 'interview', 'offer']);
+
 export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props) {
   const [sorting, setSorting] = useState<SortingState>([{ id: 'created_at', desc: true }]);
   const [globalFilter, setGlobalFilter] = useState('');
-  const [statusFilter, setStatusFilter] = useState<ApplicationStatus | ''>('');
+  const [selectedStatuses, setSelectedStatuses] = useState<Set<ApplicationStatus>>(new Set(DEFAULT_STATUSES));
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+
+  function toggleStatus(s: ApplicationStatus) {
+    setSelectedStatuses((prev) => {
+      const next = new Set(prev);
+      if (next.has(s)) next.delete(s);
+      else next.add(s);
+      return next;
+    });
+  }
 
   const filtered = useMemo(() => {
-    if (!statusFilter) return data;
-    return data.filter((a) => a.status === statusFilter);
-  }, [data, statusFilter]);
+    let result = selectedStatuses.size > 0
+      ? data.filter((a) => selectedStatuses.has(a.status as ApplicationStatus))
+      : data;
+
+    if (dateFrom) {
+      const from = new Date(dateFrom + 'T00:00:00');
+      result = result.filter((a) => {
+        const d = a.appliedAt ?? a.created_at;
+        return d && new Date(d) >= from;
+      });
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + 'T23:59:59');
+      result = result.filter((a) => {
+        const d = a.appliedAt ?? a.created_at;
+        return d && new Date(d) <= to;
+      });
+    }
+    return result;
+  }, [data, selectedStatuses, dateFrom, dateTo]);
 
   const columns = useMemo<ColumnDef<ApplicationWithJob>[]>(
     () => [
@@ -137,15 +174,7 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
     getFilteredRowModel: getFilteredRowModel(),
   });
 
-  const STATUS_OPTIONS: { value: ApplicationStatus | ''; label: string }[] = [
-    { value: '', label: 'Tous les statuts' },
-    { value: 'saved', label: 'Sauvegardées' },
-    { value: 'applied', label: 'Postulées' },
-    { value: 'interview', label: 'Entretiens' },
-    { value: 'offer', label: 'Offres' },
-    { value: 'rejected', label: 'Refusées' },
-    { value: 'ghosted', label: 'Ghostées' },
-  ];
+  const allSelected = selectedStatuses.size === APPLICATION_STATUSES.length;
 
   return (
     <div className="flex flex-col gap-4">
@@ -157,15 +186,50 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
             onChange={(e) => setGlobalFilter(e.target.value)}
             className="h-9 w-52"
           />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value as ApplicationStatus | '')}
-            className="h-9 rounded-md border border-input bg-background px-3 text-sm"
-          >
-            {STATUS_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="outline" size="sm" className="h-9 gap-1.5">
+                Statut
+                <span className="rounded-full bg-muted px-1.5 text-xs font-medium leading-tight">
+                  {allSelected ? 'tous' : selectedStatuses.size}
+                </span>
+                <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" className="w-44">
+              {APPLICATION_STATUSES.map((s) => (
+                <DropdownMenuItem
+                  key={s}
+                  onSelect={(e) => { e.preventDefault(); toggleStatus(s); }}
+                  className="gap-2"
+                >
+                  <div className={`h-3.5 w-3.5 rounded-sm border flex-shrink-0 transition-colors ${selectedStatuses.has(s) ? 'bg-foreground border-foreground' : 'border-muted-foreground/50'}`} />
+                  {STATUS_LABELS[s]}
+                </DropdownMenuItem>
+              ))}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onSelect={() => setSelectedStatuses(new Set(APPLICATION_STATUSES))}>
+                Tout afficher
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => setSelectedStatuses(new Set(DEFAULT_STATUSES))}>
+                Actives seulement
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="h-9 w-36 text-sm"
+            title="Date de début"
+          />
+          <Input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="h-9 w-36 text-sm"
+            title="Date de fin"
+          />
         </div>
         <Button size="sm" onClick={onAdd}>
           <PlusIcon className="h-4 w-4 mr-1" />
@@ -196,35 +260,49 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
               </TableRow>
             ))}
           </TableHeader>
-          <TableBody>
-            {isLoading ? (
+          {isLoading ? (
+            <TableBody>
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
                   Chargement…
                 </TableCell>
               </TableRow>
-            ) : table.getRowModel().rows.length === 0 ? (
+            </TableBody>
+          ) : table.getRowModel().rows.length === 0 ? (
+            <TableBody>
               <TableRow>
                 <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
                   Aucune candidature.
                 </TableCell>
               </TableRow>
-            ) : (
-              table.getRowModel().rows.map((row) => (
-                <TableRow
+            </TableBody>
+          ) : (
+            table.getRowModel().rows.map((row) => {
+              const suggestion = getSuggestion(row.original);
+              return (
+                <tbody
                   key={row.id}
-                  className="cursor-pointer hover:bg-muted/50"
+                  className="group cursor-pointer"
                   onClick={() => onRowClick(row.original)}
                 >
-                  {row.getVisibleCells().map((cell) => (
-                    <TableCell key={cell.id}>
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                    </TableCell>
-                  ))}
-                </TableRow>
-              ))
-            )}
-          </TableBody>
+                  <tr className={`transition-colors group-hover:bg-muted/50 ${suggestion ? '' : 'border-b'}`}>
+                    {row.getVisibleCells().map((cell) => (
+                      <td key={cell.id} className="p-4 align-middle">
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      </td>
+                    ))}
+                  </tr>
+                  {suggestion && (
+                    <tr className="border-b transition-colors group-hover:bg-muted/50">
+                      <td colSpan={columns.length} className="px-4 pt-0 pb-2 text-xs italic text-muted-foreground">
+                        {suggestion}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              );
+            })
+          )}
         </Table>
       </div>
     </div>
@@ -248,4 +326,35 @@ function dateStatus(iso: string): 'past' | 'today' | 'future' {
   if (day(d) < day(now)) return 'past';
   if (day(d) === day(now)) return 'today';
   return 'future';
+}
+
+function getSuggestion(app: ApplicationWithJob): string | null {
+  if (['rejected', 'ghosted', 'cancelled'].includes(app.status)) return null;
+
+  const events = app.events ?? [];
+  const hasInterviewDone = events.some(e => e.type === 'interview_done');
+  const hasThankYou = events.some(e => e.type === 'thank_you_sent');
+
+  if (hasInterviewDone && !hasThankYou) {
+    return 'Suggestion : Remerciez le recruteur après votre entretien.';
+  }
+
+  if (app.reminder?.at && new Date(app.reminder.at) <= new Date()) {
+    return 'Suggestion : Envoyez une relance pour ne pas vous faire oublier.';
+  }
+
+  if (!app.cvId && app.status !== 'saved') {
+    return 'Suggestion : Testez votre CV sur cette offre pour voir si votre profil correspond.';
+  }
+
+  if (hasInterviewDone) {
+    const last = [...events]
+      .filter(e => e.type === 'interview_done')
+      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0];
+    if (last && (Date.now() - new Date(last.at).getTime()) / 86400000 > 7) {
+      return 'Suggestion : Marquez le résultat de cet entretien.';
+    }
+  }
+
+  return null;
 }

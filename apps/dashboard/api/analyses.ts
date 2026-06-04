@@ -3,6 +3,7 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../lib/db.js';
 import { getEnv } from '../lib/env.js';
+import { sha256 } from '../lib/hash.js';
 import { requireSession } from '../lib/session.js';
 import { GEMINI_DAILY_QUOTA, GEMINI_MODEL } from '@joblog/shared';
 
@@ -10,11 +11,13 @@ const Schema = z.object({
   cvId: z.string(),
   applicationId: z.string(),
   force: z.boolean().optional().default(false),
+  jobDescription: z.string().max(20_000).optional(),
 });
 
 const LookupSchema = Schema.pick({ cvId: true, applicationId: true });
 
 const ANALYSIS_PROMPT_VERSION = 'requirements-evidence-v1';
+const MIN_COMPARISON_TEXT_LENGTH = 40;
 
 interface RequirementAnalysis {
   keyword: string;
@@ -63,9 +66,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const jobPostingId = String(app.jobPostingId);
   const model = getGeminiModel();
 
+  if (!ObjectId.isValid(jobPostingId)) {
+    return res.status(400).json({ error: 'Invalid job posting id' });
+  }
+
+  const jpCol = await getCollection('job_postings');
+  const jp = await jpCol.findOne({ _id: new ObjectId(jobPostingId) });
+  if (!jp) return res.status(404).json({ error: 'Offre introuvable' });
+
+  const jobDescriptionOverride = req.method === 'POST' && 'jobDescription' in parsed.data
+    ? normalizeComparisonText(parsed.data.jobDescription)
+    : '';
+  const storedJobDescription = normalizeComparisonText(jp.description);
+  const comparisonText = jobDescriptionOverride || storedJobDescription;
+
+  if (!hasComparableJobText(comparisonText)) {
+    return res.status(422).json({
+      code: 'no_comparison_data',
+      error: 'Aucune donnée à comparer avec votre CV. Collez le texte de l’offre pour lancer l’analyse.',
+    });
+  }
+
+  const jobDescriptionHash = sha256(comparisonText);
+
   const cached = !force ? await analysesCol.findOne({
     cvHash,
     jobPostingId,
+    jobDescriptionHash,
     model,
     analysisVersion: ANALYSIS_PROMPT_VERSION,
   }) : null;
@@ -87,21 +114,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const withinQuota = await checkAndIncrementQuota();
   if (!withinQuota) {
-    return res.status(503).json({
-      code: 'service_unavailable',
-      error: "Service d'analyse temporairement indisponible, réessayez demain",
+    return res.status(429).json({
+      code: 'quota_exceeded',
+      error: "Quota d'analyse atteint, réessayez demain.",
     });
   }
 
-  const jpCol = await getCollection('job_postings');
-  const jp = await jpCol.findOne({ _id: new ObjectId(jobPostingId) });
-  if (!jp) return res.status(404).json({ error: 'Offre introuvable' });
-
-  const result = await callGemini(cv.content as string, String(jp.description ?? jp.title ?? ''), model);
+  const result = await callGemini(cv.content as string, comparisonText, model);
   if (!result) {
     return res.status(503).json({
-      code: 'service_unavailable',
-      error: "Service d'analyse temporairement indisponible, réessayez demain",
+      code: 'analysis_unavailable',
+      error: "Service d'analyse temporairement indisponible, réessayez plus tard.",
     });
   }
 
@@ -111,6 +134,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       $set: {
         cvHash,
         jobPostingId,
+        jobDescriptionHash,
+        jobDescriptionSource: jobDescriptionOverride ? 'manual_input' : 'job_posting',
         model,
         analysisVersion: ANALYSIS_PROMPT_VERSION,
         keywords_matched: result.keywords_matched,
@@ -128,6 +153,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
 function getGeminiModel() {
   return getEnv('GEMINI_MODEL') ?? GEMINI_MODEL;
+}
+
+function normalizeComparisonText(value: unknown) {
+  return typeof value === 'string'
+    ? value.replace(/\s+/g, ' ').trim()
+    : '';
+}
+
+function hasComparableJobText(value: string) {
+  return value.length >= MIN_COMPARISON_TEXT_LENGTH;
 }
 
 async function checkAndIncrementQuota(): Promise<boolean> {

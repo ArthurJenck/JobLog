@@ -8,6 +8,7 @@ const STATUS_CLASSES: Record<ApplicationStatus, string> = {
   offer:      'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
   rejected:   'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   ghosted:    'bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400',
+  cancelled:  'bg-zinc-100 text-zinc-400 dark:bg-zinc-800 dark:text-zinc-500',
 };
 
 export function StatusBadge({ status }: { status: ApplicationStatus }) {

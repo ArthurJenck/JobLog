@@ -57,6 +57,7 @@ const PatchJobPostingSchema = z.object({
   requirements: z.array(z.string()).nullable().optional(),
   keywords: z.array(z.string()).nullable().optional(),
   company_website: z.string().nullable().optional(),
+  url: z.string().url().optional(),
 }).strict();
 
 function toDateOrNull(value: string | null) {
@@ -155,6 +156,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updates['status'] = status;
       if (status === 'applied' && !parsed.data.appliedAt) {
         updates['appliedAt'] = new Date();
+      }
+      if (['rejected', 'ghosted', 'cancelled'].includes(status)) {
+        updates['reminder.at'] = null;
       }
       const app = await col.findOne(appFilter);
       if (!app) return res.status(404).json({ error: 'Not found' });

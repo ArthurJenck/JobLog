@@ -2,11 +2,18 @@ import type { JobPostingDraft } from '@joblog/shared';
 import { extractCompanyWebsite, injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
 
 export default defineContentScript({
-  matches: ['https://www.welcometothejungle.com/*/jobs/*'],
+  matches: [
+    'https://welcometothejungle.com/*',
+    'https://www.welcometothejungle.com/*',
+  ],
   main() {
-    injectSaveButton(extract);
+    injectSaveButton(extract, isJobPage);
   },
 });
+
+function isJobPage() {
+  return window.location.pathname.includes('/jobs/') || window.location.pathname.includes('/jobs-matches');
+}
 
 function extract(): JobPostingDraft {
   const title =

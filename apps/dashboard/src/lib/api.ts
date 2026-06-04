@@ -10,6 +10,7 @@ export interface LogoSearchResult {
 export interface AnalysisResult {
   keywords_matched: string[];
   keywords_missing: string[];
+  requirements?: { keyword: string; present: boolean; evidence: string | null }[];
   insights: string;
   cached?: boolean;
 }
@@ -22,7 +23,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw Object.assign(new Error(body.error ?? `HTTP ${res.status}`), { status: res.status });
+    throw Object.assign(new Error(body.error ?? `HTTP ${res.status}`), {
+      status: res.status,
+      code: typeof body.code === 'string' ? body.code : undefined,
+    });
   }
   return res.json() as Promise<T>;
 }
@@ -56,6 +60,9 @@ export const api = {
     delete(id: string): Promise<{ ok: boolean }> {
       return request(`/applications/${id}`, { method: 'DELETE' });
     },
+    cancelAll(excludeId?: string): Promise<{ ok: boolean }> {
+      return request('/applications', { method: 'PATCH', body: JSON.stringify({ cancelAll: true, excludeId }) });
+    },
   },
   jobPostings: {
     create(body: Record<string, unknown>): Promise<{ jobPostingId: string; cached: boolean }> {
@@ -84,7 +91,7 @@ export const api = {
       const qs = new URLSearchParams({ cvId: params.cvId, applicationId: params.applicationId });
       return request(`/analyses?${qs.toString()}`);
     },
-    create(body: { cvId: string; applicationId: string; force?: boolean }): Promise<AnalysisResult> {
+    create(body: { cvId: string; applicationId: string; force?: boolean; jobDescription?: string }): Promise<AnalysisResult> {
       return request('/analyses', { method: 'POST', body: JSON.stringify(body) });
     },
   },

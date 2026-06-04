@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
-import { APPLICATION_STATUSES } from '@joblog/shared';
+import { APPLICATION_STATUSES, ACTIVE_STATUSES } from '@joblog/shared';
 
 const CreateApplicationSchema = z.object({
   jobPostingId: z.string(),
@@ -54,6 +54,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     return res.status(200).json({ data: results, total: results.length });
+  }
+
+  if (req.method === 'PATCH') {
+    const { cancelAll, excludeId } = req.body as { cancelAll?: boolean; excludeId?: string };
+    if (cancelAll) {
+      const filter: Record<string, unknown> = { userId, status: { $in: ACTIVE_STATUSES } };
+      if (excludeId && ObjectId.isValid(excludeId)) {
+        filter['_id'] = { $ne: new ObjectId(excludeId) };
+      }
+      const col2 = await getCollection('applications');
+      await col2.updateMany(filter, { $set: { status: 'cancelled', 'reminder.at': null, updated_at: new Date() } });
+      return res.status(200).json({ ok: true });
+    }
+    return res.status(400).json({ error: 'Invalid patch body' });
   }
 
   if (req.method === 'POST') {

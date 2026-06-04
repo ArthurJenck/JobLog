@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Textarea } from '@/components/ui/textarea';
 import { SparklesIcon, CheckCircleIcon, XCircleIcon } from 'lucide-react';
 import { api, type AnalysisResult } from '@/lib/api';
 
@@ -14,10 +15,14 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
   const [isLoading, setIsLoading] = useState(false);
   const [isCheckingCache, setIsCheckingCache] = useState(false);
   const [error, setError] = useState('');
+  const [needsJobDescription, setNeedsJobDescription] = useState(false);
+  const [jobDescription, setJobDescription] = useState('');
 
   useEffect(() => {
     setResult(null);
     setError('');
+    setNeedsJobDescription(false);
+    setJobDescription('');
 
     if (!cvId) {
       setIsCheckingCache(false);
@@ -33,7 +38,15 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
         if (!isCancelled) setResult(analysis);
       })
       .catch((e) => {
-        if (!isCancelled) setError(e instanceof Error ? e.message : 'Erreur inconnue');
+        if (!isCancelled) {
+          const apiError = e as { code?: string; message?: string };
+          if (apiError.code === 'no_comparison_data') {
+            setNeedsJobDescription(true);
+            setError(apiError.message ?? 'Aucune donnée à comparer avec votre CV.');
+          } else {
+            setError(e instanceof Error ? e.message : 'Erreur inconnue');
+          }
+        }
       })
       .finally(() => {
         if (!isCancelled) setIsCheckingCache(false);
@@ -46,16 +59,31 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
 
   async function analyze(options?: { force?: boolean }) {
     if (!cvId) return;
+    const pastedJobDescription = jobDescription.trim();
+    if (needsJobDescription && pastedJobDescription.length < 40) {
+      setError('Collez le texte de l’offre pour lancer l’analyse.');
+      return;
+    }
+
     setIsLoading(true);
     setIsCheckingCache(false);
     setError('');
     if (options?.force) setResult(null);
     try {
-      const data = await api.analyses.create({ cvId, applicationId, force: options?.force });
+      const data = await api.analyses.create({
+        cvId,
+        applicationId,
+        force: options?.force,
+        jobDescription: pastedJobDescription || undefined,
+      });
       setResult(data);
     } catch (e) {
-      if (e && typeof e === 'object' && 'status' in e && (e as { status: number }).status === 503) {
-        setError("Service d'analyse temporairement indisponible, réessayez demain.");
+      const apiError = e as { code?: string; status?: number; message?: string };
+      if (apiError.code === 'no_comparison_data') {
+        setNeedsJobDescription(true);
+        setError(apiError.message ?? 'Aucune donnée à comparer avec votre CV.');
+      } else if (apiError.status === 503) {
+        setError(apiError.message ?? "Service d'analyse temporairement indisponible, réessayez plus tard.");
       } else {
         setError(e instanceof Error ? e.message : 'Erreur inconnue');
       }
@@ -82,15 +110,28 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
           variant="outline"
           size="sm"
           onClick={() => { void analyze(); }}
-          disabled={!cvId}
+          disabled={!cvId || (needsJobDescription && jobDescription.trim().length < 40)}
           title={!cvId ? 'Sélectionne un CV pour analyser' : undefined}
           className="w-fit"
         >
           <SparklesIcon className="h-3.5 w-3.5 mr-1.5" />
-          Analyser CV vs offre
+          {needsJobDescription ? 'Analyser avec ce texte' : 'Analyser CV vs offre'}
         </Button>
         {!cvId && (
           <p className="text-xs text-muted-foreground">Sélectionne d'abord un CV.</p>
+        )}
+        {needsJobDescription && (
+          <div className="flex flex-col gap-1.5 max-w-xl">
+            <Textarea
+              value={jobDescription}
+              onChange={(event) => setJobDescription(event.target.value)}
+              placeholder="Colle ici le descriptif complet de l’offre…"
+              className="min-h-32 resize-y text-sm"
+            />
+            <p className="text-xs text-muted-foreground">
+              Le texte est envoyé comme texte brut à Gemini pour cette analyse.
+            </p>
+          </div>
         )}
         {error && <p className="text-sm text-destructive">{error}</p>}
       </div>
