@@ -1,8 +1,16 @@
 import { defineConfig } from 'wxt';
 
+const isProd = process.env.NODE_ENV === 'production';
+
 const apiHostPermission = process.env.VITE_API_URL
   ? `${new URL(process.env.VITE_API_URL).origin}/*`
   : 'https://joblog.arthurjenck.com/*';
+
+const hostPermissions = Array.from(new Set([
+  'https://joblog.arthurjenck.com/*',
+  apiHostPermission,
+  ...(!isProd ? ['http://localhost:3000/*', 'http://localhost:5173/*'] : []),
+]));
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
@@ -16,12 +24,7 @@ export default defineConfig({
       '128': 'icon-128.png',
     },
     permissions: ['storage', 'activeTab', 'alarms'],
-    host_permissions: Array.from(new Set([
-      'https://joblog.arthurjenck.com/*',
-      apiHostPermission,
-      'http://localhost:3000/*',
-      'http://localhost:5173/*',
-    ])),
+    host_permissions: hostPermissions,
     action: {
       default_popup: 'popup.html',
       default_title: 'JobLog',

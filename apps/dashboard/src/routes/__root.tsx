@@ -3,6 +3,7 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
+import { FeedbackBar } from '@/components/feedback/FeedbackBar';
 
 const PUBLIC_PATHS = ['/login', '/privacy', '/auth'];
 
@@ -49,6 +50,7 @@ export function RootLayout() {
           <Outlet />
         </SidebarInset>
       </SidebarProvider>
+      <FeedbackBar />
       <Toaster />
     </TooltipProvider>
   );

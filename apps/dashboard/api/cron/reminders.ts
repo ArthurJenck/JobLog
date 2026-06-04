@@ -171,7 +171,7 @@ async function sendWebPush(
   const { sendNotification, setVapidDetails } = await import('web-push');
 
   setVapidDetails(
-    process.env.VAPID_EMAIL!,
+    process.env.ADMIN_MAIL!,
     process.env.VAPID_PUBLIC_KEY!,
     process.env.VAPID_PRIVATE_KEY!
   );
