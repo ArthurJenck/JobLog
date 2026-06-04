@@ -5,7 +5,8 @@ import { getDb } from './db.js';
 import { getEnv, requireEnv } from './env.js';
 import { sendEmail } from './resend.js';
 
-let _auth: ReturnType<typeof betterAuth> | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _auth: ReturnType<typeof betterAuth<any>> | null = null;
 
 function getFallbackAppUrl() {
   return getEnv('PUBLIC_APP_URL') ?? 'https://joblog.arthurjenck.com';
