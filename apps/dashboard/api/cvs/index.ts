@@ -11,6 +11,10 @@ const CreateCvSchema = z.object({
   content: z.string().min(1),
 });
 
+const RenameCvSchema = z.object({
+  label: z.string().min(1),
+});
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireSession(req, res);
   if (!session) return;
@@ -43,6 +47,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const result = await col.insertOne(doc);
     return res.status(201).json({ cvId: result.insertedId.toString() });
+  }
+
+  if (req.method === 'PATCH') {
+    const { id } = req.query as { id: string };
+    if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
+
+    const parsed = RenameCvSchema.safeParse(req.body);
+    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const result = await col.updateOne(
+      { _id: new ObjectId(id), userId },
+      { $set: { label: parsed.data.label } },
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
+    return res.status(200).json({ ok: true });
   }
 
   if (req.method === 'DELETE') {

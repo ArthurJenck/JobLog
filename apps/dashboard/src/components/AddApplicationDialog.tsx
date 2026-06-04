@@ -19,7 +19,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 import { api, type LogoSearchResult } from '@/lib/api';
 import { getLogoUrlForDomain } from '@/lib/company-logo';
-import { CONTRACT_TYPES, REMOTE_TYPES } from '@joblog/shared';
+import { CONTRACT_TYPES, CONTRACT_LABELS, REMOTE_TYPES, REMOTE_LABELS } from '@joblog/shared';
 
 interface Props {
   open: boolean;
@@ -232,7 +232,7 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
             <SelectContent>
               {CONTRACT_TYPES.map((c) => (
                 <SelectItem key={c} value={c}>
-                  {c.toUpperCase()}
+                  {CONTRACT_LABELS[c]}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -247,7 +247,7 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
             <SelectContent>
               {REMOTE_TYPES.map((r) => (
                 <SelectItem key={r} value={r}>
-                  {r}
+                  {REMOTE_LABELS[r]}
                 </SelectItem>
               ))}
             </SelectContent>

@@ -1,7 +1,7 @@
-import { createRootRoute, Outlet, redirect, useRouter } from '@tanstack/react-router';
+import { createRootRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/layout/AppSidebar';
-import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
 
 const PUBLIC_PATHS = ['/login', '/privacy', '/auth'];
@@ -25,8 +25,8 @@ export const Route = createRootRoute({
 });
 
 export function RootLayout() {
-  const router = useRouter();
-  const isLoginPage = router.state.location.pathname === '/login';
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const isLoginPage = pathname === '/login';
 
   if (isLoginPage) {
     return (
@@ -42,6 +42,10 @@ export function RootLayout() {
       <SidebarProvider>
         <AppSidebar />
         <SidebarInset>
+          <div className="flex items-center gap-2 px-4 py-3 border-b md:hidden">
+            <SidebarTrigger />
+            <span className="font-semibold text-sm">JobLog</span>
+          </div>
           <Outlet />
         </SidebarInset>
       </SidebarProvider>

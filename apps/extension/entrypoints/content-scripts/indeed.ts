@@ -1,5 +1,5 @@
 import type { JobPostingDraft } from '@joblog/shared';
-import { injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
+import { extractCompanyWebsite, injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
 
 export default defineContentScript({
   matches: ['https://*.indeed.com/viewjob*', 'https://*.indeed.com/jobs*'],
@@ -42,6 +42,6 @@ function extract(): JobPostingDraft {
     salary: null,
     requirements: null,
     keywords: null,
-    company_website: null,
+    company_website: extractCompanyWebsite(company),
   };
 }

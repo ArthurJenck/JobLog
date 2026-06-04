@@ -1,5 +1,5 @@
 import type { JobPostingDraft } from '@joblog/shared';
-import { injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
+import { extractCompanyWebsite, injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
 
 export default defineContentScript({
   matches: ['https://www.linkedin.com/jobs/view/*'],
@@ -40,6 +40,6 @@ function extract(): JobPostingDraft {
     salary: null,
     requirements: null,
     keywords: null,
-    company_website: null,
+    company_website: extractCompanyWebsite(company),
   };
 }

@@ -1,4 +1,4 @@
-import { Link, useRouter } from '@tanstack/react-router';
+import { Link, useRouter, useRouterState } from '@tanstack/react-router';
 import { useEffect, useState } from 'react';
 import {
   Sidebar,
@@ -12,12 +12,13 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { BriefcaseIcon, SettingsIcon, LogOutIcon } from 'lucide-react';
+import { BriefcaseIcon, FileTextIcon, SettingsIcon, LogOutIcon } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 
 const navItems = [
   { to: '/', label: 'Candidatures', icon: BriefcaseIcon },
+  { to: '/cv', label: 'CV', icon: FileTextIcon },
   { to: '/settings', label: 'Paramètres', icon: SettingsIcon },
 ];
 
@@ -25,7 +26,7 @@ type Stats = { total: number; applied?: number; interview?: number; offer?: numb
 
 export function AppSidebar() {
   const router = useRouter();
-  const pathname = router.state.location.pathname;
+  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const [stats, setStats] = useState<Stats>({ total: 0 });
 
   useEffect(() => {
@@ -96,6 +97,7 @@ export function AppSidebar() {
                   method: 'POST',
                   credentials: 'include',
                 });
+                await router.invalidate();
                 router.navigate({ to: '/login' });
               }}
             >

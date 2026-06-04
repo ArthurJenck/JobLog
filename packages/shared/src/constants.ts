@@ -38,8 +38,22 @@ export const CONTRACT_TYPES = [
 ] as const
 export type ContractType = (typeof CONTRACT_TYPES)[number]
 
+export const CONTRACT_LABELS: Record<ContractType, string> = {
+  cdi: 'CDI',
+  cdd: 'CDD',
+  alternance: 'Alternance',
+  stage: 'Stage',
+  freelance: 'Freelance',
+}
+
 export const REMOTE_TYPES = ['remote', 'hybride', 'présentiel'] as const
 export type RemoteType = (typeof REMOTE_TYPES)[number]
+
+export const REMOTE_LABELS: Record<RemoteType, string> = {
+  remote: 'Full remote',
+  hybride: 'Hybride',
+  présentiel: 'Présentiel',
+}
 
 export const EVENT_TYPES = [
     'created',

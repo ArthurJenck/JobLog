@@ -16,6 +16,14 @@ export default function App() {
     browser.storage.local.get('auth_token').then(({ auth_token }) => {
       setAuthToken((auth_token as string) ?? null);
     });
+
+    const listener = (changes: Record<string, { newValue?: unknown; oldValue?: unknown }>) => {
+      if ('auth_token' in changes) {
+        setAuthToken((changes.auth_token.newValue as string | undefined) ?? null);
+      }
+    };
+    browser.storage.onChanged.addListener(listener);
+    return () => browser.storage.onChanged.removeListener(listener);
   }, []);
 
   useEffect(() => {
@@ -45,7 +53,7 @@ export default function App() {
           <span className="title">JobLog</span>
         </div>
         <p className="hint">Connecte-toi pour sauvegarder des offres.</p>
-        <a href={`${API_BASE}/login`} target="_blank" rel="noreferrer" className="btn-primary">
+        <a href={`${API_BASE}`} target="_blank" rel="noreferrer" className="btn-primary">
           Se connecter
         </a>
       </div>

@@ -82,3 +82,138 @@ export function parseRemote(raw: string) {
   if (r.includes('présentiel') || r.includes('sur site')) return 'présentiel' as const;
   return null;
 }
+
+export function extractCompanyWebsite(company?: string | null) {
+  return extractStructuredCompanyWebsite() ?? extractLinkedCompanyWebsite(company);
+}
+
+function extractStructuredCompanyWebsite() {
+  const candidates: string[] = [];
+
+  for (const script of document.querySelectorAll<HTMLScriptElement>('script[type="application/ld+json"]')) {
+    const raw = script.textContent?.trim();
+    if (!raw) continue;
+
+    try {
+      collectJsonLdUrls(JSON.parse(raw), candidates);
+    } catch {
+      continue;
+    }
+  }
+
+  for (const candidate of candidates) {
+    const domain = normalizeCompanyDomain(candidate);
+    if (domain) return domain;
+  }
+
+  return null;
+}
+
+function collectJsonLdUrls(value: unknown, candidates: string[]) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectJsonLdUrls(item, candidates);
+    return;
+  }
+
+  if (!value || typeof value !== 'object') return;
+
+  const record = value as Record<string, unknown>;
+  for (const key of ['hiringOrganization', 'organization', 'company', 'publisher', 'author', '@graph']) {
+    collectJsonLdUrls(record[key], candidates);
+  }
+
+  for (const key of ['url', 'website', 'sameAs']) {
+    const raw = record[key];
+    if (typeof raw === 'string') candidates.push(raw);
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (typeof item === 'string') candidates.push(item);
+      }
+    }
+  }
+}
+
+function extractLinkedCompanyWebsite(company?: string | null) {
+  const normalizedCompany = normalizeText(company ?? '');
+  const candidates = Array.from(document.querySelectorAll<HTMLAnchorElement>('a[href]'))
+    .map((anchor) => {
+      const domain = normalizeCompanyDomain(anchor.href);
+      if (!domain) return null;
+
+      const text = normalizeText([
+        anchor.innerText,
+        anchor.getAttribute('aria-label'),
+        anchor.getAttribute('title'),
+        anchor.href,
+      ].filter(Boolean).join(' '));
+
+      let score = 0;
+      if (text.includes('site web') || text.includes('website') || text.includes('official')) score += 4;
+      if (text.includes('site internet') || text.includes('visiter le site')) score += 4;
+      if (normalizedCompany && domain.includes(normalizedCompany.replace(/\s+/g, ''))) score += 2;
+      if (normalizedCompany && text.includes(normalizedCompany)) score += 1;
+      if (text.includes('postuler') || text.includes('apply') || text.includes('candidater')) score -= 4;
+      if (text.includes('job') || text.includes('career') || text.includes('emploi')) score -= 1;
+
+      return { domain, score };
+    })
+    .filter((candidate): candidate is { domain: string; score: number } => Boolean(candidate))
+    .sort((a, b) => b.score - a.score);
+
+  const best = candidates.find((candidate) => candidate.score >= 2);
+  return best?.domain ?? null;
+}
+
+function normalizeCompanyDomain(raw: string) {
+  try {
+    const url = new URL(raw, window.location.href);
+    if (url.protocol !== 'http:' && url.protocol !== 'https:') return null;
+
+    const domain = url.hostname.replace(/^www\./i, '').toLowerCase();
+    if (!domain.includes('.')) return null;
+    if (isIgnoredCompanyDomain(domain)) return null;
+
+    return domain;
+  } catch {
+    return null;
+  }
+}
+
+function isIgnoredCompanyDomain(domain: string) {
+  return [
+    window.location.hostname.replace(/^www\./i, '').toLowerCase(),
+    'welcometothejungle.com',
+    'linkedin.com',
+    'hellowork.com',
+    'indeed.com',
+    'glassdoor.com',
+    'jobteaser.com',
+    'greenhouse.io',
+    'lever.co',
+    'workable.com',
+    'ashbyhq.com',
+    'smartrecruiters.com',
+    'recruitee.com',
+    'teamtailor.com',
+    'breezy.hr',
+    'personio.com',
+    'successfactors.com',
+    'myworkdayjobs.com',
+    'workdayjobs.com',
+    'icims.com',
+    'facebook.com',
+    'instagram.com',
+    'x.com',
+    'twitter.com',
+    'youtube.com',
+    'tiktok.com',
+  ].some((ignored) => domain === ignored || domain.endsWith(`.${ignored}`));
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
+}

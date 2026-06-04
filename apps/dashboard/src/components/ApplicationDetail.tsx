@@ -14,7 +14,7 @@ import { EventTimeline } from './EventTimeline';
 import { AnalyzePanel } from './AnalyzePanel';
 import { api } from '@/lib/api';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
-import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationWithJob, type EventType, type Cv } from '@joblog/shared';
+import { APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS, type ApplicationWithJob, type ContractType, type RemoteType, type EventType, type Cv } from '@joblog/shared';
 import { ExternalLinkIcon, BuildingIcon } from 'lucide-react';
 
 interface Props {
@@ -79,10 +79,10 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {jp?.source && <SourceBadge source={jp.source} />}
                 {jp?.contract_type && (
-                  <span className="text-xs text-muted-foreground">{jp.contract_type.toUpperCase()}</span>
+                  <span className="text-xs text-muted-foreground">{CONTRACT_LABELS[jp.contract_type as ContractType] ?? jp.contract_type.toUpperCase()}</span>
                 )}
                 {jp?.remote && (
-                  <span className="text-xs text-muted-foreground">{jp.remote}</span>
+                  <span className="text-xs text-muted-foreground">{REMOTE_LABELS[jp.remote as RemoteType] ?? jp.remote}</span>
                 )}
                 {jp?.location && (
                   <span className="text-xs text-muted-foreground">{jp.location}</span>
@@ -123,7 +123,11 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 variant="outline"
                 size="sm"
                 className="w-fit"
-                onClick={() => patch({ status: 'applied', appliedAt: new Date().toISOString() })}
+                onClick={async () => {
+                  await patch({ status: 'applied', appliedAt: new Date().toISOString() });
+                  const alreadyHasEvent = application.events.some((e) => e.type === 'applied');
+                  if (!alreadyHasEvent) await addEvent('applied');
+                }}
                 disabled={isSaving}
               >
                 Marquer comme postulée
@@ -134,14 +138,14 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
           <Separator />
 
           <section className="flex flex-col gap-3">
-            <span className="text-sm font-medium">CV utilisé</span>
+            <span className="text-sm font-medium">CV associé</span>
             <Select
               value={application.cvId ?? '__none__'}
               onValueChange={(v) => patch({ cvId: v === '__none__' ? null : v })}
               disabled={isSaving}
             >
               <SelectTrigger className="h-9">
-                <SelectValue placeholder="Aucun CV sélectionné" />
+                <SelectValue placeholder="Aucun CV associé" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="__none__">Aucun CV</SelectItem>
@@ -150,13 +154,9 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 ))}
               </SelectContent>
             </Select>
-          </section>
-
-          <Separator />
-
-          <section className="flex flex-col gap-3">
-            <span className="text-sm font-medium">Analyse IA</span>
-            <AnalyzePanel applicationId={application._id} cvId={application.cvId} />
+            {application.cvId && (
+              <AnalyzePanel applicationId={application._id} cvId={application.cvId} />
+            )}
           </section>
 
           <Separator />
