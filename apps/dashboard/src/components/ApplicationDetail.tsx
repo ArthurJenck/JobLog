@@ -129,7 +129,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
             {logoUrl && (
               <img
                 src={logoUrl}
-                alt=""
+                alt={`Logo ${jp?.company ?? 'entreprise'}`}
                 className="h-10 w-10 rounded-lg object-contain flex-shrink-0 mt-0.5"
                 referrerPolicy="origin"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}

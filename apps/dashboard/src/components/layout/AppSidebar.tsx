@@ -12,7 +12,12 @@ import {
   SidebarMenuItem,
   SidebarSeparator,
 } from '@/components/ui/sidebar';
-import { BriefcaseIcon, FileTextIcon, SettingsIcon, LogOutIcon } from 'lucide-react';
+import {
+  BriefcaseIcon,
+  FileTextIcon,
+  SettingsIcon,
+  LogOutIcon,
+} from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { api } from '@/lib/api';
 
@@ -22,7 +27,12 @@ const navItems = [
   { to: '/settings', label: 'Paramètres', icon: SettingsIcon },
 ];
 
-type Stats = { total: number; applied?: number; interview?: number; offer?: number };
+type Stats = {
+  total: number;
+  applied?: number;
+  interview?: number;
+  offer?: number;
+};
 
 export function AppSidebar() {
   const router = useRouter();
@@ -30,16 +40,21 @@ export function AppSidebar() {
   const [stats, setStats] = useState<Stats>({ total: 0 });
 
   useEffect(() => {
-    api.stats.get().then(setStats).catch(() => {});
+    api.stats
+      .get()
+      .then(setStats)
+      .catch(() => {});
   }, []);
 
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-4">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary text-primary-foreground font-bold text-sm">
-            JL
-          </div>
+          <img
+            src="/icon-cropped.svg"
+            alt="Logo JobLog"
+            className="h-8 w-8 relative bottom-1"
+          />
           <span className="font-semibold text-base">JobLog</span>
         </div>
       </SidebarHeader>
@@ -73,9 +88,21 @@ export function AppSidebar() {
                 Résumé
               </p>
               <StatRow label="Total" value={stats.total} />
-              <StatRow label="Postulées" value={stats.applied ?? 0} variant="blue" />
-              <StatRow label="Entretiens" value={stats.interview ?? 0} variant="purple" />
-              <StatRow label="Offres" value={stats.offer ?? 0} variant="green" />
+              <StatRow
+                label="Postulées"
+                value={stats.applied ?? 0}
+                variant="blue"
+              />
+              <StatRow
+                label="Entretiens"
+                value={stats.interview ?? 0}
+                variant="purple"
+              />
+              <StatRow
+                label="Offres"
+                value={stats.offer ?? 0}
+                variant="green"
+              />
             </div>
           </SidebarGroupContent>
         </SidebarGroup>
@@ -86,7 +113,9 @@ export function AppSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
               <Link to="/privacy">
-                <span className="text-xs text-muted-foreground">Confidentialité</span>
+                <span className="text-xs text-muted-foreground">
+                  Confidentialité
+                </span>
               </Link>
             </SidebarMenuButton>
           </SidebarMenuItem>
@@ -113,12 +142,22 @@ export function AppSidebar() {
 
 type StatVariant = 'blue' | 'purple' | 'green' | 'default';
 
-function StatRow({ label, value, variant = 'default' }: { label: string; value: number; variant?: StatVariant }) {
+function StatRow({
+  label,
+  value,
+  variant = 'default',
+}: {
+  label: string;
+  value: number;
+  variant?: StatVariant;
+}) {
   const variantClass: Record<StatVariant, string> = {
     default: '',
     blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    purple: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
-    green: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
+    purple:
+      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
+    green:
+      'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   };
 
   return (

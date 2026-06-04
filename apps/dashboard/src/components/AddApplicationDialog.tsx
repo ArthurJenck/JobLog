@@ -188,7 +188,7 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
                       {logoUrl && (
                         <img
                           src={logoUrl}
-                          alt=""
+                          alt={`Logo ${match.name}`}
                           className="h-5 w-5 rounded object-contain"
                           referrerPolicy="origin"
                           onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}

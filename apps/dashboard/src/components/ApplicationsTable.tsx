@@ -101,18 +101,19 @@ export function ApplicationsTable({
         accessorFn: (row) => row.jobPosting?.company ?? '',
         cell: ({ row, getValue }) => {
           const logoUrl = getCompanyLogoUrl(row.original.jobPosting, 40);
+          const company = getValue() as string;
           return (
             <div className="flex items-center gap-2">
               {logoUrl && (
                 <img
                   src={logoUrl}
-                  alt=""
+                  alt={`Logo ${company || 'entreprise'}`}
                   className="h-5 w-5 rounded object-contain"
                   referrerPolicy="origin"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                 />
               )}
-              <span>{getValue() as string}</span>
+              <span>{company}</span>
             </div>
           );
         },
