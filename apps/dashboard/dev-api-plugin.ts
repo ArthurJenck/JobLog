@@ -178,7 +178,14 @@ export function apiDevPlugin(): Plugin {
 
         const { route, params } = result;
         const ct = req.headers['content-type'];
-        const bodyBuf = !route.hasCatchall && ct ? await readBodyBuf(req) : null;
+        const firstStatic = route.pattern[0]?.kind === 'static' ? (route.pattern[0] as { kind: 'static'; value: string }).value : null;
+        const catchallFirst = Array.isArray(params['all']) ? params['all'][0] : params['all'];
+        const isAuthPassthrough =
+          route.hasCatchall &&
+          firstStatic === 'auth' &&
+          catchallFirst !== 'extension-token' &&
+          catchallFirst !== 'extension-refresh';
+        const bodyBuf = !isAuthPassthrough && ct ? await readBodyBuf(req) : null;
         addHelpers(req, res, bodyBuf, ct, params);
 
         try {
