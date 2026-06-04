@@ -1,20 +1,51 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { toNodeHandler } from 'better-auth/node';
+import { getAuth } from '../lib/auth.js';
 
 type Handler = (req: VercelRequest, res: VercelResponse) => Promise<unknown>;
 
 function segments(req: VercelRequest): string[] {
-  const raw = req.query['path'];
-  return Array.isArray(raw) ? raw : raw ? raw.split('/') : [];
+  const pathname = (req.url ?? '/').split('?')[0];
+  const p = pathname.replace(/^\/api\/?/, '');
+  return p ? p.split('/').filter(Boolean) : [];
 }
 
-function key(segs: string[]) {
-  return segs.join('/');
+async function handleAuth(req: VercelRequest, res: VercelResponse, segs: string[]) {
+  const sub = segs[1];
+
+  if (sub === 'extension-token') {
+    const mod: { default: Handler } = await import('../server/auth/extension-token.js');
+    return mod.default(req, res);
+  }
+
+  if (sub === 'extension-refresh') {
+    const mod: { default: Handler } = await import('../server/auth/extension-refresh.js');
+    return mod.default(req, res);
+  }
+
+  const auth = await getAuth();
+  return toNodeHandler(auth)(req, res);
+}
+
+async function handleCron(req: VercelRequest, res: VercelResponse, segs: string[]) {
+  const name = segs[1];
+
+  let mod: { default: Handler } | null = null;
+  if (name === 'reminders') mod = await import('../server/cron/reminders.js');
+  else if (name === 'delete-inactive') mod = await import('../server/cron/delete-inactive.js');
+  else if (name === 'normalize-addresses') mod = await import('../server/cron/normalize-addresses.js');
+
+  if (!mod) return res.status(404).json({ error: 'Not found' });
+  return mod.default(req, res);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const segs = segments(req);
-  const route = key(segs);
 
+  if (segs[0] === 'auth') return handleAuth(req, res, segs);
+  if (segs[0] === 'cron') return handleCron(req, res, segs);
+
+  const route = segs.join('/');
   let mod: { default: Handler } | null = null;
 
   if (route === 'analyses') {
