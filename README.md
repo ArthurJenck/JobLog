@@ -38,8 +38,6 @@ pnpm build:dashboard
 pnpm build:extension
 ```
 
-Variables d'environnement requises pour le dashboard : `MONGODB_URI`, `BETTER_AUTH_SECRET`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `RESEND_API_KEY`, `GEMINI_API_KEY`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`.
-
 ## TODO / Roadmap
 
 - **Landing page** — le root redirige directement vers le dashboard / login, aucune page marketing.
