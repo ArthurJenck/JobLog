@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { AddressInput } from '@/components/AddressInput';
 import { api } from '@/lib/api';
 import {
   CONTRACT_TYPES, CONTRACT_LABELS, REMOTE_TYPES, REMOTE_LABELS,
@@ -100,11 +101,11 @@ export function EditJobPostingDialog({ application, open, onClose, onSaved }: Pr
             </div>
             <div className="flex flex-col gap-1.5">
               <Label className="text-xs">Lieu</Label>
-              <Input
+              <AddressInput
                 value={location}
-                onChange={(e) => setLocation(e.target.value)}
+                onChange={setLocation}
                 placeholder="Paris, France"
-                className="h-8 text-sm"
+                inputClassName="h-8 text-sm"
               />
             </div>
             <div className="flex flex-col gap-1.5">

@@ -3,7 +3,8 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
-import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS, TERMINAL_STATUSES, resolveStatusOnEvent, deriveStatusFromEvents } from '@joblog/shared';
+import { normalizeLocationForStorage } from '../../lib/addresses.js';
+import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS, TERMINAL_STATUSES, resolveStatusOnEvent, deriveStatusFromEvents, type ApplicationStatus, type EventType } from '@joblog/shared';
 
 const PatchApplicationSchema = z.object({
   status: z.enum(APPLICATION_STATUSES).optional(),
@@ -64,6 +65,13 @@ function toDateOrNull(value: string | null) {
   return value === null ? null : new Date(value);
 }
 
+interface ApplicationDoc {
+  userId: string;
+  jobPostingId: string;
+  status: ApplicationStatus;
+  events?: Array<{ type: EventType; at: Date; meta: unknown }>;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireSession(req, res);
   if (!session) return;
@@ -71,7 +79,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const { id } = req.query as { id: string };
   if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
 
-  const col = await getCollection('applications');
+  const col = await getCollection<ApplicationDoc>('applications');
   const userId = session.user.id;
   const appFilter = { _id: new ObjectId(id), userId };
 
@@ -117,9 +125,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!app) return res.status(404).json({ error: 'Not found' });
 
       const jpCol = await getCollection('job_postings');
+      const updates: Record<string, unknown> = { ...parsed.data, updated_at: new Date() };
+      if (Object.prototype.hasOwnProperty.call(parsed.data, 'location')) {
+        Object.assign(updates, await normalizeLocationForStorage(parsed.data.location));
+      }
+
       await jpCol.updateOne(
         { _id: new ObjectId(String(app.jobPostingId)) },
-        { $set: { ...parsed.data, updated_at: new Date() } }
+        { $set: updates }
       );
       return res.status(200).json({ ok: true });
     }

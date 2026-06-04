@@ -24,6 +24,16 @@ export interface LogoSearchResult {
   domain: string;
 }
 
+export interface AddressSearchResult {
+  label: string;
+  city: string | null;
+  postcode: string | null;
+  lat: number | null;
+  lon: number | null;
+  type: string | null;
+  classification: number | null;
+}
+
 export interface AnalysisResult {
   keywords_matched: string[];
   keywords_missing: string[];
@@ -137,6 +147,12 @@ export const api = {
     search(q: string): Promise<{ data: LogoSearchResult[] }> {
       const qs = new URLSearchParams({ q });
       return request(`/logos/search?${qs.toString()}`);
+    },
+  },
+  addresses: {
+    search(q: string, signal?: AbortSignal): Promise<{ data: AddressSearchResult[] }> {
+      const qs = new URLSearchParams({ q });
+      return request(`/addresses/search?${qs.toString()}`, { signal });
     },
   },
   stats: {

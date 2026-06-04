@@ -5,6 +5,7 @@ export async function ensureIndexes() {
 
   await Promise.all([
     db.collection('job_postings').createIndex({ url_hash: 1 }, { unique: true }),
+    db.collection('job_postings').createIndex({ location_normalization_status: 1 }),
 
     db.collection('applications').createIndex({ userId: 1, status: 1 }),
     db.collection('applications').createIndex({ userId: 1, 'reminder.at': 1 }),

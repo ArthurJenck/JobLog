@@ -167,6 +167,7 @@ export function apiDevPlugin(): Plugin {
         const bare = rawUrl.split('?')[0].replace(/^\/api\//, '');
         const segs = bare ? bare.split('/').filter(Boolean) : [];
 
+        routes = buildRoutes(apiDir);
         const result = matchRoute(routes, segs);
         if (!result) {
           res.statusCode = 404;

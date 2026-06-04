@@ -42,12 +42,6 @@ Variables d'environnement requises pour le dashboard : `MONGODB_URI`, `BETTER_AU
 
 ## TODO / Roadmap
 
-### Chantier à part — API d'adresse / localisation
-
-Autocomplétion d'adresse pour la saisie manuelle de l'entreprise et normalisation des adresses issues du scraping. Pistes : **api-adresse.data.gouv.fr** (gratuit, France uniquement) ou **Google Places / Mapbox Geocoding** pour l'international. À trancher selon la cible géographique du projet.
-
-### Features non implémentées
-
 - **Landing page** — le root redirige directement vers le dashboard / login, aucune page marketing.
 - **Publication sur les stores** — Chrome Web Store, Firefox AMO, Edge Add-ons. L'extension est buildable mais non soumise. Vérifier les builds Firefox / Edge (WXT les supporte, non testés).
 - **Stats avancées** — la sidebar affiche des compteurs ; pas de visualisation (funnel, sources, évolution dans le temps).

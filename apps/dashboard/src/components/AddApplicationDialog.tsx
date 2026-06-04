@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { AddressInput } from '@/components/AddressInput';
 import { toast } from 'sonner';
 import { api, type LogoSearchResult, type UrlPasteUsage } from '@/lib/api';
 import { getLogoUrlForDomain } from '@/lib/company-logo';
@@ -207,9 +208,9 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
         </div>
         <div className="flex flex-col gap-1.5">
           <Label>Lieu</Label>
-          <Input
+          <AddressInput
             value={form.location}
-            onChange={(e) => set('location', e.target.value)}
+            onChange={(value) => set('location', value)}
             placeholder="Paris, France"
           />
         </div>

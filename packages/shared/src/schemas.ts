@@ -6,6 +6,7 @@ import {
   REMOTE_TYPES,
   EVENT_TYPES,
   SCRAPE_METHODS,
+  LOCATION_NORMALIZATION_STATUSES,
 } from './constants.js';
 
 export const SalarySchema = z.object({
@@ -13,6 +14,19 @@ export const SalarySchema = z.object({
   max: z.number().nullable(),
   currency: z.string().nullable(),
   period: z.enum(['month', 'year']).nullable(),
+});
+
+export const LocationDetailsSchema = z.object({
+  label: z.string(),
+  city: z.string().nullable(),
+  postcode: z.string().nullable(),
+  citycode: z.string().nullable(),
+  lat: z.number().nullable(),
+  lon: z.number().nullable(),
+  type: z.string().nullable(),
+  score: z.number().nullable(),
+  source: z.literal('geoplateforme'),
+  raw: z.record(z.unknown()).nullable(),
 });
 
 export const JobPostingSchema = z.object({
@@ -23,6 +37,9 @@ export const JobPostingSchema = z.object({
   title: z.string(),
   company: z.string(),
   location: z.string().nullable(),
+  location_details: LocationDetailsSchema.nullable().optional(),
+  location_normalization_status: z.enum(LOCATION_NORMALIZATION_STATUSES).nullable().optional(),
+  location_normalized_at: z.string().datetime().nullable().optional(),
   description: z.string().nullable(),
   contract_type: z.enum(CONTRACT_TYPES).nullable(),
   remote: z.enum(REMOTE_TYPES).nullable(),
@@ -115,6 +132,7 @@ export const ApplicationWithJobSchema = ApplicationSchema.extend({
 });
 
 export type Salary = z.infer<typeof SalarySchema>;
+export type LocationDetails = z.infer<typeof LocationDetailsSchema>;
 export type JobPosting = z.infer<typeof JobPostingSchema>;
 export type JobPostingDraft = z.infer<typeof JobPostingDraftSchema>;
 export type Event = z.infer<typeof EventSchema>;

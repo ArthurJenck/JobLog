@@ -31,7 +31,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 
-const EVENT_ICONS: Partial<Record<EventType, React.ElementType>> & { _fallback: React.ElementType } = {
+const EVENT_ICONS: Partial<Record<EventType, React.ElementType>> & {
+  _fallback: React.ElementType;
+} = {
   created: PlusCircleIcon,
   applied: SendIcon,
   response_received: MessageSquareIcon,
@@ -68,6 +70,26 @@ const EVENT_COLORS: Partial<Record<EventType, string>> = {
 
 const FALLBACK_COLOR = 'text-slate-500 bg-slate-100 dark:bg-slate-800';
 
+function EventTypeIcon({
+  type,
+  size = 'md',
+}: {
+  type: EventType;
+  size?: 'sm' | 'md';
+}) {
+  const Icon = EVENT_ICONS[type] ?? EVENT_ICONS._fallback;
+  const colorClass = EVENT_COLORS[type] ?? FALLBACK_COLOR;
+  const box = size === 'sm' ? 'h-5 w-5' : 'h-7 w-7';
+  const iconSize = size === 'sm' ? '[&_svg]:!size-3' : '[&_svg]:size-4';
+  return (
+    <div
+      className={`flex items-center justify-center rounded-full flex-shrink-0 ${box} ${colorClass} ${iconSize}`}
+    >
+      <Icon />
+    </div>
+  );
+}
+
 interface EventItem {
   type: EventType;
   at: string;
@@ -103,7 +125,8 @@ function getNextPipelineEvent(
   events: EventItem[],
   currentStatus: ApplicationStatus,
 ): EventType | null {
-  if ((TERMINAL_STATUSES as readonly string[]).includes(currentStatus)) return null;
+  if ((TERMINAL_STATUSES as readonly string[]).includes(currentStatus))
+    return null;
   const existing = new Set(events.map((e) => e.type));
 
   if (existing.has('interview_scheduled') && !existing.has('interview_done')) {
@@ -169,9 +192,14 @@ function EditableEventDate({
 
 function getEventLabel(event: EventItem): string {
   if (event.type === 'custom') {
-    return typeof event.meta?.label === 'string' ? event.meta.label : 'Note personnalisée';
+    return typeof event.meta?.label === 'string'
+      ? event.meta.label
+      : 'Note personnalisée';
   }
-  return EVENT_LABELS[event.type] ?? (typeof event.meta?.label === 'string' ? event.meta.label : event.type);
+  return (
+    EVENT_LABELS[event.type] ??
+    (typeof event.meta?.label === 'string' ? event.meta.label : event.type)
+  );
 }
 
 export function EventTimeline({
@@ -225,6 +253,7 @@ export function EventTimeline({
                   setOpen(false);
                 }}
               >
+                <EventTypeIcon type={type} size="sm" />
                 {EVENT_LABELS[type] ?? type}
               </DropdownMenuItem>
             ))}
@@ -243,7 +272,10 @@ export function EventTimeline({
             autoFocus
             onKeyDown={(e) => {
               if (e.key === 'Enter') commitCustom();
-              if (e.key === 'Escape') { setAddingCustom(false); setCustomDraft(''); }
+              if (e.key === 'Escape') {
+                setAddingCustom(false);
+                setCustomDraft('');
+              }
             }}
             onBlur={commitCustom}
           />
@@ -275,19 +307,13 @@ export function EventTimeline({
           </div>
         )}
         {sorted.map((event, i) => {
-          const Icon = EVENT_ICONS[event.type] ?? EVENT_ICONS._fallback;
-          const colorClass = EVENT_COLORS[event.type] ?? FALLBACK_COLOR;
           const extraMeta = event.meta
             ? Object.entries(event.meta).filter(([k]) => k !== 'label')
             : [];
           return (
             <div key={i} className="flex gap-3 group">
               <div className="flex flex-col items-center">
-                <div
-                  className={`flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 ${colorClass}`}
-                >
-                  <Icon className="h-3.5 w-3.5" />
-                </div>
+                <EventTypeIcon type={event.type} />
                 {i < sorted.length - 1 && (
                   <div className="w-px flex-1 bg-border mt-1 mb-1 min-h-4" />
                 )}
@@ -308,7 +334,9 @@ export function EventTimeline({
                 </div>
                 <EditableEventDate
                   at={event.at}
-                  onUpdate={(newAt) => onUpdateEventDate(event.type, event.at, newAt)}
+                  onUpdate={(newAt) =>
+                    onUpdateEventDate(event.type, event.at, newAt)
+                  }
                 />
                 {extraMeta.length > 0 && (
                   <p className="text-xs text-muted-foreground mt-0.5">

@@ -4,6 +4,7 @@ import { getCollection } from '../../lib/db.js';
 import { getEnv } from '../../lib/env.js';
 import { sha256 } from '../../lib/hash.js';
 import { requireSession } from '../../lib/session.js';
+import { normalizeLocationForStorage } from '../../lib/addresses.js';
 import {
   CONTRACT_TYPES,
   GEMINI_DAILY_QUOTA,
@@ -270,13 +271,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const source = detectSource(url);
   const now = new Date();
+  const locationNormalization = await normalizeLocationForStorage(extraction.location);
   const doc = {
     url,
     url_hash,
     source,
     title: extraction.title,
     company: extraction.company,
-    location: extraction.location,
+    ...locationNormalization,
     description: extraction.description,
     contract_type: extraction.contract_type,
     remote: extraction.remote,

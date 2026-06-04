@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
 import { sha256 } from '../../lib/hash.js';
+import { normalizeLocationForStorage } from '../../lib/addresses.js';
 import { JOB_SOURCES, CONTRACT_TYPES, REMOTE_TYPES, SCRAPE_METHODS } from '@joblog/shared';
 
 const CreateJobPostingSchema = z.object({
@@ -42,6 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (existing) {
       if (isBlockedOrErrorJobPosting(existing)) {
         const now = new Date();
+        const locationNormalization = await normalizeLocationForStorage(data.location ?? null);
         await col.updateOne(
           { _id: existing._id },
           {
@@ -49,7 +51,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
               source: data.source,
               title: data.title,
               company: data.company,
-              location: data.location ?? null,
+              ...locationNormalization,
               description: data.description ?? null,
               contract_type: data.contract_type ?? null,
               remote: data.remote ?? null,
@@ -75,13 +77,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const now = new Date();
+    const locationNormalization = await normalizeLocationForStorage(data.location ?? null);
     const doc = {
       url: data.url,
       url_hash,
       source: data.source,
       title: data.title,
       company: data.company,
-      location: data.location ?? null,
+      ...locationNormalization,
       description: data.description ?? null,
       contract_type: data.contract_type ?? null,
       remote: data.remote ?? null,

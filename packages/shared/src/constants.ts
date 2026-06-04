@@ -69,6 +69,15 @@ export const REMOTE_LABELS: Record<RemoteType, string> = {
   présentiel: 'Présentiel',
 }
 
+export const LOCATION_NORMALIZATION_STATUSES = [
+    'matched',
+    'unmatched',
+    'ambiguous',
+    'skipped',
+    'error',
+] as const
+export type LocationNormalizationStatus = (typeof LOCATION_NORMALIZATION_STATUSES)[number]
+
 export const EVENT_TYPES = [
     'created',
     'applied',
