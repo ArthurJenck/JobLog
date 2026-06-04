@@ -33,6 +33,11 @@ export function PrivacyPage() {
               <li>Envoyer des rappels de relance (email ou push)</li>
               <li>Analyser la correspondance CV / offre via l'API Gemini de Google (le texte de votre CV est transmis à Google à chaque analyse)</li>
             </ul>
+            <p className="mt-3">
+              Les données collectées par l'extension sont utilisées uniquement pour fournir et améliorer
+              les fonctionnalités JobLog. Elles ne sont pas vendues, ne sont pas transférées à des fins
+              publicitaires, et ne sont pas utilisées pour de la publicité personnalisée.
+            </p>
           </section>
 
           <section>
