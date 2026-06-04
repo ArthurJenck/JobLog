@@ -47,6 +47,12 @@ export const api = {
     addEvent(id: string, event: { type: string; at?: string; meta?: Record<string, unknown> | null }): Promise<{ ok: boolean }> {
       return request(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ event }) });
     },
+    deleteEvent(id: string, event: { type: string; at: string }): Promise<{ ok: boolean }> {
+      return request(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ deleteEvent: event }) });
+    },
+    updateEventDate(id: string, event: { type: string; at: string; newAt: string }): Promise<{ ok: boolean }> {
+      return request(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ updateEventDate: event }) });
+    },
     delete(id: string): Promise<{ ok: boolean }> {
       return request(`/applications/${id}`, { method: 'DELETE' });
     },

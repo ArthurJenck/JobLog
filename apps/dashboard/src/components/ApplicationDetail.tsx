@@ -14,8 +14,8 @@ import { EventTimeline } from './EventTimeline';
 import { AnalyzePanel } from './AnalyzePanel';
 import { api } from '@/lib/api';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
-import { APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS, type ApplicationWithJob, type ContractType, type RemoteType, type EventType, type Cv } from '@joblog/shared';
-import { ExternalLinkIcon, BuildingIcon } from 'lucide-react';
+import { APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS, STATUS_EVENT, type ApplicationStatus, type ApplicationWithJob, type ContractType, type RemoteType, type EventType, type Cv } from '@joblog/shared';
+import { ExternalLinkIcon, BuildingIcon, SendIcon, CalendarIcon, TrophyIcon, XCircleIcon, GhostIcon } from 'lucide-react';
 
 interface Props {
   application: ApplicationWithJob | null;
@@ -51,6 +51,26 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
   async function addEvent(type: EventType) {
     await api.applications.addEvent(application!._id, { type, at: new Date().toISOString() });
+    onUpdated();
+  }
+
+  async function deleteEvent(type: EventType, at: string) {
+    await api.applications.deleteEvent(application!._id, { type, at });
+    onUpdated();
+  }
+
+  async function confirmFuture(type: EventType) {
+    const status = (Object.entries(STATUS_EVENT) as [ApplicationStatus, EventType][])
+      .find(([, e]) => e === type)?.[0];
+    if (status) {
+      await patch({ status });
+    } else {
+      await addEvent(type);
+    }
+  }
+
+  async function updateEventDate(type: EventType, at: string, newAt: string) {
+    await api.applications.updateEventDate(application!._id, { type, at, newAt });
     onUpdated();
   }
 
@@ -118,20 +138,73 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 ))}
               </SelectContent>
             </Select>
-            {application.status !== 'applied' && (
-              <Button
-                variant="outline"
-                size="sm"
-                className="w-fit"
-                onClick={async () => {
-                  await patch({ status: 'applied', appliedAt: new Date().toISOString() });
-                  const alreadyHasEvent = application.events.some((e) => e.type === 'applied');
-                  if (!alreadyHasEvent) await addEvent('applied');
-                }}
-                disabled={isSaving}
-              >
-                Marquer comme postulée
-              </Button>
+            {application.status === 'saved' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'applied' })}>
+                  <SendIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Candidature envoyée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'rejected' })}>
+                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Refusée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
+                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Ghostée
+                </Button>
+              </div>
+            )}
+            {application.status === 'applied' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'interview' })}>
+                  <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Entretien reçu
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'rejected' })}>
+                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Refusée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
+                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Ghostée
+                </Button>
+              </div>
+            )}
+            {application.status === 'interview' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => addEvent('interview_scheduled')}>
+                  <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Nouvel entretien
+                </Button>
+                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'offer' })}>
+                  <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Offre reçue
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'rejected' })}>
+                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Refusée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
+                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Ghostée
+                </Button>
+              </div>
+            )}
+            {application.status === 'offer' && (
+              <div className="flex items-center gap-2 flex-wrap">
+                <Button size="sm" disabled={isSaving} onClick={() => addEvent('offer_accepted')}>
+                  <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Acceptée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => addEvent('offer_declined')}>
+                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Refusée
+                </Button>
+                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
+                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
+                  Ghostée
+                </Button>
+              </div>
             )}
           </section>
 
@@ -171,7 +244,14 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
           <Separator />
 
-          <EventTimeline events={application.events} onAddEvent={addEvent} />
+          <EventTimeline
+            events={application.events}
+            currentStatus={application.status}
+            onAddEvent={addEvent}
+            onDeleteEvent={deleteEvent}
+            onConfirmFuture={confirmFuture}
+            onUpdateEventDate={updateEventDate}
+          />
 
           <Separator />
 

@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
-import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES } from '@joblog/shared';
+import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS } from '@joblog/shared';
 
 const PatchApplicationSchema = z.object({
   status: z.enum(APPLICATION_STATUSES).optional(),
@@ -28,6 +28,17 @@ const AddEventSchema = z.object({
   type: z.enum(EVENT_TYPES),
   at: z.string().datetime().optional(),
   meta: z.record(z.unknown()).nullable().optional(),
+});
+
+const DeleteEventSchema = z.object({
+  type: z.enum(EVENT_TYPES).refine(t => t !== 'created', 'Cannot delete created event'),
+  at: z.string().datetime(),
+});
+
+const UpdateEventDateSchema = z.object({
+  type: z.enum(EVENT_TYPES),
+  at: z.string().datetime(),
+  newAt: z.string().datetime(),
 });
 
 const PatchJobPostingSchema = z.object({
@@ -81,9 +92,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
       const event = { ...parsed.data, at: parsed.data.at ? new Date(parsed.data.at) : new Date(), meta: parsed.data.meta ?? null };
+      const setOps: Record<string, unknown> = { updated_at: new Date() };
+      const autoStatus = EVENT_AUTO_STATUS[parsed.data.type];
+      if (autoStatus) setOps['status'] = autoStatus;
+
       await col.updateOne(appFilter, {
         $push: { events: event },
-        $set: { updated_at: new Date() },
+        $set: setOps,
       });
       return res.status(200).json({ ok: true });
     }
@@ -103,18 +118,55 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(200).json({ ok: true });
     }
 
+    if (body.deleteEvent) {
+      const parsed = DeleteEventSchema.safeParse(body.deleteEvent);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      await col.updateOne(appFilter, {
+        $pull: { events: { type: parsed.data.type, at: new Date(parsed.data.at) } },
+        $set: { updated_at: new Date() },
+      });
+      return res.status(200).json({ ok: true });
+    }
+
+    if (body.updateEventDate) {
+      const parsed = UpdateEventDateSchema.safeParse(body.updateEventDate);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      await col.updateOne(
+        appFilter,
+        { $set: { 'events.$[elem].at': new Date(parsed.data.newAt), updated_at: new Date() } },
+        { arrayFilters: [{ 'elem.type': parsed.data.type, 'elem.at': new Date(parsed.data.at) }] }
+      );
+      return res.status(200).json({ ok: true });
+    }
+
     const parsed = PatchApplicationSchema.safeParse(body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const updates: Record<string, unknown> = { updated_at: new Date() };
-    const { reminder, ...rest } = parsed.data;
+    const { reminder, status, ...restFields } = parsed.data;
 
-    for (const [k, v] of Object.entries(rest)) {
+    for (const [k, v] of Object.entries(restFields)) {
       if (v !== undefined) updates[k] = k === 'appliedAt' ? toDateOrNull(v as string | null) : v;
     }
 
-    if (parsed.data.status === 'applied' && !parsed.data.appliedAt) {
-      updates['appliedAt'] = new Date();
+    if (status !== undefined) {
+      updates['status'] = status;
+      if (status === 'applied' && !parsed.data.appliedAt) {
+        updates['appliedAt'] = new Date();
+      }
+      const app = await col.findOne(appFilter);
+      if (!app) return res.status(404).json({ error: 'Not found' });
+      if (status !== app.status) {
+        const newType = STATUS_EVENT[status];
+        if (newType) {
+          const events = (app.events ?? []) as Array<{ type: string; at: Date; meta: unknown }>;
+          if (!events.some(e => e.type === newType)) {
+            updates['events'] = [...events, { type: newType, at: new Date(), meta: null }];
+          }
+        }
+      }
     }
 
     if (reminder) {

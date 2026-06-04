@@ -80,12 +80,22 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
         cell: ({ getValue }) => <StatusBadge status={getValue() as ApplicationStatus} />,
       },
       {
-        id: 'appliedAt',
-        header: 'Candidature',
-        accessorFn: (row) => row.appliedAt,
+        id: 'nextInterview',
+        header: 'Prochain entretien',
+        accessorFn: (row) => {
+          const events = row.events.filter(e => e.type === 'interview_scheduled');
+          if (events.length === 0) return null;
+          return events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0].at;
+        },
         cell: ({ getValue }) => {
           const v = getValue() as string | null;
-          return v ? <span className="text-sm text-muted-foreground">{fmtDate(v)}</span> : <span className="text-muted-foreground/40">—</span>;
+          if (!v) return <span className="text-muted-foreground/40">—</span>;
+          const s = dateStatus(v);
+          return (
+            <span className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}>
+              {fmtDate(v)}
+            </span>
+          );
         },
       },
       {
@@ -95,21 +105,22 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
         cell: ({ getValue }) => {
           const v = getValue() as string | null;
           if (!v) return <span className="text-muted-foreground/40">—</span>;
-          const isPast = new Date(v) < new Date();
+          const s = dateStatus(v);
           return (
-            <span className={`text-sm ${isPast ? 'text-red-500 font-medium' : 'text-muted-foreground'}`}>
+            <span className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}>
               {fmtDate(v)}
             </span>
           );
         },
       },
       {
-        id: 'created_at',
-        header: 'Ajoutée',
-        accessorKey: 'created_at',
-        cell: ({ getValue }) => (
-          <span className="text-sm text-muted-foreground">{fmtDate(getValue() as string)}</span>
-        ),
+        id: 'appliedAt',
+        header: 'Candidature',
+        accessorFn: (row) => row.appliedAt,
+        cell: ({ getValue }) => {
+          const v = getValue() as string | null;
+          return v ? <span className="text-sm text-muted-foreground">{fmtDate(v)}</span> : <span className="text-muted-foreground/40">—</span>;
+        },
       },
     ],
     []
@@ -228,4 +239,13 @@ function SortIcon({ direction }: { direction: false | 'asc' | 'desc' }) {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+}
+
+function dateStatus(iso: string): 'past' | 'today' | 'future' {
+  const d = new Date(iso);
+  const now = new Date();
+  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  if (day(d) < day(now)) return 'past';
+  if (day(d) === day(now)) return 'today';
+  return 'future';
 }
