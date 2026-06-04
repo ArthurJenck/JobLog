@@ -50,7 +50,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(422).json({ error: 'Impossible de récupérer l\'URL' });
   }
 
-  const extracted = extractWithCheerio(html);
+  const extracted = extractWithCheerio(html, url);
   const incomplete = !extracted.title || !extracted.company;
 
   let scrape_method: 'cheerio' | 'gemini' | 'manual' = 'cheerio';
@@ -96,32 +96,65 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   return res.status(201).json({ ...doc, _id: result.insertedId.toString(), cached: false });
 }
 
-function extractWithCheerio(html: string) {
+function extractWithCheerio(html: string, url: string) {
   const $ = cheerio.load(html);
 
   const ogTitle = $('meta[property="og:title"]').attr('content')?.trim();
   const ogDesc = $('meta[property="og:description"]').attr('content')?.trim();
   const h1 = $('h1').first().text().trim();
-  const title = ogTitle ?? h1 ?? '';
 
+  let title = '';
   let company = '';
+  let location: string | null = null;
+
+  if (url.includes('hellowork.com')) {
+    const hw = extractHelloWorkFromHtml($);
+    title = hw.title;
+    company = hw.company;
+    location = hw.location;
+  }
+
+  if (url.includes('jobijoba.com')) {
+    const jj = extractJobijobaFromHtml($);
+    title = jj.title;
+    company = jj.company;
+    location = jj.location;
+  }
+
+  if (!title) title = ogTitle ?? h1 ?? '';
+
+  if (!company && url.includes('francetravail.fr')) {
+    company = extractFranceTravailCompanyFromHtml($);
+  }
+
   const ogSiteName = $('meta[property="og:site_name"]').attr('content')?.trim();
   const companySelectors = [
+    '.media .media-body h3.t4.title',
+    '.media .media-body h3.title',
     '[class*="company"]', '[class*="employer"]', '[class*="organization"]',
     '[itemprop="hiringOrganization"] [itemprop="name"]',
   ];
-  for (const sel of companySelectors) {
-    const text = $(sel).first().text().trim();
-    if (text && text.length < 100) { company = text; break; }
+  if (!company) {
+    for (const sel of companySelectors) {
+      const text = $(sel).first().text().trim();
+      if (text && text.length < 100) { company = text; break; }
+    }
   }
-  if (!company && ogSiteName) company = ogSiteName;
+  if (
+    !company
+    && ogSiteName
+    && !url.includes('francetravail.fr')
+    && !url.includes('hellowork.com')
+    && !url.includes('jobijoba.com')
+  ) {
+    company = ogSiteName;
+  }
 
   const locationSelectors = [
     '[class*="location"]', '[class*="city"]', '[itemprop="addressLocality"]',
     '[class*="address"]',
   ];
-  let location: string | null = null;
-  for (const sel of locationSelectors) {
+  if (!location) for (const sel of locationSelectors) {
     const text = $(sel).first().text().trim();
     if (text && text.length < 100) { location = text; break; }
   }
@@ -233,6 +266,7 @@ function isIgnoredCompanyDomain(domain: string) {
     'welcometothejungle.com',
     'linkedin.com',
     'hellowork.com',
+    'jobijoba.com',
     'indeed.com',
     'glassdoor.com',
     'jobteaser.com',
@@ -285,9 +319,68 @@ function isBlockedOrErrorPage(input: {
   return false;
 }
 
+const UNKNOWN_COMPANY = 'Entreprise inconnue';
+
+function extractJobijobaFromHtml($: cheerio.CheerioAPI) {
+  const title = jobijobaPermalinkInfo($, 'icon-resume-briefcase');
+  let company = jobijobaPermalinkInfo($, 'icon-apartment');
+  const location = jobijobaPermalinkInfo($, 'icon-map-marker') || null;
+
+  if (!company) company = UNKNOWN_COMPANY;
+
+  return { title, company, location };
+}
+
+function jobijobaPermalinkInfo($: cheerio.CheerioAPI, iconClass: string) {
+  let result = '';
+  $('.permalink-info').each((_, el) => {
+    if (result) return;
+    const $info = $(el);
+    if ($info.find(`.${iconClass}`).length) {
+      result = $info.text().trim();
+    }
+  });
+  return result;
+}
+
+function extractHelloWorkFromHtml($: cheerio.CheerioAPI) {
+  const title = $('[data-cy="jobTitle"]').first().text().trim();
+
+  let company = $('[data-cy="job-company-name"]').first().text().trim();
+  if (!company) {
+    company = $('h1 a[href*="/entreprises/"]').first().text().trim();
+  }
+
+  const location = $('[data-cy="job-location"]').first().text().trim() || null;
+
+  return { title, company, location };
+}
+
+function extractFranceTravailCompanyFromHtml($: cheerio.CheerioAPI) {
+  const employerLink = $('a[href*="page-employeur"]').first();
+  if (employerLink.length) {
+    const fromHeading = employerLink.closest('.media-body').find('h3').first().text().trim();
+    if (fromHeading) return fromHeading;
+
+    const href = employerLink.attr('href');
+    if (href) {
+      const match = href.match(/\/page-employeur\/([^/?#]+)/i);
+      if (match?.[1]) {
+        return match[1].replace(/-\d+$/, '').replace(/-/g, ' ');
+      }
+    }
+  }
+
+  return $('.media .media-body h3.t4.title, .media .media-body h3.title').first().text().trim();
+}
+
 function blockedScrapeMessage(url: string) {
   if (url.includes('welcometothejungle.com')) {
     return 'Welcome to the Jungle bloque la récupération depuis le dashboard. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension.';
+  }
+
+  if (url.includes('francetravail.fr')) {
+    return 'France Travail charge l\'employeur côté navigateur. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension JobLog.';
   }
 
   return 'Le site bloque la récupération automatique. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension.';
@@ -357,5 +450,12 @@ function detectSource(url: string) {
   if (url.includes('indeed.com')) return 'indeed' as const;
   if (url.includes('glassdoor.')) return 'glassdoor' as const;
   if (url.includes('jobteaser.com')) return 'jobteaser' as const;
+  if (url.includes('jobijoba.com')) return 'jobijoba' as const;
+  if (url.includes('meteojob.com')) return 'meteojob' as const;
+  if (url.includes('apec.fr')) return 'apec' as const;
+  if (url.includes('francetravail.fr')) return 'francetravail' as const;
+  if (url.includes('cadremploi.fr')) return 'cadremploi' as const;
+  if (url.includes('talent.com')) return 'talent' as const;
+  if (url.includes('lesjeudis.com')) return 'lesjeudis' as const;
   return 'paste' as const;
 }

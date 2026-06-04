@@ -33,10 +33,25 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 
 export const api = {
   applications: {
-    list(params?: { status?: string; search?: string }): Promise<{ data: ApplicationWithJob[]; total: number }> {
+    list(params?: {
+      status?: string;
+      search?: string;
+      dateFrom?: string;
+      dateTo?: string;
+      sort?: string;
+      dir?: 'asc' | 'desc';
+      page?: number;
+      pageSize?: number;
+    }): Promise<{ data: ApplicationWithJob[]; total: number; page: number; pageSize: number }> {
       const qs = new URLSearchParams();
       if (params?.status) qs.set('status', params.status);
       if (params?.search) qs.set('search', params.search);
+      if (params?.dateFrom) qs.set('dateFrom', params.dateFrom);
+      if (params?.dateTo) qs.set('dateTo', params.dateTo);
+      if (params?.sort) qs.set('sort', params.sort);
+      if (params?.dir) qs.set('dir', params.dir);
+      if (params?.page != null) qs.set('page', String(params.page));
+      if (params?.pageSize != null) qs.set('pageSize', String(params.pageSize));
       return request(`/applications?${qs}`);
     },
     get(id: string): Promise<ApplicationWithJob> {
@@ -102,7 +117,7 @@ export const api = {
     },
   },
   stats: {
-    get(): Promise<{ total: number; saved?: number; applied?: number; interview?: number; offer?: number; rejected?: number; ghosted?: number }> {
+    get(): Promise<{ total: number; saved?: number; applied?: number; interview?: number; offer?: number; accepted?: number; rejected?: number; ghosted?: number; cancelled?: number }> {
       return request('/applications/stats');
     },
   },

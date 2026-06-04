@@ -116,12 +116,14 @@ body {
   flex-shrink: 0;
 }
 
-.status-dot.status-saved     { background: #94a3b8; }
-.status-dot.status-applied   { background: #3b82f6; }
-.status-dot.status-interview { background: #a855f7; }
-.status-dot.status-offer     { background: #22c55e; }
-.status-dot.status-rejected  { background: #ef4444; }
-.status-dot.status-ghosted   { background: #d4d4d8; }
+.status-dot.status-saved      { background: #94a3b8; }
+.status-dot.status-applied    { background: #3b82f6; }
+.status-dot.status-interview  { background: #a855f7; }
+.status-dot.status-offer      { background: #22c55e; }
+.status-dot.status-accepted   { background: #10b981; }
+.status-dot.status-rejected   { background: #ef4444; }
+.status-dot.status-ghosted    { background: #d4d4d8; }
+.status-dot.status-cancelled  { background: #d4d4d8; }
 
 .actions {
   display: flex;

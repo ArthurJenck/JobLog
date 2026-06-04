@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import {
-  Sheet, SheetContent, SheetHeader, SheetTitle,
+  Sheet, SheetClose, SheetContent, SheetHeader, SheetTitle,
 } from '@/components/ui/sheet';
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
@@ -26,7 +26,7 @@ import {
 } from '@joblog/shared';
 import {
   ExternalLinkIcon, BuildingIcon, SendIcon, CalendarIcon, TrophyIcon,
-  XCircleIcon, GhostIcon, BanIcon, PencilIcon,
+  XCircleIcon, GhostIcon, BanIcon, PencilIcon, XIcon,
 } from 'lucide-react';
 
 interface Props {
@@ -58,6 +58,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
     try {
       await api.applications.patch(application!._id, body);
       onUpdated();
+      if (body.status === 'accepted') setCancelAllOpen(true);
     } finally {
       setIsSaving(false);
     }
@@ -66,7 +67,6 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
   async function addEvent(type: EventType, meta?: Record<string, unknown>) {
     await api.applications.addEvent(application!._id, { type, at: new Date().toISOString(), meta });
     onUpdated();
-    if (type === 'offer_accepted') setCancelAllOpen(true);
   }
 
   async function deleteEvent(type: EventType, at: string) {
@@ -123,7 +123,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
       onSaved={onUpdated}
     />
     <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
-      <SheetContent className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
+      <SheetContent showCloseButton={false} className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 py-4 border-b">
           <div className="flex items-start gap-3">
             {logoUrl && (
@@ -141,17 +141,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <div className="flex items-start gap-1.5">
-                <SheetTitle className="text-base leading-tight flex-1 min-w-0">{jp?.title ?? '—'}</SheetTitle>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-6 w-6 flex-shrink-0 text-muted-foreground hover:text-foreground"
-                  onClick={() => setEditJobOpen(true)}
-                >
-                  <PencilIcon className="h-3.5 w-3.5" />
-                </Button>
-              </div>
+              <SheetTitle className="text-base leading-tight">{jp?.title ?? '—'}</SheetTitle>
               <p className="text-sm text-muted-foreground mt-0.5">{jp?.company ?? '—'}</p>
               <div className="flex items-center gap-2 mt-2 flex-wrap">
                 {jp?.source && <SourceBadge source={jp.source} />}
@@ -171,6 +161,27 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                   </a>
                 )}
               </div>
+            </div>
+            <div className="flex items-center gap-0.5 flex-shrink-0 -mt-0.5">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                onClick={() => setEditJobOpen(true)}
+                aria-label="Modifier l'offre"
+              >
+                <PencilIcon className="h-4 w-4" />
+              </Button>
+              <SheetClose asChild>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                  aria-label="Fermer"
+                >
+                  <XIcon className="h-4 w-4" />
+                </Button>
+              </SheetClose>
             </div>
           </div>
         </SheetHeader>
@@ -261,7 +272,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
             )}
             {application.status === 'offer' && (
               <div className="flex items-center gap-2 flex-wrap">
-                <Button size="sm" disabled={isSaving} onClick={() => addEvent('offer_accepted')}>
+                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'accepted' })}>
                   <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
                   Acceptée
                 </Button>

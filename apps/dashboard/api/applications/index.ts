@@ -11,6 +11,15 @@ const CreateApplicationSchema = z.object({
   cvId: z.string().nullable().optional(),
 });
 
+const SORT_FIELD_MAP: Record<string, string> = {
+  title: 'title',
+  company: 'company',
+  status: 'status',
+  nextInterview: 'nextInterview',
+  reminder: 'reminder.at',
+  appliedAt: 'effectiveDate',
+};
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireSession(req, res);
   if (!session) return;
@@ -18,42 +27,114 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const userId = session.user.id;
 
   if (req.method === 'GET') {
-    const col = await getCollection('applications');
-    const jpCol = await getCollection('job_postings');
+    const {
+      status,
+      search,
+      dateFrom,
+      dateTo,
+      sort = 'appliedAt',
+      dir = 'desc',
+      page = '1',
+      pageSize = '25',
+    } = req.query as Record<string, string>;
 
-    const { status, search, limit = '100', offset = '0' } = req.query as Record<string, string>;
-    const filter: Record<string, unknown> = { userId };
-    if (status) filter['status'] = { $in: status.split(',') };
+    const pageNum = Math.max(1, Number(page));
+    const pageSizeNum = Math.min(100, Math.max(1, Number(pageSize)));
+    const skip = (pageNum - 1) * pageSizeNum;
 
-    const applications = await col
-      .find(filter)
-      .sort({ created_at: -1 })
-      .skip(Number(offset))
-      .limit(Number(limit))
-      .toArray();
+    const sortField = SORT_FIELD_MAP[sort] ?? 'effectiveDate';
+    const sortDir = dir === 'asc' ? 1 : -1;
 
-    const jobPostingIds = [...new Set(applications.map((a) => a.jobPostingId))];
-    const jobPostings = await jpCol
-      .find({ _id: { $in: jobPostingIds.map((id) => new ObjectId(String(id))) } })
-      .toArray();
-    const jpMap = new Map(jobPostings.map((jp) => [jp._id.toString(), jp]));
+    const pipeline: object[] = [];
 
-    let results = applications.map((app) => ({
-      ...app,
-      _id: app._id.toString(),
-      jobPosting: jpMap.get(String(app.jobPostingId)) ?? null,
-    }));
+    const initialMatch: Record<string, unknown> = { userId };
+    if (status) initialMatch['status'] = { $in: status.split(',') };
+    pipeline.push({ $match: initialMatch });
 
-    if (search) {
-      const q = search.toLowerCase();
-      results = results.filter(
-        (a) =>
-          String(a.jobPosting?.title ?? '').toLowerCase().includes(q) ||
-          String(a.jobPosting?.company ?? '').toLowerCase().includes(q)
-      );
+    pipeline.push({
+      $addFields: {
+        effectiveDate: { $ifNull: ['$appliedAt', '$created_at'] },
+      },
+    });
+
+    if (dateFrom || dateTo) {
+      const dateMatch: Record<string, unknown> = {};
+      if (dateFrom) dateMatch['$gte'] = new Date(dateFrom + 'T00:00:00');
+      if (dateTo) dateMatch['$lte'] = new Date(dateTo + 'T23:59:59');
+      pipeline.push({ $match: { effectiveDate: dateMatch } });
     }
 
-    return res.status(200).json({ data: results, total: results.length });
+    pipeline.push({
+      $lookup: {
+        from: 'job_postings',
+        let: { jpId: '$jobPostingId' },
+        pipeline: [
+          { $match: { $expr: { $eq: ['$_id', { $toObjectId: '$$jpId' }] } } },
+        ],
+        as: 'jobPosting',
+      },
+    });
+
+    pipeline.push({
+      $addFields: {
+        jobPosting: { $first: '$jobPosting' },
+        title: { $first: '$jobPosting.title' },
+        company: { $first: '$jobPosting.company' },
+        nextInterview: {
+          $max: {
+            $map: {
+              input: {
+                $filter: {
+                  input: { $ifNull: ['$events', []] },
+                  cond: { $eq: ['$$this.type', 'interview_scheduled'] },
+                },
+              },
+              in: '$$this.at',
+            },
+          },
+        },
+      },
+    });
+
+    if (search) {
+      const q = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      pipeline.push({
+        $match: {
+          $or: [
+            { title: { $regex: q, $options: 'i' } },
+            { company: { $regex: q, $options: 'i' } },
+          ],
+        },
+      });
+    }
+
+    pipeline.push({
+      $facet: {
+        data: [
+          { $sort: { [sortField]: sortDir } },
+          { $skip: skip },
+          { $limit: pageSizeNum },
+        ],
+        total: [{ $count: 'count' }],
+      },
+    });
+
+    const col = await getCollection('applications');
+    const [facet] = await col.aggregate(pipeline).toArray();
+
+    const total: number = facet?.total?.[0]?.count ?? 0;
+    const results = (facet?.data ?? []).map((app: Record<string, unknown>) => ({
+      ...app,
+      _id: (app._id as ObjectId).toString(),
+      jobPosting: app.jobPosting
+        ? {
+            ...(app.jobPosting as Record<string, unknown>),
+            _id: ((app.jobPosting as Record<string, unknown>)._id as ObjectId).toString(),
+          }
+        : null,
+    }));
+
+    return res.status(200).json({ data: results, total, page: pageNum, pageSize: pageSizeNum });
   }
 
   if (req.method === 'PATCH') {

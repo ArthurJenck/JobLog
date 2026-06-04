@@ -3,7 +3,7 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
-import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS } from '@joblog/shared';
+import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS, TERMINAL_STATUSES, resolveStatusOnEvent, deriveStatusFromEvents } from '@joblog/shared';
 
 const PatchApplicationSchema = z.object({
   status: z.enum(APPLICATION_STATUSES).optional(),
@@ -94,8 +94,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
       const event = { ...parsed.data, at: parsed.data.at ? new Date(parsed.data.at) : new Date(), meta: parsed.data.meta ?? null };
       const setOps: Record<string, unknown> = { updated_at: new Date() };
-      const autoStatus = EVENT_AUTO_STATUS[parsed.data.type];
-      if (autoStatus) setOps['status'] = autoStatus;
+
+      if (EVENT_AUTO_STATUS[parsed.data.type] !== undefined) {
+        const app = await col.findOne(appFilter);
+        if (!app) return res.status(404).json({ error: 'Not found' });
+        const newStatus = resolveStatusOnEvent(app.status, parsed.data.type);
+        if (newStatus) setOps['status'] = newStatus;
+      }
 
       await col.updateOne(appFilter, {
         $push: { events: event },
@@ -123,9 +128,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       const parsed = DeleteEventSchema.safeParse(body.deleteEvent);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
+      const setOps: Record<string, unknown> = { updated_at: new Date() };
+
+      if (EVENT_AUTO_STATUS[parsed.data.type] !== undefined) {
+        const app = await col.findOne(appFilter);
+        if (!app) return res.status(404).json({ error: 'Not found' });
+        const remaining = (app.events ?? []).filter(
+          (e: { type: string; at: Date }) =>
+            !(e.type === parsed.data.type && e.at.toISOString() === new Date(parsed.data.at).toISOString()),
+        );
+        setOps['status'] = deriveStatusFromEvents(remaining as Array<{ type: EventType; at: Date }>);
+      }
+
       await col.updateOne(appFilter, {
         $pull: { events: { type: parsed.data.type, at: new Date(parsed.data.at) } },
-        $set: { updated_at: new Date() },
+        $set: setOps,
       });
       return res.status(200).json({ ok: true });
     }
@@ -157,7 +174,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (status === 'applied' && !parsed.data.appliedAt) {
         updates['appliedAt'] = new Date();
       }
-      if (['rejected', 'ghosted', 'cancelled'].includes(status)) {
+      if (TERMINAL_STATUSES.includes(status)) {
         updates['reminder.at'] = null;
       }
       const app = await col.findOne(appFilter);

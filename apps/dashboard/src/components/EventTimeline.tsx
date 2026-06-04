@@ -1,6 +1,7 @@
 import {
   EVENT_LABELS,
   EVENT_PIPELINE,
+  TERMINAL_STATUSES,
   type ApplicationStatus,
   type EventType,
 } from '@joblog/shared';
@@ -17,6 +18,7 @@ import {
   ThumbsDownIcon,
   XCircleIcon,
   GhostIcon,
+  BanIcon,
   StickyNoteIcon,
   TrashIcon,
 } from 'lucide-react';
@@ -42,6 +44,7 @@ const EVENT_ICONS: Partial<Record<EventType, React.ElementType>> & { _fallback: 
   offer_declined: ThumbsDownIcon,
   rejected: XCircleIcon,
   ghosted: GhostIcon,
+  cancelled: BanIcon,
   custom: StickyNoteIcon,
   _fallback: StickyNoteIcon,
 };
@@ -59,12 +62,11 @@ const EVENT_COLORS: Partial<Record<EventType, string>> = {
   offer_declined: 'text-red-600 bg-red-100 dark:bg-red-900/40',
   rejected: 'text-red-600 bg-red-100 dark:bg-red-900/40',
   ghosted: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800',
+  cancelled: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800',
   custom: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
 };
 
 const FALLBACK_COLOR = 'text-slate-500 bg-slate-100 dark:bg-slate-800';
-
-const TERMINAL_STATUSES = new Set<ApplicationStatus>(['rejected', 'ghosted']);
 
 interface EventItem {
   type: EventType;
@@ -93,6 +95,7 @@ const ADDABLE_EVENTS: EventType[] = [
   'offer_declined',
   'rejected',
   'ghosted',
+  'cancelled',
   'custom',
 ];
 
@@ -100,7 +103,7 @@ function getNextPipelineEvent(
   events: EventItem[],
   currentStatus: ApplicationStatus,
 ): EventType | null {
-  if (TERMINAL_STATUSES.has(currentStatus)) return null;
+  if ((TERMINAL_STATUSES as readonly string[]).includes(currentStatus)) return null;
   const existing = new Set(events.map((e) => e.type));
 
   if (existing.has('interview_scheduled') && !existing.has('interview_done')) {

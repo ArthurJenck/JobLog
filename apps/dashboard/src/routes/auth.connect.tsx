@@ -19,8 +19,8 @@ export function ConnectPage() {
         return r.ok ? r.json() : null;
       })
       .then((data) => {
-        if (!data?.token) { setStatus('error'); return; }
-        window.postMessage({ type: 'JOBLOG_AUTH_TOKEN', token: data.token }, '*');
+        if (!data?.accessToken || !data?.refreshToken) { setStatus('error'); return; }
+        window.postMessage({ type: 'JOBLOG_AUTH_TOKEN', accessToken: data.accessToken, refreshToken: data.refreshToken }, '*');
         setStatus('success');
       })
       .catch(() => setStatus('error'));

@@ -1,9 +1,7 @@
-import { useState, useMemo } from 'react';
+import { useMemo } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
-  getSortedRowModel,
-  getFilteredRowModel,
   flexRender,
   type ColumnDef,
   type SortingState,
@@ -18,58 +16,74 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from '@/components/ui/pagination';
 import { StatusBadge } from './StatusBadge';
 import { SourceBadge } from './SourceBadge';
 import { PlusIcon, ArrowUpDownIcon, ArrowUpIcon, ArrowDownIcon, ChevronDownIcon } from 'lucide-react';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
-import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationWithJob, type ApplicationStatus, type JobSource } from '@joblog/shared';
+import { APPLICATION_STATUSES, STATUS_LABELS, TERMINAL_STATUSES, type ApplicationWithJob, type ApplicationStatus, type JobSource } from '@joblog/shared';
+
+const DEFAULT_STATUSES = new Set<ApplicationStatus>(['saved', 'applied', 'interview', 'offer', 'accepted']);
 
 interface Props {
   data: ApplicationWithJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+  statuses: Set<ApplicationStatus>;
+  searchText: string;
+  dateFrom: string;
+  dateTo: string;
+  sortId: string;
+  sortDesc: boolean;
+  onStatusesChange: (s: Set<ApplicationStatus>) => void;
+  onSearchChange: (v: string) => void;
+  onDateFromChange: (v: string) => void;
+  onDateToChange: (v: string) => void;
+  onSortChange: (id: string, desc: boolean) => void;
+  onPageChange: (p: number) => void;
   onRowClick: (app: ApplicationWithJob) => void;
   onAdd: () => void;
   isLoading?: boolean;
 }
 
-const DEFAULT_STATUSES = new Set<ApplicationStatus>(['saved', 'applied', 'interview', 'offer']);
-
-export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props) {
-  const [sorting, setSorting] = useState<SortingState>([{ id: 'created_at', desc: true }]);
-  const [globalFilter, setGlobalFilter] = useState('');
-  const [selectedStatuses, setSelectedStatuses] = useState<Set<ApplicationStatus>>(new Set(DEFAULT_STATUSES));
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+export function ApplicationsTable({
+  data,
+  total,
+  page,
+  pageSize,
+  statuses,
+  searchText,
+  dateFrom,
+  dateTo,
+  sortId,
+  sortDesc,
+  onStatusesChange,
+  onSearchChange,
+  onDateFromChange,
+  onDateToChange,
+  onSortChange,
+  onPageChange,
+  onRowClick,
+  onAdd,
+  isLoading,
+}: Props) {
+  const sorting: SortingState = [{ id: sortId, desc: sortDesc }];
 
   function toggleStatus(s: ApplicationStatus) {
-    setSelectedStatuses((prev) => {
-      const next = new Set(prev);
-      if (next.has(s)) next.delete(s);
-      else next.add(s);
-      return next;
-    });
+    const next = new Set(statuses);
+    if (next.has(s)) next.delete(s);
+    else next.add(s);
+    onStatusesChange(next);
   }
-
-  const filtered = useMemo(() => {
-    let result = selectedStatuses.size > 0
-      ? data.filter((a) => selectedStatuses.has(a.status as ApplicationStatus))
-      : data;
-
-    if (dateFrom) {
-      const from = new Date(dateFrom + 'T00:00:00');
-      result = result.filter((a) => {
-        const d = a.appliedAt ?? a.created_at;
-        return d && new Date(d) >= from;
-      });
-    }
-    if (dateTo) {
-      const to = new Date(dateTo + 'T23:59:59');
-      result = result.filter((a) => {
-        const d = a.appliedAt ?? a.created_at;
-        return d && new Date(d) <= to;
-      });
-    }
-    return result;
-  }, [data, selectedStatuses, dateFrom, dateTo]);
 
   const columns = useMemo<ColumnDef<ApplicationWithJob>[]>(
     () => [
@@ -153,7 +167,7 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
       {
         id: 'appliedAt',
         header: 'Candidature',
-        accessorFn: (row) => row.appliedAt,
+        accessorFn: (row) => row.appliedAt ?? row.created_at,
         cell: ({ getValue }) => {
           const v = getValue() as string | null;
           return v ? <span className="text-sm text-muted-foreground">{fmtDate(v)}</span> : <span className="text-muted-foreground/40">—</span>;
@@ -164,17 +178,26 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
   );
 
   const table = useReactTable({
-    data: filtered,
+    data,
     columns,
-    state: { sorting, globalFilter },
-    onSortingChange: setSorting,
-    onGlobalFilterChange: setGlobalFilter,
+    state: { sorting },
+    manualSorting: true,
+    manualFiltering: true,
+    manualPagination: true,
+    onSortingChange: (updater) => {
+      const next = typeof updater === 'function' ? updater(sorting) : updater;
+      if (next.length > 0) {
+        onSortChange(next[0].id, next[0].desc);
+      }
+    },
     getCoreRowModel: getCoreRowModel(),
-    getSortedRowModel: getSortedRowModel(),
-    getFilteredRowModel: getFilteredRowModel(),
   });
 
-  const allSelected = selectedStatuses.size === APPLICATION_STATUSES.length;
+  const allSelected = statuses.size === APPLICATION_STATUSES.length;
+  const pageCount = Math.ceil(total / pageSize);
+
+  const rangeStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const rangeEnd = Math.min(page * pageSize, total);
 
   return (
     <div className="flex flex-col gap-4">
@@ -182,8 +205,8 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
         <div className="flex items-center gap-2 flex-wrap">
           <Input
             placeholder="Rechercher…"
-            value={globalFilter}
-            onChange={(e) => setGlobalFilter(e.target.value)}
+            value={searchText}
+            onChange={(e) => onSearchChange(e.target.value)}
             className="h-9 w-52"
           />
           <DropdownMenu>
@@ -191,7 +214,7 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
               <Button variant="outline" size="sm" className="h-9 gap-1.5">
                 Statut
                 <span className="rounded-full bg-muted px-1.5 text-xs font-medium leading-tight">
-                  {allSelected ? 'tous' : selectedStatuses.size}
+                  {allSelected ? 'tous' : statuses.size}
                 </span>
                 <ChevronDownIcon className="h-3.5 w-3.5 opacity-60" />
               </Button>
@@ -203,15 +226,15 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
                   onSelect={(e) => { e.preventDefault(); toggleStatus(s); }}
                   className="gap-2"
                 >
-                  <div className={`h-3.5 w-3.5 rounded-sm border flex-shrink-0 transition-colors ${selectedStatuses.has(s) ? 'bg-foreground border-foreground' : 'border-muted-foreground/50'}`} />
+                  <div className={`h-3.5 w-3.5 rounded-sm border flex-shrink-0 transition-colors ${statuses.has(s) ? 'bg-foreground border-foreground' : 'border-muted-foreground/50'}`} />
                   {STATUS_LABELS[s]}
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => setSelectedStatuses(new Set(APPLICATION_STATUSES))}>
+              <DropdownMenuItem onSelect={() => onStatusesChange(new Set(APPLICATION_STATUSES))}>
                 Tout afficher
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => setSelectedStatuses(new Set(DEFAULT_STATUSES))}>
+              <DropdownMenuItem onSelect={() => onStatusesChange(new Set(DEFAULT_STATUSES))}>
                 Actives seulement
               </DropdownMenuItem>
             </DropdownMenuContent>
@@ -219,14 +242,14 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
           <Input
             type="date"
             value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
+            onChange={(e) => onDateFromChange(e.target.value)}
             className="h-9 w-36 text-sm"
             title="Date de début"
           />
           <Input
             type="date"
             value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
+            onChange={(e) => onDateToChange(e.target.value)}
             className="h-9 w-36 text-sm"
             title="Date de fin"
           />
@@ -305,8 +328,64 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
           )}
         </Table>
       </div>
+
+      {total > pageSize && (
+        <div className="flex items-center justify-between gap-4 px-1">
+          <span className="text-sm text-muted-foreground">
+            {rangeStart}–{rangeEnd} sur {total}
+          </span>
+          <Pagination className="mx-0 w-auto justify-end">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  onClick={page > 1 ? () => onPageChange(page - 1) : undefined}
+                  className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  aria-disabled={page <= 1}
+                />
+              </PaginationItem>
+              {buildPageItems(page, pageCount).map((item, i) =>
+                item === '...' ? (
+                  <PaginationItem key={`ellipsis-${i}`}>
+                    <PaginationEllipsis />
+                  </PaginationItem>
+                ) : (
+                  <PaginationItem key={item}>
+                    <PaginationLink
+                      isActive={item === page}
+                      onClick={() => onPageChange(item as number)}
+                      className="cursor-pointer"
+                    >
+                      {item}
+                    </PaginationLink>
+                  </PaginationItem>
+                )
+              )}
+              <PaginationItem>
+                <PaginationNext
+                  onClick={page < pageCount ? () => onPageChange(page + 1) : undefined}
+                  className={page >= pageCount ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  aria-disabled={page >= pageCount}
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
+        </div>
+      )}
     </div>
   );
+}
+
+function buildPageItems(current: number, count: number): (number | '...')[] {
+  if (count <= 7) return Array.from({ length: count }, (_, i) => i + 1);
+  const items: (number | '...')[] = [];
+  items.push(1);
+  if (current > 3) items.push('...');
+  for (let p = Math.max(2, current - 1); p <= Math.min(count - 1, current + 1); p++) {
+    items.push(p);
+  }
+  if (current < count - 2) items.push('...');
+  items.push(count);
+  return items;
 }
 
 function SortIcon({ direction }: { direction: false | 'asc' | 'desc' }) {
@@ -328,32 +407,82 @@ function dateStatus(iso: string): 'past' | 'today' | 'future' {
   return 'future';
 }
 
+const THANK_YOU_WINDOW_DAYS = 7;
+const GHOST_STALE_DAYS = 30;
+
+function daysSince(iso: string): number {
+  return (Date.now() - new Date(iso).getTime()) / 86400000;
+}
+
 function getSuggestion(app: ApplicationWithJob): string | null {
-  if (['rejected', 'ghosted', 'cancelled'].includes(app.status)) return null;
+  if ((TERMINAL_STATUSES as readonly string[]).includes(app.status)) return null;
 
   const events = app.events ?? [];
-  const hasInterviewDone = events.some(e => e.type === 'interview_done');
-  const hasThankYou = events.some(e => e.type === 'thank_you_sent');
+  const has = (type: string) => events.some(e => e.type === type);
+  const now = new Date();
+  const reminderDue = app.reminder?.at != null && new Date(app.reminder.at) <= now;
+  const relancesExhausted = (app.reminder?.sentCount ?? 0) >= (app.reminder?.maxCount ?? 3);
 
-  if (hasInterviewDone && !hasThankYou) {
-    return 'Suggestion : Remerciez le recruteur après votre entretien.';
+  if (has('offer_accepted')) return null;
+
+  if (has('offer_received') && !has('offer_accepted') && !has('offer_declined')) {
+    return "Suggestion : N'oubliez pas de répondre à l'offre.";
   }
 
-  if (app.reminder?.at && new Date(app.reminder.at) <= new Date()) {
-    return 'Suggestion : Envoyez une relance pour ne pas vous faire oublier.';
+  const hasFutureInterview = events.some(
+    e => e.type === 'interview_scheduled' && new Date(e.at) > now,
+  );
+  if (hasFutureInterview) return null;
+
+  const frontier = [...events]
+    .filter(e => e.type !== 'custom' && new Date(e.at) <= now)
+    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0];
+
+  if (!frontier) return null;
+
+  switch (frontier.type) {
+    case 'interview_scheduled':
+      return 'Suggestion : Marquez votre entretien comme passé.';
+
+    case 'interview_done':
+      if (daysSince(frontier.at) < THANK_YOU_WINDOW_DAYS) {
+        return 'Suggestion : Remerciez le recruteur après votre entretien.';
+      }
+      return 'Suggestion : Marquez le résultat de cet entretien.';
+
+    case 'thank_you_sent':
+      if (reminderDue) return 'Suggestion : Relancez pour obtenir un retour.';
+      if (daysSince(frontier.at) >= THANK_YOU_WINDOW_DAYS) {
+        return 'Suggestion : Marquez le résultat de cet entretien.';
+      }
+      return null;
+
+    case 'followup_sent':
+      if (relancesExhausted || daysSince(frontier.at) >= GHOST_STALE_DAYS) {
+        return 'Suggestion : Sans réponse depuis longtemps — marquez-la comme ghostée ?';
+      }
+      return null;
+
+    case 'response_received':
+      return null;
+
+    case 'applied':
+      if (reminderDue) return 'Suggestion : Envoyez une relance pour ne pas vous faire oublier.';
+      if (relancesExhausted || daysSince(frontier.at) >= GHOST_STALE_DAYS) {
+        return 'Suggestion : Sans réponse depuis longtemps — marquez-la comme ghostée ?';
+      }
+      break;
+
+    case 'created':
+      if (app.status === 'saved') return 'Suggestion : Postulez à cette offre quand vous êtes prêt.';
+      break;
+
+    default:
+      break;
   }
 
   if (!app.cvId && app.status !== 'saved') {
     return 'Suggestion : Testez votre CV sur cette offre pour voir si votre profil correspond.';
-  }
-
-  if (hasInterviewDone) {
-    const last = [...events]
-      .filter(e => e.type === 'interview_done')
-      .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0];
-    if (last && (Date.now() - new Date(last.at).getTime()) / 86400000 > 7) {
-      return 'Suggestion : Marquez le résultat de cet entretien.';
-    }
   }
 
   return null;

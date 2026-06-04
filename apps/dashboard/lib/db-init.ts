@@ -19,5 +19,9 @@ export async function ensureIndexes() {
     db.collection('quota_usage').createIndex({ date: 1 }, { unique: true }),
 
     db.collection('notification_settings').createIndex({ userId: 1 }, { unique: true }),
+
+    db.collection('extension_tokens').createIndex({ tokenHash: 1 }, { unique: true }),
+    db.collection('extension_tokens').createIndex({ userId: 1 }),
+    db.collection('extension_tokens').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
   ]);
 }

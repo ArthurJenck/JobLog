@@ -2,6 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ObjectId } from 'mongodb';
 import { getCollection } from '../../lib/db.js';
 import { sendReminderEmail } from '../../lib/email.js';
+import { TERMINAL_STATUSES } from '@joblog/shared';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers['authorization'];
@@ -25,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { 'reminder.snoozedUntil': null },
       { 'reminder.snoozedUntil': { $lte: now } },
     ],
-    status: { $nin: ['rejected', 'ghosted', 'offer'] },
+    status: { $nin: [...TERMINAL_STATUSES, 'offer'] },
   }).toArray();
 
   let sent = 0;

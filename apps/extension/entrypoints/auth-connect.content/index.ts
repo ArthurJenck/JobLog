@@ -9,20 +9,20 @@ export default defineContentScript({
       if (event.source !== window) return;
       if (event.data?.type !== 'JOBLOG_AUTH_TOKEN') return;
 
-      const token = event.data.token as string;
-      if (!token) return;
+      const { accessToken, refreshToken } = event.data as { accessToken?: string; refreshToken?: string };
+      if (!accessToken || !refreshToken) return;
 
-      await browser.storage.local.set({ auth_token: token });
+      await browser.storage.local.set({ access_token: accessToken, refresh_token: refreshToken });
     });
 
-    browser.storage.local.get('auth_token').then(({ auth_token }) => {
-      if (auth_token) return;
+    browser.storage.local.get(['access_token', 'refresh_token']).then(({ access_token, refresh_token }) => {
+      if (access_token && refresh_token) return;
 
       fetch('/api/auth/extension-token', { method: 'POST', credentials: 'include' })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => {
-          if (data?.token) {
-            browser.storage.local.set({ auth_token: data.token });
+          if (data?.accessToken && data?.refreshToken) {
+            browser.storage.local.set({ access_token: data.accessToken, refresh_token: data.refreshToken });
           }
         })
         .catch(() => {});

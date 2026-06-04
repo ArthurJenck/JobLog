@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
+import { TERMINAL_STATUSES } from '@joblog/shared';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
@@ -19,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { 'reminder.snoozedUntil': null },
       { 'reminder.snoozedUntil': { $lte: now } },
     ],
-    status: { $nin: ['rejected', 'ghosted', 'offer'] },
+    status: { $nin: [...TERMINAL_STATUSES, 'offer'] },
   });
 
   return res.status(200).json({ count });

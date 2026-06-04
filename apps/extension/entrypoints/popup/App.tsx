@@ -12,13 +12,13 @@ export default function App() {
   const [recent, setRecent] = useState<RecentApp[]>([]);
 
   useEffect(() => {
-    browser.storage.local.get('auth_token').then(({ auth_token }) => {
-      setAuthToken((auth_token as string) ?? null);
+    browser.storage.local.get('access_token').then(({ access_token }) => {
+      setAuthToken((access_token as string) ?? null);
     });
 
     const listener = (changes: Record<string, { newValue?: unknown; oldValue?: unknown }>) => {
-      if ('auth_token' in changes) {
-        setAuthToken((changes.auth_token.newValue as string | undefined) ?? null);
+      if ('access_token' in changes) {
+        setAuthToken((changes.access_token.newValue as string | undefined) ?? null);
       }
     };
     browser.storage.onChanged.addListener(listener);
@@ -29,7 +29,6 @@ export default function App() {
     if (!authToken) return;
     fetch(`${API_BASE}/api/applications?limit=5`, {
       headers: { Authorization: `Bearer ${authToken}` },
-      credentials: 'include',
     })
       .then((r) => r.ok ? r.json() : null)
       .then((data) => data?.data && setRecent(data.data))
@@ -107,7 +106,7 @@ export default function App() {
         <button
           className="btn-ghost"
           onClick={async () => {
-            await browser.storage.local.remove('auth_token');
+            await browser.storage.local.remove(['access_token', 'refresh_token']);
             setAuthToken(null);
           }}
         >

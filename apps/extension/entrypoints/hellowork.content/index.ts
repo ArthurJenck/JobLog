@@ -12,12 +12,15 @@ export default defineContentScript({
 });
 
 function extract(): JobPostingDraft {
-  const title = document.querySelector<HTMLElement>('h1')?.innerText?.trim() ?? '';
+  const title =
+    document.querySelector<HTMLElement>('[data-cy="jobTitle"]')?.innerText?.trim() ??
+    document.querySelector<HTMLElement>('h1')?.innerText?.trim() ??
+    '';
 
   const company =
     document.querySelector<HTMLElement>('[data-cy="job-company-name"]')?.innerText?.trim() ??
+    document.querySelector<HTMLElement>('h1 a[href*="/entreprises/"]')?.innerText?.trim() ??
     document.querySelector<HTMLElement>('.company-name')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('[class*="company"]')?.innerText?.trim() ??
     '';
 
   const location =
