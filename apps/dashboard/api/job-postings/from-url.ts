@@ -1,73 +1,271 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import * as cheerio from 'cheerio';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { getEnv } from '../../lib/env.js';
-import { requireSession } from '../../lib/session.js';
 import { sha256 } from '../../lib/hash.js';
-import { GEMINI_DAILY_QUOTA, GEMINI_SCRAPE_RESERVE, GEMINI_MODEL } from '@joblog/shared';
+import { requireSession } from '../../lib/session.js';
+import {
+  CONTRACT_TYPES,
+  GEMINI_DAILY_QUOTA,
+  GEMINI_MODEL,
+  GEMINI_SCRAPE_RESERVE,
+  REMOTE_TYPES,
+  parseContractType,
+  parseRemote,
+  type ContractType,
+  type RemoteType,
+} from '@joblog/shared';
 
-const Schema = z.object({ url: z.string().url() });
+const RequestSchema = z.object({ url: z.string().url() });
+
+const URL_USAGE_KIND = 'url_paste';
+const URL_USAGE_WARNING_AT = 3;
+const URL_USAGE_LIMIT = 5;
+const JINA_ALERT_THRESHOLD_DEFAULT = 8_000_000;
+const JINA_READER_URL = 'https://r.jina.ai/';
+const MAX_MARKDOWN_CHARS_FOR_GEMINI = 18_000;
+const MAX_DESCRIPTION_CHARS = 10_000;
+const PARIS_TIME_ZONE = 'Europe/Paris';
+
+const SalarySchema = z.object({
+  min: z.number().nullable().optional(),
+  max: z.number().nullable().optional(),
+  currency: z.string().nullable().optional(),
+  period: z.enum(['month', 'year']).nullable().optional(),
+}).nullable().optional();
+
+const GeminiExtractionSchema = z.object({
+  readable: z.boolean().nullable().optional(),
+  failure_reason: z.enum(['blocked', 'login_required', 'not_job_posting', 'empty', 'other']).nullable().optional(),
+  title: z.string().nullable().optional(),
+  company: z.string().nullable().optional(),
+  location: z.string().nullable().optional(),
+  description: z.string().nullable().optional(),
+  contract_type: z.string().nullable().optional(),
+  remote: z.string().nullable().optional(),
+  salary: SalarySchema,
+  requirements: z.array(z.string()).nullable().optional(),
+  keywords: z.array(z.string()).nullable().optional(),
+  company_website: z.string().nullable().optional(),
+});
+
+type UrlUsage = {
+  date: string;
+  count: number;
+  warningAt: number;
+  limit: number;
+  remaining: number;
+  shouldWarn: boolean;
+  isBlocked: boolean;
+};
+
+type NormalizedExtraction = {
+  title: string;
+  company: string;
+  location: string | null;
+  description: string | null;
+  contract_type: ContractType | null;
+  remote: RemoteType | null;
+  salary: {
+    min: number | null;
+    max: number | null;
+    currency: string | null;
+    period: 'month' | 'year' | null;
+  } | null;
+  requirements: string[] | null;
+  keywords: string[] | null;
+  company_website: string | null;
+};
+
+interface JobPostingDoc {
+  url: string;
+  url_hash: string;
+  title?: unknown;
+  company?: unknown;
+  description?: unknown;
+}
+
+interface UsageLimitDoc {
+  userId: string;
+  date: string;
+  kind: string;
+  count: number;
+  created_at: Date;
+  updated_at: Date;
+}
+
+interface JinaUsageDoc {
+  date: string;
+  keyHash: string;
+  calls: number;
+  successCalls: number;
+  failureCalls: number;
+  estimatedTokens: number;
+  lastStatus: number | null;
+  lastErrorCode?: string;
+  lastErrorAt?: Date;
+  alertThreshold: number;
+  alertedAt: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
   const session = await requireSession(req, res);
   if (!session) return;
 
-  const parsed = Schema.safeParse(req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+  if (req.method === 'GET') {
+    return res.status(200).json({
+      usage: await getUrlUsage(session.user.id),
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  const parsed = RequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return res.status(400).json({ error: parsed.error.flatten() });
+  }
 
   const { url } = parsed.data;
   const url_hash = sha256(url);
-  const col = await getCollection('job_postings');
-
+  const col = await getCollection<JobPostingDoc>('job_postings');
   const cached = await col.findOne({ url_hash });
+  const currentUsage = await getUrlUsage(session.user.id);
+
   if (cached) {
-    if (isBlockedOrErrorPage({
+    if (isBlockedOrErrorContent({
       title: String(cached.title ?? ''),
       company: String(cached.company ?? ''),
-      html: String(cached.description ?? ''),
+      content: String(cached.description ?? ''),
       status: null,
     })) {
-      return res.status(422).json({ error: blockedScrapeMessage(url) });
+      return res.status(422).json({
+        code: 'blocked_or_empty_cache',
+        error: blockedScrapeMessage(url),
+        usage: currentUsage,
+        extensionUrl: getExtensionUrl(),
+      });
     }
 
-    return res.status(200).json({ ...cached, _id: cached._id.toString(), cached: true });
-  }
-
-  let html: string;
-  try {
-    const fetchRes = await fetch(url, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobLog/1.0)' },
-      signal: AbortSignal.timeout(10_000),
+    return res.status(200).json({
+      ...cached,
+      _id: cached._id.toString(),
+      cached: true,
+      usage: currentUsage,
+      extensionUrl: getExtensionUrl(),
     });
-    html = await fetchRes.text();
-    if (isBlockedOrErrorPage({ title: '', company: '', html, status: fetchRes.status })) {
-      return res.status(422).json({ error: blockedScrapeMessage(url) });
-    }
-  } catch {
-    return res.status(422).json({ error: 'Impossible de récupérer l\'URL' });
   }
 
-  const extracted = extractWithCheerio(html, url);
-  const incomplete = !extracted.title || !extracted.company;
-
-  let scrape_method: 'cheerio' | 'gemini' | 'manual' = 'cheerio';
-
-  if (incomplete) {
-    const quotaOk = await checkGeminiQuota();
-    if (quotaOk) {
-      const geminiResult = await extractWithGemini(html, url);
-      if (geminiResult) {
-        Object.assign(extracted, geminiResult);
-        scrape_method = 'gemini';
-      }
-    }
+  if (currentUsage.isBlocked) {
+    return res.status(429).json({
+      code: 'url_paste_limit_exceeded',
+      error: "Limite d'ajout par URL atteinte pour aujourd'hui. Utilise l'extension pour continuer sans limite.",
+      usage: currentUsage,
+      extensionUrl: getExtensionUrl(),
+    });
   }
 
-  if (!extracted.title && !extracted.company) {
-    scrape_method = 'manual';
+  const jinaApiKey = getEnv('JINA_API_KEY');
+  if (!jinaApiKey) {
+    return res.status(503).json({
+      code: 'jina_missing_api_key',
+      error: 'Service de récupération temporairement indisponible.',
+      usage: currentUsage,
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  const usageAfterIncrement = await incrementUrlUsage(session.user.id);
+  if (!usageAfterIncrement) {
+    const usage = await getUrlUsage(session.user.id);
+    return res.status(429).json({
+      code: 'url_paste_limit_exceeded',
+      error: "Limite d'ajout par URL atteinte pour aujourd'hui. Utilise l'extension pour continuer sans limite.",
+      usage,
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  const jinaResult = await fetchJinaMarkdown(url, jinaApiKey);
+  await recordJinaUsage({
+    apiKey: jinaApiKey,
+    status: jinaResult.status,
+    outputChars: jinaResult.markdown?.length ?? 0,
+    errorCode: jinaResult.errorCode,
+  });
+
+  if (!jinaResult.ok) {
+    const usageAfterRelease = await releaseUrlUsage(session.user.id);
+    const status = jinaResult.errorCode === 'jina_auth_error' ||
+      jinaResult.errorCode === 'jina_balance_error' ||
+      jinaResult.errorCode === 'jina_rate_limited' ||
+      jinaResult.errorCode === 'jina_unavailable' ||
+      jinaResult.errorCode === 'jina_fetch_failed'
+      ? 503
+      : 422;
+
+    return res.status(status).json({
+      code: jinaResult.errorCode,
+      error: status === 503
+        ? 'Service de récupération temporairement indisponible.'
+        : unreadableUrlMessage(url),
+      providerStatus: jinaResult.status,
+      usage: usageAfterRelease,
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  if (isBlockedOrErrorContent({
+    title: '',
+    company: '',
+    content: jinaResult.markdown,
+    status: jinaResult.status,
+  })) {
+    const usageAfterRelease = await releaseUrlUsage(session.user.id);
+    return res.status(422).json({
+      code: 'site_blocks_reader',
+      error: blockedScrapeMessage(url),
+      providerStatus: jinaResult.status,
+      usage: usageAfterRelease,
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  const geminiApiKey = getEnv('GEMINI_API_KEY');
+  if (!geminiApiKey) {
+    const usageAfterRelease = await releaseUrlUsage(session.user.id);
+    return res.status(503).json({
+      code: 'gemini_missing_api_key',
+      error: "Service d'analyse temporairement indisponible.",
+      usage: usageAfterRelease,
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  const quotaOk = await checkAndIncrementGeminiQuota();
+  if (!quotaOk) {
+    const usageAfterRelease = await releaseUrlUsage(session.user.id);
+    return res.status(429).json({
+      code: 'gemini_quota_exceeded',
+      error: "Quota d'analyse atteint, réessayez demain.",
+      usage: usageAfterRelease,
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  const extraction = await extractWithGemini(jinaResult.markdown, url, geminiApiKey);
+  if (!extraction) {
+    const usageAfterRelease = await releaseUrlUsage(session.user.id);
+    return res.status(422).json({
+      code: 'gemini_extraction_failed',
+      error: "Impossible d'extraire les informations principales de cette offre.",
+      usage: usageAfterRelease,
+      extensionUrl: getExtensionUrl(),
+    });
   }
 
   const source = detectSource(url);
@@ -76,185 +274,248 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     url,
     url_hash,
     source,
-    title: extracted.title ?? '',
-    company: extracted.company ?? '',
-    location: extracted.location ?? null,
-    description: extracted.description ?? null,
-    contract_type: null,
-    remote: null,
-    salary: null,
-    requirements: null,
-    keywords: null,
-    company_website: extracted.company_website ?? null,
-    scrape_method,
+    title: extraction.title,
+    company: extraction.company,
+    location: extraction.location,
+    description: extraction.description,
+    contract_type: extraction.contract_type,
+    remote: extraction.remote,
+    salary: extraction.salary,
+    requirements: extraction.requirements,
+    keywords: extraction.keywords,
+    company_website: extraction.company_website,
+    scrape_method: 'jina' as const,
     scraped_at: now,
     created_at: now,
     updated_at: now,
   };
 
   const result = await col.insertOne(doc);
-  return res.status(201).json({ ...doc, _id: result.insertedId.toString(), cached: false });
+  return res.status(201).json({
+    ...doc,
+    _id: result.insertedId.toString(),
+    cached: false,
+    usage: usageAfterIncrement,
+    extensionUrl: getExtensionUrl(),
+  });
 }
 
-function extractWithCheerio(html: string, url: string) {
-  const $ = cheerio.load(html);
+async function fetchJinaMarkdown(url: string, apiKey: string): Promise<{
+  ok: true;
+  markdown: string;
+  status: number;
+  errorCode: null;
+} | {
+  ok: false;
+  markdown: null;
+  status: number | null;
+  errorCode: string;
+}> {
+  try {
+    const resp = await fetch(`${JINA_READER_URL}${url}`, {
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        Accept: 'text/plain',
+        'X-Respond-With': 'markdown',
+        'X-Remove-Selector': 'script, style, noscript, header, nav, footer',
+      },
+      signal: AbortSignal.timeout(25_000),
+    });
 
-  const ogTitle = $('meta[property="og:title"]').attr('content')?.trim();
-  const ogDesc = $('meta[property="og:description"]').attr('content')?.trim();
-  const h1 = $('h1').first().text().trim();
-
-  let title = '';
-  let company = '';
-  let location: string | null = null;
-
-  if (url.includes('hellowork.com')) {
-    const hw = extractHelloWorkFromHtml($);
-    title = hw.title;
-    company = hw.company;
-    location = hw.location;
-  }
-
-  if (url.includes('jobijoba.com')) {
-    const jj = extractJobijobaFromHtml($);
-    title = jj.title;
-    company = jj.company;
-    location = jj.location;
-  }
-
-  if (!title) title = ogTitle ?? h1 ?? '';
-
-  if (!company && url.includes('francetravail.fr')) {
-    company = extractFranceTravailCompanyFromHtml($);
-  }
-
-  const ogSiteName = $('meta[property="og:site_name"]').attr('content')?.trim();
-  const companySelectors = [
-    '.media .media-body h3.t4.title',
-    '.media .media-body h3.title',
-    '[class*="company"]', '[class*="employer"]', '[class*="organization"]',
-    '[itemprop="hiringOrganization"] [itemprop="name"]',
-  ];
-  if (!company) {
-    for (const sel of companySelectors) {
-      const text = $(sel).first().text().trim();
-      if (text && text.length < 100) { company = text; break; }
+    const text = await resp.text();
+    if (!resp.ok) {
+      return {
+        ok: false,
+        markdown: null,
+        status: resp.status,
+        errorCode: classifyJinaHttpError(resp.status, text),
+      };
     }
+
+    return { ok: true, markdown: text, status: resp.status, errorCode: null };
+  } catch {
+    return {
+      ok: false,
+      markdown: null,
+      status: null,
+      errorCode: 'jina_fetch_failed',
+    };
+  }
+}
+
+function classifyJinaHttpError(status: number, body: string) {
+  const text = body.toLowerCase();
+  if (status === 401 || text.includes('auth_missing') || text.includes('auth_invalid')) {
+    return 'jina_auth_error';
   }
   if (
-    !company
-    && ogSiteName
-    && !url.includes('francetravail.fr')
-    && !url.includes('hellowork.com')
-    && !url.includes('jobijoba.com')
+    status === 403 &&
+    (text.includes('insufficient') || text.includes('balance') || text.includes('authz_'))
   ) {
-    company = ogSiteName;
+    return 'jina_balance_error';
   }
-
-  const locationSelectors = [
-    '[class*="location"]', '[class*="city"]', '[itemprop="addressLocality"]',
-    '[class*="address"]',
-  ];
-  if (!location) for (const sel of locationSelectors) {
-    const text = $(sel).first().text().trim();
-    if (text && text.length < 100) { location = text; break; }
+  if (status === 429 || text.includes('rate_') || text.includes('rate limit')) {
+    return 'jina_rate_limited';
   }
-
-  const description = ogDesc ?? $('main').first().text().trim().slice(0, 5000) ?? null;
-  const company_website = extractCompanyWebsite($, company);
-
-  return { title, company, location, description, company_website };
+  if (status >= 500) return 'jina_unavailable';
+  return 'jina_target_unreadable';
 }
 
-function extractCompanyWebsite($: cheerio.CheerioAPI, company: string) {
-  return extractStructuredCompanyWebsite($) ?? extractLinkedCompanyWebsite($, company);
-}
+async function extractWithGemini(
+  markdown: string,
+  url: string,
+  apiKey: string,
+): Promise<NormalizedExtraction | null> {
+  try {
+    const model = getEnv('GEMINI_MODEL') ?? GEMINI_MODEL;
+    const boundedMarkdown = normalizeWhitespace(markdown)
+      .slice(0, MAX_MARKDOWN_CHARS_FOR_GEMINI);
 
-function extractStructuredCompanyWebsite($: cheerio.CheerioAPI) {
-  const candidates: string[] = [];
-
-  $('script[type="application/ld+json"]').each((_, el) => {
-    const raw = $(el).text().trim();
-    if (!raw) return;
-
-    try {
-      collectJsonLdUrls(JSON.parse(raw), candidates);
-    } catch {
-      return;
-    }
-  });
-
-  for (const candidate of candidates) {
-    const domain = normalizeCompanyDomain(candidate);
-    if (domain) return domain;
-  }
-
-  return null;
-}
-
-function collectJsonLdUrls(value: unknown, candidates: string[]) {
-  if (Array.isArray(value)) {
-    for (const item of value) collectJsonLdUrls(item, candidates);
-    return;
-  }
-
-  if (!value || typeof value !== 'object') return;
-
-  const record = value as Record<string, unknown>;
-  for (const key of ['hiringOrganization', 'organization', 'company', 'publisher', 'author', '@graph']) {
-    collectJsonLdUrls(record[key], candidates);
-  }
-
-  for (const key of ['url', 'website', 'sameAs']) {
-    const raw = record[key];
-    if (typeof raw === 'string') candidates.push(raw);
-    if (Array.isArray(raw)) {
-      for (const item of raw) {
-        if (typeof item === 'string') candidates.push(item);
+    const resp = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            parts: [{
+              text: buildGeminiPrompt(url, boundedMarkdown),
+            }],
+          }],
+          generationConfig: { responseMimeType: 'application/json' },
+        }),
+        signal: AbortSignal.timeout(20_000),
       }
-    }
+    );
+
+    if (!resp.ok) return null;
+    const data = await resp.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!text) return null;
+
+    const parsed = GeminiExtractionSchema.safeParse(JSON.parse(text));
+    if (!parsed.success) return null;
+
+    return normalizeGeminiExtraction(parsed.data, boundedMarkdown);
+  } catch {
+    return null;
   }
 }
 
-function extractLinkedCompanyWebsite($: cheerio.CheerioAPI, company: string) {
-  const normalizedCompany = normalizeText(company);
-  const candidates: { domain: string; score: number }[] = [];
+function buildGeminiPrompt(url: string, markdown: string) {
+  return `Extrait les informations principales de cette offre d'emploi depuis le markdown Jina ci-dessous.
+Réponds uniquement en JSON strict avec ces clés:
+{
+  "readable": boolean,
+  "failure_reason": "blocked" | "login_required" | "not_job_posting" | "empty" | "other" | null,
+  "title": string | null,
+  "company": string | null,
+  "location": string | null,
+  "description": string | null,
+  "contract_type": "cdi" | "cdd" | "alternance" | "stage" | "freelance" | null,
+  "remote": "remote" | "hybride" | "présentiel" | null,
+  "salary": { "min": number | null, "max": number | null, "currency": string | null, "period": "month" | "year" | null } | null,
+  "requirements": string[] | null,
+  "keywords": string[] | null,
+  "company_website": string | null
+}
 
-  $('a[href]').each((_, el) => {
-    const href = $(el).attr('href');
-    const domain = href ? normalizeCompanyDomain(href) : null;
-    if (!domain) return;
+Règles:
+- readable vaut false si le markdown est une page de blocage, login obligatoire, captcha/challenge, erreur technique, page vide, liste de résultats, ou pas une offre d'emploi unique.
+- Si readable vaut false, failure_reason doit être l'une des valeurs autorisées et tous les champs métier doivent être null.
+- title et company doivent venir de l'offre, pas du nom du job board.
+- N'invente jamais title ou company. Si tu n'es pas sûr, utilise null.
+- description doit être le texte utile de l'offre, sans navigation ni texte de login, 6000 caractères maximum.
+- company_website doit être le domaine officiel de l'entreprise si un lien clair existe, sinon null. Ne renvoie pas le domaine du job board.
+- requirements contient 3 à 10 prérequis/compétences concrets si visibles.
+- keywords contient 3 à 12 mots-clés utiles pour retrouver l'offre.
+- Si une information est introuvable, utilise null.
 
-    const text = normalizeText([
-      $(el).text(),
-      $(el).attr('aria-label'),
-      $(el).attr('title'),
-      href,
-    ].filter(Boolean).join(' '));
+URL: ${url}
+Markdown:
+"""${markdown}"""`;
+}
 
-    let score = 0;
-    if (text.includes('site web') || text.includes('website') || text.includes('official')) score += 4;
-    if (text.includes('site internet') || text.includes('visiter le site')) score += 4;
-    if (normalizedCompany && domain.includes(normalizedCompany.replace(/\s+/g, ''))) score += 2;
-    if (normalizedCompany && text.includes(normalizedCompany)) score += 1;
-    if (text.includes('postuler') || text.includes('apply') || text.includes('candidater')) score -= 4;
-    if (text.includes('job') || text.includes('career') || text.includes('emploi')) score -= 1;
+function normalizeGeminiExtraction(
+  raw: z.infer<typeof GeminiExtractionSchema>,
+  markdown: string,
+): NormalizedExtraction | null {
+  if (raw.readable === false) return null;
 
-    candidates.push({ domain, score });
-  });
+  const title = cleanText(raw.title);
+  const company = cleanText(raw.company);
+  if (!title || !company) return null;
 
-  candidates.sort((a, b) => b.score - a.score);
+  const searchableText = [
+    raw.contract_type,
+    raw.remote,
+    raw.description,
+    markdown.slice(0, 5000),
+  ].filter(Boolean).join(' ');
 
-  const best = candidates.find((candidate) => candidate.score >= 2);
-  return best?.domain ?? null;
+  const contract_type = normalizeContractType(raw.contract_type, searchableText);
+  const remote = normalizeRemote(raw.remote, searchableText);
+  const description = cleanText(raw.description)?.slice(0, MAX_DESCRIPTION_CHARS) ??
+    markdown.slice(0, MAX_DESCRIPTION_CHARS);
+
+  if (isBlockedOrErrorContent({ title, company, content: description, status: null })) {
+    return null;
+  }
+
+  return {
+    title,
+    company,
+    location: cleanText(raw.location) ?? null,
+    description,
+    contract_type,
+    remote,
+    salary: normalizeSalary(raw.salary),
+    requirements: normalizeStringArray(raw.requirements),
+    keywords: normalizeStringArray(raw.keywords),
+    company_website: normalizeCompanyDomain(raw.company_website ?? ''),
+  };
+}
+
+function normalizeContractType(value: string | null | undefined, fallback: string) {
+  if (value && (CONTRACT_TYPES as readonly string[]).includes(value)) {
+    return value as ContractType;
+  }
+  return parseContractType([value, fallback].filter(Boolean).join(' '));
+}
+
+function normalizeRemote(value: string | null | undefined, fallback: string) {
+  if (value && (REMOTE_TYPES as readonly string[]).includes(value)) {
+    return value as RemoteType;
+  }
+  return parseRemote([value, fallback].filter(Boolean).join(' '));
+}
+
+function normalizeSalary(value: z.infer<typeof SalarySchema>) {
+  if (!value || typeof value !== 'object') return null;
+  const min = typeof value.min === 'number' && Number.isFinite(value.min) ? value.min : null;
+  const max = typeof value.max === 'number' && Number.isFinite(value.max) ? value.max : null;
+  const currency = cleanText(value.currency) ?? null;
+  const period = value.period === 'month' || value.period === 'year' ? value.period : null;
+  if (min === null && max === null && !currency && !period) return null;
+  return { min, max, currency, period };
+}
+
+function normalizeStringArray(value: string[] | null | undefined) {
+  if (!Array.isArray(value)) return null;
+  const items = [...new Set(value.map((item) => cleanText(item)).filter(Boolean) as string[])]
+    .slice(0, 12);
+  return items.length ? items : null;
 }
 
 function normalizeCompanyDomain(raw: string) {
+  const value = cleanText(raw);
+  if (!value) return null;
+
   try {
-    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const url = new URL(/^https?:\/\//i.test(value) ? value : `https://${value}`);
     const domain = url.hostname.replace(/^www\./i, '').toLowerCase();
     if (!domain.includes('.')) return null;
     if (isIgnoredCompanyDomain(domain)) return null;
-
     return domain;
   } catch {
     return null;
@@ -292,155 +553,248 @@ function isIgnoredCompanyDomain(domain: string) {
   ].some((ignored) => domain === ignored || domain.endsWith(`.${ignored}`));
 }
 
-function normalizeText(value: string) {
-  return value
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .trim();
-}
-
-function isBlockedOrErrorPage(input: {
+function isBlockedOrErrorContent(input: {
   title: string;
   company: string;
-  html: string;
+  content: string;
   status: number | null;
 }) {
-  const text = `${input.title} ${input.company} ${input.html}`.toLowerCase();
+  const text = `${input.title} ${input.company} ${input.content}`.toLowerCase();
 
   if (input.status !== null && input.status >= 400) return true;
   if (input.title.trim().toLowerCase() === '403 error') return true;
   if (text.includes('403 error')) return true;
+  if (text.includes('access denied')) return true;
   if (text.includes('not a robot')) return true;
-  if (text.includes('verify that you\'re not a robot')) return true;
+  if (text.includes("verify that you're not a robot")) return true;
+  if (looksLikeCaptchaChallenge(text)) return true;
   if (text.includes('javascript is disabled')) return true;
   if (text.includes('enable javascript and then reload the page')) return true;
+  if (text.includes('sign in to view')) return true;
+  if (text.includes('log in to view')) return true;
+  if (text.includes('authwall')) return true;
+  if (text.includes('just a moment...') && text.includes('cloudflare')) return true;
 
   return false;
 }
 
-const UNKNOWN_COMPANY = 'Entreprise inconnue';
+function looksLikeCaptchaChallenge(text: string) {
+  const hasCaptcha = text.includes('captcha') || text.includes('recaptcha');
+  if (!hasCaptcha) return false;
 
-function extractJobijobaFromHtml($: cheerio.CheerioAPI) {
-  const title = jobijobaPermalinkInfo($, 'icon-resume-briefcase');
-  let company = jobijobaPermalinkInfo($, 'icon-apartment');
-  const location = jobijobaPermalinkInfo($, 'icon-map-marker') || null;
+  const cookiePanelContext =
+    text.includes('gestion des cookies') ||
+    text.includes('cookie consent') ||
+    text.includes('services tiers') ||
+    text.includes("ce service n'a déposé aucun cookie") ||
+    text.includes('politique de confidentialité');
 
-  if (!company) company = UNKNOWN_COMPANY;
+  const challengeContext =
+    text.includes('captcha challenge') ||
+    text.includes('captcha required') ||
+    text.includes('captcha verification') ||
+    text.includes('complete the security check') ||
+    text.includes('solve the captcha') ||
+    text.includes('verify you are human') ||
+    text.includes("verify that you're not a robot") ||
+    text.includes('unusual traffic') ||
+    text.includes('automated requests');
 
-  return { title, company, location };
-}
-
-function jobijobaPermalinkInfo($: cheerio.CheerioAPI, iconClass: string) {
-  let result = '';
-  $('.permalink-info').each((_, el) => {
-    if (result) return;
-    const $info = $(el);
-    if ($info.find(`.${iconClass}`).length) {
-      result = $info.text().trim();
-    }
-  });
-  return result;
-}
-
-function extractHelloWorkFromHtml($: cheerio.CheerioAPI) {
-  const title = $('[data-cy="jobTitle"]').first().text().trim();
-
-  let company = $('[data-cy="job-company-name"]').first().text().trim();
-  if (!company) {
-    company = $('h1 a[href*="/entreprises/"]').first().text().trim();
-  }
-
-  const location = $('[data-cy="job-location"]').first().text().trim() || null;
-
-  return { title, company, location };
-}
-
-function extractFranceTravailCompanyFromHtml($: cheerio.CheerioAPI) {
-  const employerLink = $('a[href*="page-employeur"]').first();
-  if (employerLink.length) {
-    const fromHeading = employerLink.closest('.media-body').find('h3').first().text().trim();
-    if (fromHeading) return fromHeading;
-
-    const href = employerLink.attr('href');
-    if (href) {
-      const match = href.match(/\/page-employeur\/([^/?#]+)/i);
-      if (match?.[1]) {
-        return match[1].replace(/-\d+$/, '').replace(/-/g, ' ');
-      }
-    }
-  }
-
-  return $('.media .media-body h3.t4.title, .media .media-body h3.title').first().text().trim();
+  if (cookiePanelContext && !challengeContext) return false;
+  return challengeContext;
 }
 
 function blockedScrapeMessage(url: string) {
   if (url.includes('welcometothejungle.com')) {
-    return 'Welcome to the Jungle bloque la récupération depuis le dashboard. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension.';
+    return "Welcome to the Jungle bloque peut-être la récupération depuis le dashboard. Ouvre l'offre dans ton navigateur et sauvegarde-la via l'extension.";
   }
 
   if (url.includes('francetravail.fr')) {
-    return 'France Travail charge l\'employeur côté navigateur. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension JobLog.';
+    return "France Travail charge parfois l'employeur côté navigateur. Ouvre l'offre dans ton navigateur et sauvegarde-la via l'extension JobLog.";
   }
 
-  return 'Le site bloque la récupération automatique. Ouvre l\'offre dans ton navigateur et sauvegarde-la via l\'extension.';
-}
-
-async function extractWithGemini(html: string, url: string) {
-  try {
-    const model = getEnv('GEMINI_MODEL') ?? GEMINI_MODEL;
-    const truncated = html.replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
-      .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/\s+/g, ' ')
-      .trim()
-      .slice(0, 8000);
-
-    await incrementGeminiQuota();
-
-    const resp = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${process.env.GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{
-            parts: [{
-              text: `Extrait les informations suivantes de cette page d'offre d'emploi. Réponds en JSON strict avec les clés: title, company, location. Si une info est introuvable, utilise null.\nURL: ${url}\nContenu: """${truncated}"""`,
-            }],
-          }],
-          generationConfig: { responseMimeType: 'application/json' },
-        }),
-        signal: AbortSignal.timeout(15_000),
-      }
-    );
-
-    if (!resp.ok) return null;
-    const data = await resp.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
-    return JSON.parse(text) as { title?: string; company?: string; location?: string };
-  } catch {
-    return null;
+  if (url.includes('linkedin.com')) {
+    return "LinkedIn bloque souvent les lectures serveur. Ouvre l'offre dans ton navigateur et sauvegarde-la via l'extension JobLog.";
   }
+
+  return "Le site bloque la récupération automatique. Ouvre l'offre dans ton navigateur et sauvegarde-la via l'extension.";
 }
 
-async function checkGeminiQuota(): Promise<boolean> {
-  const quotaCol = await getCollection('quota_usage');
-  const today = new Date().toISOString().slice(0, 10);
-  const usage = await quotaCol.findOne({ date: today });
-  const calls = (usage?.calls as number) ?? 0;
-  return calls + GEMINI_SCRAPE_RESERVE < GEMINI_DAILY_QUOTA;
+function unreadableUrlMessage(url: string) {
+  if (url.includes('linkedin.com')) {
+    return "LinkedIn est illisible automatiquement ou bloque la récupération serveur. L'extension reste le chemin le plus fiable.";
+  }
+
+  return "Impossible de lire cette URL automatiquement. Le site peut bloquer la récupération serveur, être indisponible, ou renvoyer une page que Jina ne peut pas convertir.";
 }
 
-async function incrementGeminiQuota() {
-  const quotaCol = await getCollection('quota_usage');
-  const today = new Date().toISOString().slice(0, 10);
-  await quotaCol.updateOne(
-    { date: today },
-    { $inc: { calls: 1 }, $setOnInsert: { date: today } },
-    { upsert: true }
+async function getUrlUsage(userId: string): Promise<UrlUsage> {
+  const col = await getCollection<UsageLimitDoc>('usage_limits');
+  const date = getParisDateKey();
+  const usage = await col.findOne({ userId, date, kind: URL_USAGE_KIND });
+  const count = normalizeCount(usage?.count);
+
+  return buildUrlUsage(date, count);
+}
+
+async function incrementUrlUsage(userId: string): Promise<UrlUsage | null> {
+  const col = await getCollection<UsageLimitDoc>('usage_limits');
+  const date = getParisDateKey();
+  const now = new Date();
+  const result = await col.findOneAndUpdate(
+    {
+      userId,
+      date,
+      kind: URL_USAGE_KIND,
+      count: { $lt: URL_USAGE_LIMIT },
+    },
+    {
+      $inc: { count: 1 },
+      $set: { updated_at: now },
+      $setOnInsert: {
+        userId,
+        date,
+        kind: URL_USAGE_KIND,
+        created_at: now,
+      },
+    },
+    { upsert: true, returnDocument: 'after' },
   );
+
+  if (!result) return null;
+  return buildUrlUsage(date, normalizeCount(result.count));
+}
+
+async function releaseUrlUsage(userId: string): Promise<UrlUsage> {
+  const col = await getCollection<UsageLimitDoc>('usage_limits');
+  const date = getParisDateKey();
+  const now = new Date();
+  const result = await col.findOneAndUpdate(
+    {
+      userId,
+      date,
+      kind: URL_USAGE_KIND,
+      count: { $gt: 0 },
+    },
+    {
+      $inc: { count: -1 },
+      $set: { updated_at: now },
+    },
+    { returnDocument: 'after' },
+  );
+
+  return buildUrlUsage(date, normalizeCount(result?.count));
+}
+
+function buildUrlUsage(date: string, count: number): UrlUsage {
+  return {
+    date,
+    count,
+    warningAt: URL_USAGE_WARNING_AT,
+    limit: URL_USAGE_LIMIT,
+    remaining: Math.max(0, URL_USAGE_LIMIT - count),
+    shouldWarn: count >= URL_USAGE_WARNING_AT,
+    isBlocked: count >= URL_USAGE_LIMIT,
+  };
+}
+
+function normalizeCount(value: unknown) {
+  return typeof value === 'number' && Number.isFinite(value) ? Math.max(0, Math.trunc(value)) : 0;
+}
+
+async function checkAndIncrementGeminiQuota(): Promise<boolean> {
+  const col = await getCollection('quota_usage');
+  const today = new Date().toISOString().slice(0, 10);
+  const maxScrapeCalls = Math.max(0, GEMINI_DAILY_QUOTA - GEMINI_SCRAPE_RESERVE);
+
+  const result = await col.findOneAndUpdate(
+    { date: today, calls: { $lt: maxScrapeCalls } },
+    { $inc: { calls: 1 }, $setOnInsert: { date: today } },
+    { upsert: true, returnDocument: 'after' },
+  );
+
+  return result !== null;
+}
+
+async function recordJinaUsage({
+  apiKey,
+  status,
+  outputChars,
+  errorCode,
+}: {
+  apiKey: string;
+  status: number | null;
+  outputChars: number;
+  errorCode: string | null;
+}) {
+  const col = await getCollection<JinaUsageDoc>('jina_usage');
+  const date = getParisDateKey();
+  const now = new Date();
+  const estimatedTokens = estimateTokens(outputChars);
+  const keyHash = sha256(apiKey).slice(0, 16);
+  const isSuccess = !errorCode;
+  const alertThreshold = getJinaAlertThreshold();
+
+  await col.updateOne(
+    { date, keyHash },
+    {
+      $inc: {
+        calls: 1,
+        successCalls: isSuccess ? 1 : 0,
+        failureCalls: isSuccess ? 0 : 1,
+        estimatedTokens,
+      },
+      $set: {
+        updated_at: now,
+        lastStatus: status,
+        alertThreshold,
+        ...(errorCode ? { lastErrorCode: errorCode, lastErrorAt: now } : {}),
+      },
+      $setOnInsert: {
+        date,
+        keyHash,
+        created_at: now,
+        alertedAt: null,
+      },
+    },
+    { upsert: true },
+  );
+}
+
+function estimateTokens(chars: number) {
+  return Math.max(0, Math.ceil(chars / 4));
+}
+
+function getJinaAlertThreshold() {
+  const raw = getEnv('JINA_ESTIMATED_TOKEN_ALERT_THRESHOLD');
+  const parsed = raw ? Number(raw) : NaN;
+  return Number.isFinite(parsed) && parsed > 0
+    ? Math.trunc(parsed)
+    : JINA_ALERT_THRESHOLD_DEFAULT;
+}
+
+function getParisDateKey(date = new Date()) {
+  const parts = new Intl.DateTimeFormat('en', {
+    timeZone: PARIS_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (type: string) => parts.find((part) => part.type === type)?.value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+function getExtensionUrl() {
+  return getEnv('PUBLIC_EXTENSION_URL') ?? null;
+}
+
+function cleanText(value?: string | null) {
+  const cleaned = value?.replace(/\s+/g, ' ').trim();
+  return cleaned || undefined;
+}
+
+function normalizeWhitespace(value: string) {
+  return value.replace(/\r/g, '').replace(/[ \t]+/g, ' ').trim();
 }
 
 function detectSource(url: string) {

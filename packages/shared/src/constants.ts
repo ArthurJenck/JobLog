@@ -179,6 +179,7 @@ export const SCRAPE_METHODS = [
     'extension',
     'cheerio',
     'gemini',
+    'jina',
     'manual',
 ] as const
 export type ScrapeMethod = (typeof SCRAPE_METHODS)[number]

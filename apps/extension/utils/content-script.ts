@@ -1,4 +1,9 @@
-import type { JobPostingDraft } from '@joblog/shared';
+import {
+  parseContractType,
+  parseRemote,
+  type JobPostingDraft,
+} from '@joblog/shared';
+export { parseContractType, parseRemote };
 
 type SaveJobResponse = { ok: true } | { ok: false; error?: string };
 
@@ -383,24 +388,6 @@ function getKeywords(value: unknown): string[] | null {
 function stripHtml(value: string) {
   const cleaned = cleanText(value.replace(/<[^>]*>/g, ' '));
   return cleaned;
-}
-
-export function parseContractType(raw: string) {
-  const r = raw.toLowerCase();
-  if (r.includes('cdi')) return 'cdi' as const;
-  if (r.includes('cdd')) return 'cdd' as const;
-  if (r.includes('alternance') || r.includes('apprentissage')) return 'alternance' as const;
-  if (r.includes('stage')) return 'stage' as const;
-  if (r.includes('freelance') || r.includes('consultant')) return 'freelance' as const;
-  return null;
-}
-
-export function parseRemote(raw: string) {
-  const r = raw.toLowerCase();
-  if (r.includes('télétravail complet') || r.includes('full remote') || r.includes('remote')) return 'remote' as const;
-  if (r.includes('hybride')) return 'hybride' as const;
-  if (r.includes('présentiel') || r.includes('sur site')) return 'présentiel' as const;
-  return null;
 }
 
 export function extractCompanyWebsite(company?: string | null) {

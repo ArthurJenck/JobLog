@@ -2,6 +2,23 @@ import type { ApplicationWithJob, Cv } from '@joblog/shared';
 
 const BASE = '/api';
 
+export interface UrlPasteUsage {
+  date: string;
+  count: number;
+  warningAt: number;
+  limit: number;
+  remaining: number;
+  shouldWarn: boolean;
+  isBlocked: boolean;
+}
+
+export interface FromUrlMeta {
+  usage: UrlPasteUsage;
+  extensionUrl: string | null;
+}
+
+export type FromUrlResponse = Record<string, unknown> & Partial<FromUrlMeta>;
+
 export interface LogoSearchResult {
   name: string;
   domain: string;
@@ -26,6 +43,9 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
     throw Object.assign(new Error(body.error ?? `HTTP ${res.status}`), {
       status: res.status,
       code: typeof body.code === 'string' ? body.code : undefined,
+      providerStatus: body.providerStatus,
+      usage: body.usage,
+      extensionUrl: body.extensionUrl,
     });
   }
   return res.json() as Promise<T>;
@@ -83,7 +103,10 @@ export const api = {
     create(body: Record<string, unknown>): Promise<{ jobPostingId: string; cached: boolean }> {
       return request('/job-postings', { method: 'POST', body: JSON.stringify(body) });
     },
-    fromUrl(url: string): Promise<Record<string, unknown>> {
+    getFromUrlUsage(): Promise<FromUrlMeta> {
+      return request('/job-postings/from-url');
+    },
+    fromUrl(url: string): Promise<FromUrlResponse> {
       return request('/job-postings/from-url', { method: 'POST', body: JSON.stringify({ url }) });
     },
   },

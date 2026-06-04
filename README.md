@@ -50,10 +50,7 @@ Autocomplétion d'adresse pour la saisie manuelle de l'entreprise et normalisati
 
 - **Landing page** — le root redirige directement vers le dashboard / login, aucune page marketing.
 - **Publication sur les stores** — Chrome Web Store, Firefox AMO, Edge Add-ons. L'extension est buildable mais non soumise. Vérifier les builds Firefox / Edge (WXT les supporte, non testés).
-- **Cron de suppression des comptes inactifs** (>6 mois) — prévu dans l'architecture, absent du code.
-- **Web Push end-to-end** — l'endpoint `/api/push` existe et le service worker est enregistré, mais le flux complet n'est pas vérifié côté client.
 - **Stats avancées** — la sidebar affiche des compteurs ; pas de visualisation (funnel, sources, évolution dans le temps).
-- **Refresh token / session longue** — le dashboard utilise un cookie better-auth (~7 jours, pas de rolling session), l'extension un JWT statique 90 jours sans rotation. Prévoir `updateAge` côté better-auth et un mécanisme de refresh pour le token extension.
 
 ---
 
