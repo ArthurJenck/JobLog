@@ -2,6 +2,18 @@ import type { ApplicationWithJob, Cv } from '@joblog/shared';
 
 const BASE = '/api';
 
+export interface LogoSearchResult {
+  name: string;
+  domain: string;
+}
+
+export interface AnalysisResult {
+  keywords_matched: string[];
+  keywords_missing: string[];
+  insights: string;
+  cached?: boolean;
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(BASE + url, {
     ...options,
@@ -59,8 +71,18 @@ export const api = {
     },
   },
   analyses: {
-    create(body: { cvId: string; applicationId: string; force?: boolean }): Promise<{ keywords_matched: string[]; keywords_missing: string[]; insights: string; cached?: boolean }> {
+    getCached(params: { cvId: string; applicationId: string }): Promise<{ analysis: AnalysisResult | null }> {
+      const qs = new URLSearchParams({ cvId: params.cvId, applicationId: params.applicationId });
+      return request(`/analyses?${qs.toString()}`);
+    },
+    create(body: { cvId: string; applicationId: string; force?: boolean }): Promise<AnalysisResult> {
       return request('/analyses', { method: 'POST', body: JSON.stringify(body) });
+    },
+  },
+  logos: {
+    search(q: string): Promise<{ data: LogoSearchResult[] }> {
+      const qs = new URLSearchParams({ q });
+      return request(`/logos/search?${qs.toString()}`);
     },
   },
   stats: {

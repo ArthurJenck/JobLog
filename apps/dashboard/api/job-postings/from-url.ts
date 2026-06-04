@@ -85,7 +85,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     salary: null,
     requirements: null,
     keywords: null,
-    company_website: null,
+    company_website: extracted.company_website ?? null,
     scrape_method,
     scraped_at: now,
     created_at: now,
@@ -127,8 +127,143 @@ function extractWithCheerio(html: string) {
   }
 
   const description = ogDesc ?? $('main').first().text().trim().slice(0, 5000) ?? null;
+  const company_website = extractCompanyWebsite($, company);
 
-  return { title, company, location, description };
+  return { title, company, location, description, company_website };
+}
+
+function extractCompanyWebsite($: cheerio.CheerioAPI, company: string) {
+  return extractStructuredCompanyWebsite($) ?? extractLinkedCompanyWebsite($, company);
+}
+
+function extractStructuredCompanyWebsite($: cheerio.CheerioAPI) {
+  const candidates: string[] = [];
+
+  $('script[type="application/ld+json"]').each((_, el) => {
+    const raw = $(el).text().trim();
+    if (!raw) return;
+
+    try {
+      collectJsonLdUrls(JSON.parse(raw), candidates);
+    } catch {
+      return;
+    }
+  });
+
+  for (const candidate of candidates) {
+    const domain = normalizeCompanyDomain(candidate);
+    if (domain) return domain;
+  }
+
+  return null;
+}
+
+function collectJsonLdUrls(value: unknown, candidates: string[]) {
+  if (Array.isArray(value)) {
+    for (const item of value) collectJsonLdUrls(item, candidates);
+    return;
+  }
+
+  if (!value || typeof value !== 'object') return;
+
+  const record = value as Record<string, unknown>;
+  for (const key of ['hiringOrganization', 'organization', 'company', 'publisher', 'author', '@graph']) {
+    collectJsonLdUrls(record[key], candidates);
+  }
+
+  for (const key of ['url', 'website', 'sameAs']) {
+    const raw = record[key];
+    if (typeof raw === 'string') candidates.push(raw);
+    if (Array.isArray(raw)) {
+      for (const item of raw) {
+        if (typeof item === 'string') candidates.push(item);
+      }
+    }
+  }
+}
+
+function extractLinkedCompanyWebsite($: cheerio.CheerioAPI, company: string) {
+  const normalizedCompany = normalizeText(company);
+  const candidates: { domain: string; score: number }[] = [];
+
+  $('a[href]').each((_, el) => {
+    const href = $(el).attr('href');
+    const domain = href ? normalizeCompanyDomain(href) : null;
+    if (!domain) return;
+
+    const text = normalizeText([
+      $(el).text(),
+      $(el).attr('aria-label'),
+      $(el).attr('title'),
+      href,
+    ].filter(Boolean).join(' '));
+
+    let score = 0;
+    if (text.includes('site web') || text.includes('website') || text.includes('official')) score += 4;
+    if (text.includes('site internet') || text.includes('visiter le site')) score += 4;
+    if (normalizedCompany && domain.includes(normalizedCompany.replace(/\s+/g, ''))) score += 2;
+    if (normalizedCompany && text.includes(normalizedCompany)) score += 1;
+    if (text.includes('postuler') || text.includes('apply') || text.includes('candidater')) score -= 4;
+    if (text.includes('job') || text.includes('career') || text.includes('emploi')) score -= 1;
+
+    candidates.push({ domain, score });
+  });
+
+  candidates.sort((a, b) => b.score - a.score);
+
+  const best = candidates.find((candidate) => candidate.score >= 2);
+  return best?.domain ?? null;
+}
+
+function normalizeCompanyDomain(raw: string) {
+  try {
+    const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+    const domain = url.hostname.replace(/^www\./i, '').toLowerCase();
+    if (!domain.includes('.')) return null;
+    if (isIgnoredCompanyDomain(domain)) return null;
+
+    return domain;
+  } catch {
+    return null;
+  }
+}
+
+function isIgnoredCompanyDomain(domain: string) {
+  return [
+    'welcometothejungle.com',
+    'linkedin.com',
+    'hellowork.com',
+    'indeed.com',
+    'glassdoor.com',
+    'jobteaser.com',
+    'greenhouse.io',
+    'lever.co',
+    'workable.com',
+    'ashbyhq.com',
+    'smartrecruiters.com',
+    'recruitee.com',
+    'teamtailor.com',
+    'breezy.hr',
+    'personio.com',
+    'successfactors.com',
+    'myworkdayjobs.com',
+    'workdayjobs.com',
+    'icims.com',
+    'facebook.com',
+    'instagram.com',
+    'x.com',
+    'twitter.com',
+    'youtube.com',
+    'tiktok.com',
+  ].some((ignored) => domain === ignored || domain.endsWith(`.${ignored}`));
+}
+
+function normalizeText(value: string) {
+  return value
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim();
 }
 
 function isBlockedOrErrorPage(input: {

@@ -31,6 +31,19 @@ function clearSearchKeys(keys: string[]) {
   window.history.replaceState(window.history.state, '', `${url.pathname}${url.search}${url.hash}`);
 }
 
+function readSnoozeToastFromUrl() {
+  const params = new URLSearchParams(window.location.search);
+  if (params.get('toast') !== 'reminder-snoozed') return null;
+
+  const rawDays = params.get('snoozeDays');
+  const snoozeDays = rawDays && Number.isFinite(Number(rawDays)) ? Number(rawDays) : undefined;
+
+  return {
+    applicationId: params.get('applicationId') ?? '',
+    snoozeDays,
+  };
+}
+
 function formatSnoozeToastDelay(days?: number) {
   if (!days || days < 1) return 'selon la fréquence définie.';
   return days === 1 ? 'demain.' : `dans ${Math.trunc(days)} jours.`;
@@ -88,15 +101,23 @@ export function IndexPage() {
   }, [navigate]);
 
   useEffect(() => {
-    const toastKey = `${search.toast ?? ''}:${search.applicationId ?? ''}:${search.snoozeDays ?? ''}`;
-    if (search.toast !== 'reminder-snoozed' || shownToast.current === toastKey) return;
+    const snoozeToast = readSnoozeToastFromUrl();
+    if (!snoozeToast) return;
+
+    const toastKey = `reminder-snoozed:${snoozeToast.applicationId}:${snoozeToast.snoozeDays ?? ''}`;
+    if (shownToast.current === toastKey) return;
 
     shownToast.current = toastKey;
-    toast.success('Rappel snoozé', {
-      description: `On te le rappellera ${formatSnoozeToastDelay(search.snoozeDays)}`,
-    });
+
+    const timeout = window.setTimeout(() => {
+      toast.success('Rappel snoozé', {
+        description: `On te le rappellera ${formatSnoozeToastDelay(snoozeToast.snoozeDays)}`,
+      });
+    }, 150);
+
     clearSearchKeys(['toast', 'snoozeDays']);
-  }, [search.applicationId, search.snoozeDays, search.toast]);
+    return () => window.clearTimeout(timeout);
+  }, []);
 
   useEffect(() => {
     const applicationId = search.applicationId;

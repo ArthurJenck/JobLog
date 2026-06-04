@@ -13,6 +13,7 @@ import { SourceBadge } from './SourceBadge';
 import { EventTimeline } from './EventTimeline';
 import { AnalyzePanel } from './AnalyzePanel';
 import { api } from '@/lib/api';
+import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationWithJob, type EventType, type Cv } from '@joblog/shared';
 import { ExternalLinkIcon, BuildingIcon } from 'lucide-react';
 
@@ -36,7 +37,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
   if (!application) return null;
 
   const jp = application.jobPosting;
-  const domain = jp?.url ? extractDomain(jp.url) : null;
+  const logoUrl = getCompanyLogoUrl(jp, 80);
 
   async function patch(body: Record<string, unknown>) {
     setIsSaving(true);
@@ -58,15 +59,16 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
       <SheetContent className="w-full sm:max-w-2xl overflow-y-auto flex flex-col gap-0 p-0">
         <SheetHeader className="px-6 py-4 border-b">
           <div className="flex items-start gap-3">
-            {domain && (
+            {logoUrl && (
               <img
-                src={`https://logo.clearbit.com/${domain}`}
+                src={logoUrl}
                 alt=""
                 className="h-10 w-10 rounded-lg object-contain flex-shrink-0 mt-0.5"
+                referrerPolicy="origin"
                 onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
               />
             )}
-            {!domain && (
+            {!logoUrl && (
               <div className="h-10 w-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
                 <BuildingIcon className="h-5 w-5 text-muted-foreground" />
               </div>
@@ -292,9 +294,4 @@ function ReminderFields({
       </div>
     </div>
   );
-}
-
-function extractDomain(url?: string | null) {
-  if (!url) return null;
-  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
 }

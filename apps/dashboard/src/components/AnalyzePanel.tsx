@@ -1,29 +1,53 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SparklesIcon, CheckCircleIcon, XCircleIcon } from 'lucide-react';
-import { api } from '@/lib/api';
+import { api, type AnalysisResult } from '@/lib/api';
 
 interface Props {
   applicationId: string;
   cvId: string | null;
 }
 
-interface AnalysisResult {
-  keywords_matched: string[];
-  keywords_missing: string[];
-  insights: string;
-  cached?: boolean;
-}
-
 export function AnalyzePanel({ applicationId, cvId }: Props) {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isCheckingCache, setIsCheckingCache] = useState(false);
   const [error, setError] = useState('');
+
+  useEffect(() => {
+    setResult(null);
+    setError('');
+
+    if (!cvId) {
+      setIsCheckingCache(false);
+      return;
+    }
+
+    let isCancelled = false;
+    setIsCheckingCache(true);
+
+    api.analyses
+      .getCached({ cvId, applicationId })
+      .then(({ analysis }) => {
+        if (!isCancelled) setResult(analysis);
+      })
+      .catch((e) => {
+        if (!isCancelled) setError(e instanceof Error ? e.message : 'Erreur inconnue');
+      })
+      .finally(() => {
+        if (!isCancelled) setIsCheckingCache(false);
+      });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [applicationId, cvId]);
 
   async function analyze(options?: { force?: boolean }) {
     if (!cvId) return;
     setIsLoading(true);
+    setIsCheckingCache(false);
     setError('');
     if (options?.force) setResult(null);
     try {
@@ -40,7 +64,7 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
     }
   }
 
-  if (isLoading) {
+  if (isLoading || isCheckingCache) {
     return (
       <div className="flex flex-col gap-3">
         <Skeleton className="h-4 w-3/4" />

@@ -12,6 +12,8 @@ const Schema = z.object({
   force: z.boolean().optional().default(false),
 });
 
+const LookupSchema = Schema.pick({ cvId: true, applicationId: true });
+
 const ANALYSIS_PROMPT_VERSION = 'requirements-evidence-v1';
 
 interface RequirementAnalysis {
@@ -28,15 +30,20 @@ interface AnalysisResult {
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
 
   const session = await requireSession(req, res);
   if (!session) return;
 
-  const parsed = Schema.safeParse(req.body);
+  const parsed = (req.method === 'GET' ? LookupSchema : Schema).safeParse(req.method === 'GET' ? req.query : req.body);
   if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-  const { cvId, applicationId, force } = parsed.data;
+  const { cvId, applicationId } = parsed.data;
+  const force = req.method === 'POST' && 'force' in parsed.data ? parsed.data.force : false;
+
+  if (!ObjectId.isValid(cvId) || !ObjectId.isValid(applicationId)) {
+    return res.status(400).json({ error: 'Invalid id' });
+  }
 
   const [cvCol, appCol, analysesCol] = await Promise.all([
     getCollection('cvs'),
@@ -56,20 +63,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const jobPostingId = String(app.jobPostingId);
   const model = getGeminiModel();
 
-  const cached = force ? null : await analysesCol.findOne({
+  const cached = !force ? await analysesCol.findOne({
     cvHash,
     jobPostingId,
     model,
     analysisVersion: ANALYSIS_PROMPT_VERSION,
-  });
+  }) : null;
   if (cached) {
-    return res.status(200).json({
+    const analysis = {
       keywords_matched: cached.keywords_matched,
       keywords_missing: cached.keywords_missing,
       requirements: cached.requirements ?? [],
       insights: cached.insights,
       cached: true,
-    });
+    };
+
+    return res.status(200).json(req.method === 'GET' ? { analysis } : analysis);
+  }
+
+  if (req.method === 'GET') {
+    return res.status(200).json({ analysis: null });
   }
 
   const withinQuota = await checkAndIncrementQuota();

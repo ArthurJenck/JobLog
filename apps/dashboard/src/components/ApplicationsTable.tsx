@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { StatusBadge } from './StatusBadge';
 import { SourceBadge } from './SourceBadge';
 import { PlusIcon, ArrowUpDownIcon, ArrowUpIcon, ArrowDownIcon } from 'lucide-react';
+import { getCompanyLogoUrl } from '@/lib/company-logo';
 import type { ApplicationWithJob, ApplicationStatus, JobSource } from '@joblog/shared';
 
 interface Props {
@@ -48,14 +49,15 @@ export function ApplicationsTable({ data, onRowClick, onAdd, isLoading }: Props)
         header: 'Entreprise',
         accessorFn: (row) => row.jobPosting?.company ?? '',
         cell: ({ row, getValue }) => {
-          const domain = extractDomain(row.original.jobPosting?.url);
+          const logoUrl = getCompanyLogoUrl(row.original.jobPosting, 40);
           return (
             <div className="flex items-center gap-2">
-              {domain && (
+              {logoUrl && (
                 <img
-                  src={`https://logo.clearbit.com/${domain}`}
+                  src={logoUrl}
                   alt=""
                   className="h-5 w-5 rounded object-contain"
+                  referrerPolicy="origin"
                   onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
                 />
               )}
@@ -226,9 +228,4 @@ function SortIcon({ direction }: { direction: false | 'asc' | 'desc' }) {
 
 function fmtDate(iso: string) {
   return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function extractDomain(url?: string | null) {
-  if (!url) return null;
-  try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return null; }
 }

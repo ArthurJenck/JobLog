@@ -5,6 +5,8 @@ export function Toaster({ ...props }: ToasterProps) {
     <Sonner
       className="toaster group"
       closeButton
+      duration={5000}
+      position="top-center"
       richColors
       toastOptions={{
         classNames: {
