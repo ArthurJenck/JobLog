@@ -5,6 +5,36 @@
 
 @custom-variant dark (&:is(.dark *));
 
+@keyframes heroBlurIn {
+  from { opacity: 0; filter: blur(10px); transform: translateY(10px); }
+  to   { opacity: 1; filter: blur(0px);  transform: translateY(0px);  }
+}
+
+@keyframes heroFadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes cloudSlideLeft {
+  from { transform: translateX(-200px); }
+  to   { transform: translateX(0px); }
+}
+
+@keyframes cloudSlideRight {
+  from { transform: translateX(200px); }
+  to   { transform: translateX(0px); }
+}
+
+@keyframes dashboardEnter {
+  from { opacity: 0; transform: perspective(1000px) translateY(-80px) scale(0.8) rotateX(25deg); }
+  to   { opacity: 1; transform: perspective(1000px) translateY(0px)  scale(1)   rotateX(15deg); }
+}
+
+@keyframes revealUp {
+  from { opacity: 0; transform: translateY(24px); filter: blur(6px); }
+  to   { opacity: 1; transform: translateY(0);    filter: blur(0);   }
+}
+
 @theme inline {
     --font-heading: var(--font-sans);
     --font-sans: 'Geist Variable', sans-serif;
@@ -126,5 +156,15 @@
     }
   html {
     @apply font-sans;
+    scroll-behavior: smooth;
+    scroll-padding-top: 96px;
     }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+  *, *::before, *::after {
+    animation-duration: 0.001ms !important;
+    animation-delay: 0ms !important;
+  }
 }

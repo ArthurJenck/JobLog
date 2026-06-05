@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import type { JobSource } from '@joblog/shared';
 
@@ -19,9 +20,38 @@ const SOURCE_LABELS: Record<JobSource, string> = {
   manual: 'Manuel',
 };
 
+const SOURCE_LOGOS: Partial<Record<JobSource, string>> = {
+  linkedin: '/icons/linkedin.webp',
+  wttj: '/icons/wttj.webp',
+  hellowork: '/icons/hellowork.webp',
+  indeed: '/icons/indeed.webp',
+  glassdoor: '/icons/glassdoor.webp',
+  jobteaser: '/icons/jobteaser.webp',
+  jobijoba: '/icons/jobijoba.webp',
+  meteojob: '/icons/meteojob.webp',
+  apec: '/icons/apec.webp',
+  francetravail: '/icons/francetravail.webp',
+  cadremploi: '/icons/cadremploi.webp',
+  talent: '/icons/talent.webp',
+  lesjeudis: '/icons/lesjeudis.webp',
+};
+
 export function SourceBadge({ source }: { source: JobSource }) {
+  const [imgError, setImgError] = useState(false);
+  const logo = SOURCE_LOGOS[source];
+
   return (
-    <Badge variant="outline" className="text-xs font-normal text-nowrap">
+    <Badge variant="outline" className="gap-1 text-xs font-normal text-nowrap">
+      {logo && !imgError && (
+        <img
+          src={logo}
+          alt=""
+          width={16}
+          height={16}
+          className="size-4 shrink-0 rounded-[2px] object-contain"
+          onError={() => setImgError(true)}
+        />
+      )}
       {SOURCE_LABELS[source] ?? source}
     </Badge>
   );

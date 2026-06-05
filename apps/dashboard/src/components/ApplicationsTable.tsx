@@ -6,7 +6,14 @@ import {
   type ColumnDef,
   type SortingState,
 } from '@tanstack/react-table';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import {
@@ -27,11 +34,31 @@ import {
 } from '@/components/ui/pagination';
 import { StatusBadge } from './StatusBadge';
 import { SourceBadge } from './SourceBadge';
-import { PlusIcon, ArrowUpDownIcon, ArrowUpIcon, ArrowDownIcon, ChevronDownIcon } from 'lucide-react';
+import {
+  PlusIcon,
+  ArrowUpDownIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+  ChevronDownIcon,
+} from 'lucide-react';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
-import { APPLICATION_STATUSES, STATUS_LABELS, TERMINAL_STATUSES, type ApplicationWithJob, type ApplicationStatus, type JobSource } from '@joblog/shared';
+import {
+  APPLICATION_STATUSES,
+  STATUS_LABELS,
+  TERMINAL_STATUSES,
+  INTERVIEW_CONCLUDING_EVENTS,
+  type ApplicationWithJob,
+  type ApplicationStatus,
+  type JobSource,
+} from '@joblog/shared';
 
-const DEFAULT_STATUSES = new Set<ApplicationStatus>(['saved', 'applied', 'interview', 'offer', 'accepted']);
+const DEFAULT_STATUSES = new Set<ApplicationStatus>([
+  'saved',
+  'applied',
+  'interview',
+  'offer',
+  'accepted',
+]);
 
 interface Props {
   data: ApplicationWithJob[];
@@ -53,6 +80,7 @@ interface Props {
   onRowClick: (app: ApplicationWithJob) => void;
   onAdd: () => void;
   isLoading?: boolean;
+  isError?: boolean;
 }
 
 export function ApplicationsTable({
@@ -75,6 +103,7 @@ export function ApplicationsTable({
   onRowClick,
   onAdd,
   isLoading,
+  isError,
 }: Props) {
   const sorting: SortingState = [{ id: sortId, desc: sortDesc }];
 
@@ -110,7 +139,10 @@ export function ApplicationsTable({
                   alt={`Logo ${company || 'entreprise'}`}
                   className="h-5 w-5 rounded object-contain"
                   referrerPolicy="origin"
-                  onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display =
+                      'none';
+                  }}
                 />
               )}
               <span>{company}</span>
@@ -122,29 +154,46 @@ export function ApplicationsTable({
         id: 'source',
         header: 'Source',
         accessorFn: (row) => row.jobPosting?.source ?? 'manual',
-        cell: ({ getValue }) => <SourceBadge source={getValue() as JobSource} />,
+        cell: ({ getValue }) => (
+          <SourceBadge source={getValue() as JobSource} />
+        ),
         enableSorting: false,
       },
       {
         id: 'status',
         header: 'Statut',
         accessorKey: 'status',
-        cell: ({ getValue }) => <StatusBadge status={getValue() as ApplicationStatus} />,
+        cell: ({ getValue }) => (
+          <StatusBadge status={getValue() as ApplicationStatus} />
+        ),
       },
       {
         id: 'nextInterview',
         header: 'Prochain entretien',
         accessorFn: (row) => {
-          const events = row.events.filter(e => e.type === 'interview_scheduled');
-          if (events.length === 0) return null;
-          return events.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0].at;
+          const scheduled = row.events.filter(
+            (e) => e.type === 'interview_scheduled',
+          );
+          if (scheduled.length === 0) return null;
+          const latest = scheduled.reduce((a, b) =>
+            new Date(b.at).getTime() > new Date(a.at).getTime() ? b : a,
+          );
+          const latestTime = new Date(latest.at).getTime();
+          const concluded = row.events.some(
+            (e) =>
+              INTERVIEW_CONCLUDING_EVENTS.includes(e.type) &&
+              new Date(e.at).getTime() > latestTime,
+          );
+          return concluded ? null : latest.at;
         },
         cell: ({ getValue }) => {
           const v = getValue() as string | null;
           if (!v) return <span className="text-muted-foreground/40">—</span>;
           const s = dateStatus(v);
           return (
-            <span className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}>
+            <span
+              className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}
+            >
               {fmtDate(v)}
             </span>
           );
@@ -159,7 +208,9 @@ export function ApplicationsTable({
           if (!v) return <span className="text-muted-foreground/40">—</span>;
           const s = dateStatus(v);
           return (
-            <span className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}>
+            <span
+              className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}
+            >
               {fmtDate(v)}
             </span>
           );
@@ -171,11 +222,15 @@ export function ApplicationsTable({
         accessorFn: (row) => row.appliedAt ?? row.created_at,
         cell: ({ getValue }) => {
           const v = getValue() as string | null;
-          return v ? <span className="text-sm text-muted-foreground">{fmtDate(v)}</span> : <span className="text-muted-foreground/40">—</span>;
+          return v ? (
+            <span className="text-sm text-muted-foreground">{fmtDate(v)}</span>
+          ) : (
+            <span className="text-muted-foreground/40">—</span>
+          );
         },
       },
     ],
-    []
+    [],
   );
 
   const table = useReactTable({
@@ -224,22 +279,32 @@ export function ApplicationsTable({
               {APPLICATION_STATUSES.map((s) => (
                 <DropdownMenuItem
                   key={s}
-                  onSelect={(e) => { e.preventDefault(); toggleStatus(s); }}
+                  onSelect={(e) => {
+                    e.preventDefault();
+                    toggleStatus(s);
+                  }}
                   className="gap-2"
                 >
-                  <div className={`h-3.5 w-3.5 rounded-sm border flex-shrink-0 transition-colors ${statuses.has(s) ? 'bg-foreground border-foreground' : 'border-muted-foreground/50'}`} />
+                  <div
+                    className={`h-3.5 w-3.5 rounded-sm border flex-shrink-0 transition-colors ${statuses.has(s) ? 'bg-foreground border-foreground' : 'border-muted-foreground/50'}`}
+                  />
                   {STATUS_LABELS[s]}
                 </DropdownMenuItem>
               ))}
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => onStatusesChange(new Set(APPLICATION_STATUSES))}>
+              <DropdownMenuItem
+                onSelect={() => onStatusesChange(new Set(APPLICATION_STATUSES))}
+              >
                 Tout afficher
               </DropdownMenuItem>
-              <DropdownMenuItem onSelect={() => onStatusesChange(new Set(DEFAULT_STATUSES))}>
+              <DropdownMenuItem
+                onSelect={() => onStatusesChange(new Set(DEFAULT_STATUSES))}
+              >
                 Actives seulement
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+          <span className="pl-4">Du</span>
           <Input
             type="date"
             value={dateFrom}
@@ -247,6 +312,7 @@ export function ApplicationsTable({
             className="h-9 w-36 text-sm"
             title="Date de début"
           />
+          <span className="pl-4">Au</span>
           <Input
             type="date"
             value={dateTo}
@@ -273,11 +339,17 @@ export function ApplicationsTable({
                         className="flex items-center gap-1 hover:text-foreground transition-colors"
                         onClick={header.column.getToggleSortingHandler()}
                       >
-                        {flexRender(header.column.columnDef.header, header.getContext())}
+                        {flexRender(
+                          header.column.columnDef.header,
+                          header.getContext(),
+                        )}
                         <SortIcon direction={header.column.getIsSorted()} />
                       </button>
                     ) : (
-                      flexRender(header.column.columnDef.header, header.getContext())
+                      flexRender(
+                        header.column.columnDef.header,
+                        header.getContext(),
+                      )
                     )}
                   </TableHead>
                 ))}
@@ -287,15 +359,32 @@ export function ApplicationsTable({
           {isLoading ? (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-32 text-center text-muted-foreground"
+                >
                   Chargement…
+                </TableCell>
+              </TableRow>
+            </TableBody>
+          ) : isError ? (
+            <TableBody>
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-32 text-center text-destructive"
+                >
+                  Erreur lors du chargement des candidatures.
                 </TableCell>
               </TableRow>
             </TableBody>
           ) : table.getRowModel().rows.length === 0 ? (
             <TableBody>
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-32 text-center text-muted-foreground">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-32 text-center text-muted-foreground"
+                >
                   Aucune candidature.
                 </TableCell>
               </TableRow>
@@ -309,16 +398,24 @@ export function ApplicationsTable({
                   className="group cursor-pointer"
                   onClick={() => onRowClick(row.original)}
                 >
-                  <tr className={`transition-colors group-hover:bg-muted/50 ${suggestion ? '' : 'border-b'}`}>
+                  <tr
+                    className={`transition-colors group-hover:bg-muted/50 ${suggestion ? '' : 'border-b'}`}
+                  >
                     {row.getVisibleCells().map((cell) => (
                       <td key={cell.id} className="p-4 align-middle">
-                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
                       </td>
                     ))}
                   </tr>
                   {suggestion && (
                     <tr className="border-b transition-colors group-hover:bg-muted/50">
-                      <td colSpan={columns.length} className="px-4 pt-0 pb-2 text-xs italic text-muted-foreground">
+                      <td
+                        colSpan={columns.length}
+                        className="px-4 pt-0 pb-2 text-xs italic text-muted-foreground"
+                      >
                         {suggestion}
                       </td>
                     </tr>
@@ -340,7 +437,11 @@ export function ApplicationsTable({
               <PaginationItem>
                 <PaginationPrevious
                   onClick={page > 1 ? () => onPageChange(page - 1) : undefined}
-                  className={page <= 1 ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  className={
+                    page <= 1
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
+                  }
                   aria-disabled={page <= 1}
                 />
               </PaginationItem>
@@ -359,12 +460,18 @@ export function ApplicationsTable({
                       {item}
                     </PaginationLink>
                   </PaginationItem>
-                )
+                ),
               )}
               <PaginationItem>
                 <PaginationNext
-                  onClick={page < pageCount ? () => onPageChange(page + 1) : undefined}
-                  className={page >= pageCount ? 'pointer-events-none opacity-50' : 'cursor-pointer'}
+                  onClick={
+                    page < pageCount ? () => onPageChange(page + 1) : undefined
+                  }
+                  className={
+                    page >= pageCount
+                      ? 'pointer-events-none opacity-50'
+                      : 'cursor-pointer'
+                  }
                   aria-disabled={page >= pageCount}
                 />
               </PaginationItem>
@@ -381,7 +488,11 @@ function buildPageItems(current: number, count: number): (number | '...')[] {
   const items: (number | '...')[] = [];
   items.push(1);
   if (current > 3) items.push('...');
-  for (let p = Math.max(2, current - 1); p <= Math.min(count - 1, current + 1); p++) {
+  for (
+    let p = Math.max(2, current - 1);
+    p <= Math.min(count - 1, current + 1);
+    p++
+  ) {
     items.push(p);
   }
   if (current < count - 2) items.push('...');
@@ -396,13 +507,18 @@ function SortIcon({ direction }: { direction: false | 'asc' | 'desc' }) {
 }
 
 function fmtDate(iso: string) {
-  return new Date(iso).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' });
+  return new Date(iso).toLocaleDateString('fr-FR', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
 }
 
 function dateStatus(iso: string): 'past' | 'today' | 'future' {
   const d = new Date(iso);
   const now = new Date();
-  const day = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const day = (x: Date) =>
+    new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
   if (day(d) < day(now)) return 'past';
   if (day(d) === day(now)) return 'today';
   return 'future';
@@ -416,27 +532,34 @@ function daysSince(iso: string): number {
 }
 
 function getSuggestion(app: ApplicationWithJob): string | null {
-  if ((TERMINAL_STATUSES as readonly string[]).includes(app.status)) return null;
+  if ((TERMINAL_STATUSES as readonly string[]).includes(app.status))
+    return null;
 
   const events = app.events ?? [];
-  const has = (type: string) => events.some(e => e.type === type);
+  const has = (type: string) => events.some((e) => e.type === type);
   const now = new Date();
-  const reminderDue = app.reminder?.at != null && new Date(app.reminder.at) <= now;
-  const relancesExhausted = (app.reminder?.sentCount ?? 0) >= (app.reminder?.maxCount ?? 3);
+  const reminderDue =
+    app.reminder?.at != null && new Date(app.reminder.at) <= now;
+  const relancesExhausted =
+    (app.reminder?.sentCount ?? 0) >= (app.reminder?.maxCount ?? 3);
 
   if (has('offer_accepted')) return null;
 
-  if (has('offer_received') && !has('offer_accepted') && !has('offer_declined')) {
+  if (
+    has('offer_received') &&
+    !has('offer_accepted') &&
+    !has('offer_declined')
+  ) {
     return "Suggestion : N'oubliez pas de répondre à l'offre.";
   }
 
   const hasFutureInterview = events.some(
-    e => e.type === 'interview_scheduled' && new Date(e.at) > now,
+    (e) => e.type === 'interview_scheduled' && new Date(e.at) > now,
   );
   if (hasFutureInterview) return null;
 
   const frontier = [...events]
-    .filter(e => e.type !== 'custom' && new Date(e.at) <= now)
+    .filter((e) => e.type !== 'custom' && new Date(e.at) <= now)
     .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime())[0];
 
   if (!frontier) return null;
@@ -468,14 +591,16 @@ function getSuggestion(app: ApplicationWithJob): string | null {
       return null;
 
     case 'applied':
-      if (reminderDue) return 'Suggestion : Envoyez une relance pour ne pas vous faire oublier.';
+      if (reminderDue)
+        return 'Suggestion : Envoyez une relance pour ne pas vous faire oublier.';
       if (relancesExhausted || daysSince(frontier.at) >= GHOST_STALE_DAYS) {
         return 'Suggestion : Sans réponse depuis longtemps — marquez-la comme ghostée ?';
       }
       break;
 
     case 'created':
-      if (app.status === 'saved') return 'Suggestion : Postulez à cette offre quand vous êtes prêt.';
+      if (app.status === 'saved')
+        return 'Suggestion : Postulez à cette offre quand vous êtes prêt.';
       break;
 
     default:

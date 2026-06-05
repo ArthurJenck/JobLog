@@ -1,5 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
+import { SessionContext } from './__root';
+import { LandingPage } from '@/components/landing/LandingPage';
 import { ApplicationsTable } from '@/components/ApplicationsTable';
 import { ApplicationDetail } from '@/components/ApplicationDetail';
 import { AddApplicationDialog } from '@/components/AddApplicationDialog';
@@ -36,8 +38,14 @@ export const Route = createFileRoute('/')({
         : undefined,
     toast: typeof search.toast === 'string' ? search.toast : undefined,
   }),
-  component: IndexPage,
+  component: IndexOrLanding,
 });
+
+function IndexOrLanding() {
+  const hasSession = useContext(SessionContext);
+  if (!hasSession) return <LandingPage />;
+  return <IndexPage />;
+}
 
 function clearSearchKeys(keys: string[]) {
   const url = new URL(window.location.href);
@@ -77,6 +85,7 @@ export function IndexPage() {
   const [applications, setApplications] = useState<ApplicationWithJob[]>([]);
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
   const [selectedApp, setSelectedApp] = useState<ApplicationWithJob | null>(
     null,
   );
@@ -122,6 +131,7 @@ export function IndexPage() {
   if (listParamsKey !== trackedListParamsKey) {
     setTrackedListParamsKey(listParamsKey);
     setIsLoading(true);
+    setIsError(false);
   }
 
   const fetchApplications = useCallback(async () => {
@@ -130,6 +140,7 @@ export function IndexPage() {
       const { data, total: t } = await api.applications.list(listParams);
       setApplications(data);
       setTotal(t);
+      setIsError(false);
     } catch (err) {
       if (
         err &&
@@ -138,6 +149,8 @@ export function IndexPage() {
         (err as { status: number }).status === 401
       ) {
         navigate({ to: '/login' });
+      } else {
+        setIsError(true);
       }
     } finally {
       setIsLoading(false);
@@ -153,6 +166,7 @@ export function IndexPage() {
         if (cancelled) return;
         setApplications(data);
         setTotal(t);
+        setIsError(false);
       } catch (err) {
         if (cancelled) return;
         if (
@@ -162,6 +176,8 @@ export function IndexPage() {
           (err as { status: number }).status === 401
         ) {
           navigate({ to: '/login' });
+        } else {
+          setIsError(true);
         }
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -310,6 +326,7 @@ export function IndexPage() {
         onRowClick={openDetail}
         onAdd={() => setAddOpen(true)}
         isLoading={isLoading}
+        isError={isError}
       />
 
       <ApplicationDetail

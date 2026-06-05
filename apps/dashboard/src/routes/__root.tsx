@@ -1,3 +1,4 @@
+import { createContext } from 'react';
 import { createRootRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/layout/AppSidebar';
@@ -5,11 +6,15 @@ import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/s
 import { Toaster } from '@/components/ui/sonner';
 import { FeedbackBar } from '@/components/feedback/FeedbackBar';
 
+export const SessionContext = createContext<boolean>(false);
+
 const PUBLIC_PATHS = ['/login', '/privacy', '/auth'];
 
 export const Route = createRootRoute({
-  beforeLoad: async ({ location }) => {
-    if (PUBLIC_PATHS.some((p) => location.pathname.startsWith(p))) return;
+  beforeLoad: async ({ location }): Promise<{ hasSession: boolean }> => {
+    if (PUBLIC_PATHS.some((p) => location.pathname.startsWith(p))) {
+      return { hasSession: false };
+    }
     let hasSession = false;
     try {
       const res = await fetch('/api/auth/get-session');
@@ -20,38 +25,48 @@ export const Route = createRootRoute({
     } catch {
       hasSession = false;
     }
-    if (!hasSession) throw redirect({ to: '/login' });
+    if (!hasSession && location.pathname !== '/') throw redirect({ to: '/login' });
+    return { hasSession };
   },
   component: RootLayout,
 });
 
 export function RootLayout() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
-  const isStandalonePublicPage = pathname === '/login' || pathname === '/privacy' || pathname.startsWith('/auth');
+  const { hasSession } = Route.useRouteContext() as { hasSession: boolean };
+  const isStandalonePublicPage =
+    pathname === '/login' ||
+    pathname === '/privacy' ||
+    pathname.startsWith('/auth') ||
+    (pathname === '/' && !hasSession);
 
   if (isStandalonePublicPage) {
     return (
-      <TooltipProvider>
-        <Outlet />
-        <Toaster />
-      </TooltipProvider>
+      <SessionContext.Provider value={hasSession}>
+        <TooltipProvider>
+          <Outlet />
+          <Toaster />
+        </TooltipProvider>
+      </SessionContext.Provider>
     );
   }
 
   return (
-    <TooltipProvider>
-      <SidebarProvider>
-        <AppSidebar />
-        <SidebarInset>
-          <div className="flex items-center gap-2 px-4 py-3 border-b lg:hidden">
-            <SidebarTrigger />
-            <span className="font-semibold text-sm">JobLog</span>
-          </div>
-          <Outlet />
-        </SidebarInset>
-      </SidebarProvider>
-      <FeedbackBar />
-      <Toaster />
-    </TooltipProvider>
+    <SessionContext.Provider value={hasSession}>
+      <TooltipProvider>
+        <SidebarProvider>
+          <AppSidebar />
+          <SidebarInset>
+            <div className="flex items-center gap-2 px-4 py-3 border-b lg:hidden">
+              <SidebarTrigger />
+              <span className="font-semibold text-sm">JobLog</span>
+            </div>
+            <Outlet />
+          </SidebarInset>
+        </SidebarProvider>
+        <FeedbackBar />
+        <Toaster />
+      </TooltipProvider>
+    </SessionContext.Provider>
   );
 }

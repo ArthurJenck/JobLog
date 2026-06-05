@@ -129,6 +129,7 @@ export function AppSidebar() {
                 await router.invalidate();
                 router.navigate({ to: '/login' });
               }}
+              className="cursor-pointer"
             >
               <LogOutIcon className="h-4 w-4" />
               <span>Déconnexion</span>

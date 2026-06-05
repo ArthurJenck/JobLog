@@ -3,7 +3,11 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
-import { APPLICATION_STATUSES, ACTIVE_STATUSES } from '@joblog/shared';
+import {
+  APPLICATION_STATUSES,
+  ACTIVE_STATUSES,
+  INTERVIEW_CONCLUDING_EVENTS,
+} from '@joblog/shared';
 
 const CreateApplicationSchema = z.object({
   jobPostingId: z.string(),
@@ -21,6 +25,15 @@ const SORT_FIELD_MAP: Record<string, string> = {
 };
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
+  try {
+    return await _handler(req, res);
+  } catch (err) {
+    console.error('[applications] unhandled error', err);
+    return res.status(500).json({ error: 'Internal server error' });
+  }
+}
+
+async function _handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireSession(req, res);
   if (!session) return;
 
@@ -81,15 +94,50 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         title: { $first: '$jobPosting.title' },
         company: { $first: '$jobPosting.company' },
         nextInterview: {
-          $max: {
-            $map: {
-              input: {
-                $filter: {
-                  input: { $ifNull: ['$events', []] },
-                  cond: { $eq: ['$$this.type', 'interview_scheduled'] },
+          $let: {
+            vars: {
+              sched: {
+                $max: {
+                  $map: {
+                    input: {
+                      $filter: {
+                        input: { $ifNull: ['$events', []] },
+                        cond: { $eq: ['$$this.type', 'interview_scheduled'] },
+                      },
+                    },
+                    in: '$$this.at',
+                  },
                 },
               },
-              in: '$$this.at',
+            },
+            in: {
+              $cond: [
+                {
+                  $anyElementTrue: {
+                    $map: {
+                      input: {
+                        $filter: {
+                          input: { $ifNull: ['$events', []] },
+                          cond: {
+                            $and: [
+                              {
+                                $in: [
+                                  '$$this.type',
+                                  INTERVIEW_CONCLUDING_EVENTS,
+                                ],
+                              },
+                              { $gt: ['$$this.at', '$$sched'] },
+                            ],
+                          },
+                        },
+                      },
+                      in: true,
+                    },
+                  },
+                },
+                null,
+                '$$sched',
+              ],
             },
           },
         },

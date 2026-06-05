@@ -1,4 +1,4 @@
-import { createFileRoute } from '@tanstack/react-router';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -65,11 +65,49 @@ export function LoginPage() {
     setError("Impossible d'envoyer le lien de connexion.");
   }
 
+  const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+  const cloudDuration = '0.8s';
+  const cloudDelay = '0.05s';
+
   return (
-    <div className="min-h-screen flex items-center justify-center bg-background">
-      <Card className="w-full max-w-md">
+    <div
+      className="min-h-screen flex items-center justify-center relative overflow-hidden"
+      style={{ background: 'linear-gradient(180deg, #9cc1e7 0%, #eddfd0 100%)' }}
+    >
+      <img
+        src="/images/left-cloud.png"
+        aria-hidden="true"
+        className="pointer-events-none select-none absolute"
+        style={{
+          top: '60px',
+          left: '-180px',
+          width: '477px',
+          zIndex: 1,
+          animation: `cloudSlideLeft ${cloudDuration} ${EASE} ${cloudDelay} both`,
+        }}
+      />
+      <img
+        src="/images/right-cloud.png"
+        aria-hidden="true"
+        className="pointer-events-none select-none absolute"
+        style={{
+          top: '60px',
+          right: '-180px',
+          width: '478px',
+          zIndex: 1,
+          animation: `cloudSlideRight ${cloudDuration} ${EASE} ${cloudDelay} both`,
+        }}
+      />
+      <Card
+        className="w-full max-w-md relative z-10"
+        style={{ animation: `revealUp 0.6s cubic-bezier(0.25, 0.46, 0.45, 0.94) 0.1s both` }}
+      >
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl">JobLog</CardTitle>
+          <CardTitle className="text-2xl">
+            <Link to="/" className="hover:opacity-70 transition-opacity">
+              JobLog
+            </Link>
+          </CardTitle>
           <CardDescription>Suivez vos candidatures facilement</CardDescription>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">

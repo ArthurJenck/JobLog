@@ -184,6 +184,18 @@ export const EVENT_PIPELINE: EventType[] = [
     'offer_accepted',
 ]
 
+export const INTERVIEW_CONCLUDING_EVENTS: EventType[] = [
+    'interview_done',
+    'thank_you_sent',
+    'followup_sent',
+    'offer_received',
+    'offer_accepted',
+    'offer_declined',
+    'rejected',
+    'ghosted',
+    'cancelled',
+]
+
 export const SCRAPE_METHODS = [
     'extension',
     'cheerio',
