@@ -279,7 +279,7 @@ export function LandingHero() {
           }}
         >
           <img
-            src="/images/feature-1.webp"
+            src="/images/hero.webp"
             alt="Tableau de bord JobLog pour le suivi de candidatures"
             width={2880}
             height={2000}
