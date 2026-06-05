@@ -40,7 +40,6 @@ pnpm build:extension
 
 ## TODO / Roadmap
 
-- **Landing page** — le root redirige directement vers le dashboard / login, aucune page marketing.
 - **Publication sur les stores** — Chrome Web Store, Firefox AMO, Edge Add-ons. L'extension est buildable mais non soumise. Vérifier les builds Firefox / Edge (WXT les supporte, non testés).
 - **Stats avancées** — la sidebar affiche des compteurs ; pas de visualisation (funnel, sources, évolution dans le temps).
 

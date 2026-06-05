@@ -13,11 +13,21 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const userId = session.user.id;
 
+  const cvsCol = await getCollection('cvs');
+  const userCvs = await cvsCol
+    .find({ userId }, { projection: { content_hash: 1 } })
+    .toArray();
+  const cvHashes = userCvs
+    .map((cv) => cv.content_hash as string | undefined)
+    .filter((hash): hash is string => typeof hash === 'string' && hash.length > 0);
+
   await Promise.all([
     getCollection('applications').then((col) => col.deleteMany({ userId })),
-    getCollection('cvs').then((col) => col.deleteMany({ userId })),
+    cvsCol.deleteMany({ userId }),
     getCollection('notification_settings').then((col) => col.deleteMany({ userId })),
-    getCollection('cv_analyses'),
+    cvHashes.length
+      ? getCollection('cv_analyses').then((col) => col.deleteMany({ cvHash: { $in: cvHashes } }))
+      : Promise.resolve(),
   ]);
 
   try {

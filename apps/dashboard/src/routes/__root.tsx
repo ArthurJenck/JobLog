@@ -59,6 +59,11 @@ export function RootLayout() {
           <SidebarInset>
             <div className="flex items-center gap-2 px-4 py-3 border-b lg:hidden">
               <SidebarTrigger />
+              <img
+                src="/icon-cropped.svg"
+                alt="Logo JobLog"
+                className="h-6 w-6"
+              />
               <span className="font-semibold text-sm">JobLog</span>
             </div>
             <Outlet />

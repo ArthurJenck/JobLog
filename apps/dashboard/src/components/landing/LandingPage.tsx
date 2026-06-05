@@ -39,7 +39,15 @@ const FEATURE_2_BULLETS = [
 
 export function LandingPage() {
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="relative min-h-screen text-foreground">
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0 -z-10"
+        style={{
+          background:
+            'linear-gradient(180deg, #fafafa 0%, #f9f8f8 36%, #f4f1ee 45% 51%, #e2ecf6 73%, #a7cbf2 125%)',
+        }}
+      />
       <LandingNavbar />
       <LandingHero />
       <div id="features">

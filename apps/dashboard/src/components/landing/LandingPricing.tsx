@@ -1,24 +1,7 @@
 import type { CSSProperties } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Check } from 'lucide-react';
 import { useInView } from './use-in-view';
-
-const TIER = {
-  name: 'Gratuit',
-  price: 'Gratuit',
-  description: 'Toutes les fonctionnalités, sans carte bancaire.',
-  features: [
-    'Candidatures illimitées',
-    'Extension navigateur sur 13 sites',
-    'Import par URL & analyse CV par IA',
-    'Relances automatiques email & push',
-    'Gestion multi-CV',
-    'Export de vos données',
-  ],
-  cta: 'Commencer gratuitement',
-};
 
 const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
@@ -29,58 +12,86 @@ export function LandingPricing() {
     opacity: 0,
     ...(inView && {
       animation: `revealUp 0.6s ${EASE} forwards`,
-      animationDelay: `${i * 0.08}s`,
+      animationDelay: `${i * 0.1}s`,
     }),
   });
 
+  const cloudDuration = '0.8s';
+  const cloudDelay = '0.05s';
+
   return (
-    <section id="pricing" ref={ref} className="py-24 px-6 bg-background">
-      <div className="mx-auto max-w-6xl">
-        <div className="mb-14 text-center">
+    <section
+      id="pricing"
+      ref={ref}
+      className="relative overflow-clip py-32 px-6 bg-transparent"
+    >
+      <div
+        className="relative z-[2] mx-auto max-w-3xl flex flex-col items-center gap-8 text-center"
+        style={{ overflow: 'visible' }}
+      >
+        <img
+          src="/images/left-cloud.png"
+          aria-hidden="true"
+          width={2048}
+          height={1117}
+          className="pointer-events-none select-none"
+          style={{
+            position: 'absolute',
+            top: '-40px',
+            left: '-320px',
+            width: '477px',
+            zIndex: 1,
+            ...(inView
+              ? { animation: `cloudSlideLeft ${cloudDuration} ${EASE} ${cloudDelay} both` }
+              : { transform: 'translateX(-200px)' }),
+          }}
+        />
+        <img
+          src="/images/right-cloud.png"
+          aria-hidden="true"
+          width={2048}
+          height={1117}
+          className="pointer-events-none select-none"
+          style={{
+            position: 'absolute',
+            top: '-40px',
+            right: '-320px',
+            width: '478px',
+            zIndex: 1,
+            ...(inView
+              ? { animation: `cloudSlideRight ${cloudDuration} ${EASE} ${cloudDelay} both` }
+              : { transform: 'translateX(200px)' }),
+          }}
+        />
+
+        <div className="flex flex-col items-center gap-4 relative z-[2]">
           <h2
-            className="text-3xl md:text-4xl font-semibold tracking-tight mb-3"
-            style={reveal(0)}
+            className="font-semibold text-[rgb(26,22,21)]"
+            style={{
+              fontSize: 'clamp(32px, 5vw, 56px)',
+              letterSpacing: '-0.03em',
+              lineHeight: '120%',
+              ...reveal(0),
+            }}
           >
-            Gratuit, tout simplement
+            Prêt à commencer ?
           </h2>
           <p
-            className="text-muted-foreground max-w-md mx-auto"
-            style={reveal(1)}
+            className="text-lg"
+            style={{ color: '#453f3d', ...reveal(1) }}
           >
-            Toutes les fonctionnalités, sans carte bancaire.
+            JobLog est entièrement gratuit. Aucune carte bancaire requise.
           </p>
         </div>
 
-        <div className="max-w-sm mx-auto" style={reveal(2)}>
-          <Card className="p-6 flex flex-col gap-6">
-            <div className="flex flex-col gap-1">
-              <span className="font-semibold text-sm">{TIER.name}</span>
-              <div className="flex items-baseline gap-1 mt-2">
-                <span className="text-3xl font-semibold tracking-tight">
-                  0€
-                </span>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">
-                {TIER.description}
-              </p>
-            </div>
-
-            <ul className="flex flex-col gap-2.5">
-              {TIER.features.map((feature) => (
-                <li key={feature} className="flex items-center gap-2.5 text-sm">
-                  <Check size={14} className="flex-shrink-0 text-foreground" />
-                  {feature}
-                </li>
-              ))}
-            </ul>
-
-            <Button
-              asChild
-              className="w-full mt-auto rounded-full transition-transform duration-200 hover:-translate-y-0.5"
-            >
-              <Link to="/login">{TIER.cta}</Link>
-            </Button>
-          </Card>
+        <div style={reveal(2)} className="relative z-[2]">
+          <Button
+            asChild
+            size="lg"
+            className="rounded-full px-8 transition-transform duration-200 hover:-translate-y-0.5"
+          >
+            <Link to="/login">Commencer gratuitement</Link>
+          </Button>
         </div>
       </div>
     </section>

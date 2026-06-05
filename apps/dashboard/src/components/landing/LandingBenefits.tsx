@@ -1,5 +1,4 @@
 import type { CSSProperties } from 'react';
-import { Card } from '@/components/ui/card';
 import { Workflow, Bell, Lightbulb, Sparkles } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import { useInView } from './use-in-view';
@@ -37,6 +36,12 @@ const BENEFITS: Array<{
 
 const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
+const GLASS: CSSProperties = {
+  background: 'rgba(255, 255, 255, 0.7)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+};
+
 export function LandingBenefits() {
   const { ref, inView } = useInView<HTMLElement>();
 
@@ -49,7 +54,7 @@ export function LandingBenefits() {
   });
 
   return (
-    <section id="benefits" ref={ref} className="py-24 px-6 bg-muted/30">
+    <section id="benefits" ref={ref} className="py-24 px-6 bg-transparent">
       <div className="mx-auto max-w-6xl">
         <div className="mb-14 text-center">
           <h2
@@ -69,12 +74,12 @@ export function LandingBenefits() {
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {BENEFITS.map(({ icon: Icon, title, description }, i) => (
-            <Card
+            <div
               key={title}
-              className="p-6 flex flex-col gap-4 transition-transform duration-300 hover:-translate-y-1.5"
-              style={reveal(i + 2)}
+              className="p-6 flex flex-col gap-4 rounded-2xl transition-transform duration-300 hover:-translate-y-1.5"
+              style={{ ...GLASS, ...reveal(i + 2) }}
             >
-              <span className="inline-flex w-10 h-10 items-center justify-center rounded-lg bg-muted">
+              <span className="inline-flex w-10 h-10 items-center justify-center rounded-lg bg-white/60">
                 <Icon size={18} />
               </span>
               <div className="flex flex-col gap-1">
@@ -83,7 +88,7 @@ export function LandingBenefits() {
                   {description}
                 </p>
               </div>
-            </Card>
+            </div>
           ))}
         </div>
       </div>

@@ -1,4 +1,5 @@
 import type { CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -23,6 +24,7 @@ interface LandingFeatureProps {
 }
 
 const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
+const PARALLAX_OFFSET = 300;
 
 export function LandingFeature({
   eyebrow,
@@ -36,6 +38,25 @@ export function LandingFeature({
   reversed = false,
 }: LandingFeatureProps) {
   const { ref, inView } = useInView<HTMLElement>();
+  const [imgY, setImgY] = useState(PARALLAX_OFFSET);
+
+  useEffect(() => {
+    const update = () => {
+      const el = ref.current;
+      if (!el) return;
+      const rect = el.getBoundingClientRect();
+      const viewH = window.innerHeight;
+      const progress = Math.max(
+        0,
+        Math.min(1, (viewH - rect.top) / (viewH * 0.7)),
+      );
+      setImgY((1 - progress) * PARALLAX_OFFSET);
+    };
+
+    update();
+    window.addEventListener('scroll', update, { passive: true });
+    return () => window.removeEventListener('scroll', update);
+  }, [ref]);
 
   const reveal = (i: number): CSSProperties => ({
     opacity: 0,
@@ -46,7 +67,7 @@ export function LandingFeature({
   });
 
   return (
-    <section ref={ref} className="py-24 px-6 bg-background">
+    <section ref={ref} className="py-24 px-6 bg-transparent">
       <div className="mx-auto max-w-6xl grid grid-cols-1 md:grid-cols-2 gap-16 items-center">
         <div className={cn('flex flex-col gap-6', reversed && 'md:order-2')}>
           <span
@@ -92,10 +113,12 @@ export function LandingFeature({
 
         <div
           className={cn(
-            'rounded-2xl border bg-muted/40 overflow-hidden shadow-lg min-h-80 transition-transform duration-500 hover:-translate-y-1',
+            'rounded-2xl overflow-hidden flex items-center justify-center h-[400px] md:h-[460px]',
             reversed && 'md:order-1',
           )}
-          style={reveal(1)}
+          style={{
+            background: 'linear-gradient(to bottom, #9cc1e7, #f1ebe5)',
+          }}
         >
           <img
             src={image}
@@ -103,7 +126,11 @@ export function LandingFeature({
             width={imageWidth}
             height={imageHeight}
             loading="lazy"
-            className="w-full h-auto block"
+            className="max-w-[85%] max-h-[85%] w-auto h-auto object-contain rounded-2xl"
+            style={{
+              transform: `translateY(${imgY}px)`,
+              willChange: 'transform',
+            }}
           />
         </div>
       </div>

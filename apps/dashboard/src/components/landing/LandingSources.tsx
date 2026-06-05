@@ -19,6 +19,12 @@ const SOURCES = [
 
 const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
+const GLASS: CSSProperties = {
+  background: 'rgba(255, 255, 255, 0.7)',
+  backdropFilter: 'blur(10px)',
+  WebkitBackdropFilter: 'blur(10px)',
+};
+
 export function LandingSources() {
   const { ref, inView } = useInView<HTMLElement>();
 
@@ -31,7 +37,7 @@ export function LandingSources() {
   });
 
   return (
-    <section ref={ref} className="py-24 px-6 bg-muted/30">
+    <section ref={ref} className="py-24 px-6 bg-transparent">
       <div className="mx-auto max-w-4xl flex flex-col items-center gap-10 text-center">
         <div className="flex flex-col gap-3" style={reveal(0)}>
           <h2 className="text-3xl md:text-4xl font-semibold tracking-tight">
@@ -45,7 +51,8 @@ export function LandingSources() {
           {SOURCES.map(({ id, label }) => (
             <div
               key={id}
-              className="flex items-center gap-2 rounded-full border bg-background px-4 py-2 text-sm font-medium"
+              className="flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium"
+              style={GLASS}
             >
               <img
                 src={`/icons/${id}.webp`}
