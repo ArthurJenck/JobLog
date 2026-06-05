@@ -24,7 +24,7 @@ interface LandingFeatureProps {
 }
 
 const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
-const PARALLAX_OFFSET = 300;
+const PARALLAX_OFFSET = 100;
 
 export function LandingFeature({
   eyebrow,
