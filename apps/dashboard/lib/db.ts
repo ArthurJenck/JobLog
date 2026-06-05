@@ -1,4 +1,4 @@
-import { MongoClient, Db, Document } from 'mongodb';
+import { MongoClient, Db, type Document } from 'mongodb';
 import { requireEnv } from './env.js';
 
 let client: MongoClient | null = null;

@@ -22,7 +22,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const auth = await getAuth();
-    await auth.api.deleteUser({ headers: fromNodeHeaders(req.headers) });
+    await auth.api.deleteUser({ headers: fromNodeHeaders(req.headers), body: {} });
   } catch {
     try {
       const userCol = await getCollection('user');

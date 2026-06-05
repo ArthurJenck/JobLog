@@ -15,7 +15,9 @@ import {
   type ContractType,
   type EventType,
   type JobSource,
+  type LocationNormalizationStatus,
   type RemoteType,
+  type ScrapeMethod,
   type ScrapeStatus,
   parseContractType,
   parseRemote,
@@ -126,7 +128,19 @@ interface JobPostingDoc {
   source?: JobSource;
   title?: unknown;
   company?: unknown;
+  location?: string | null;
+  location_details?: unknown;
+  location_normalization_status?: LocationNormalizationStatus | null;
+  location_normalized_at?: Date | null;
   description?: unknown;
+  contract_type?: ContractType | null;
+  remote?: RemoteType | null;
+  salary?: NormalizedExtraction['salary'];
+  requirements?: string[] | null;
+  keywords?: string[] | null;
+  company_website?: string | null;
+  scrape_method?: ScrapeMethod;
+  scraped_at?: Date;
   scrape_status?: ScrapeStatus | null;
   scrape_steps?: ScrapeStep[];
   scrape_attempts?: number;
@@ -135,6 +149,7 @@ interface JobPostingDoc {
   scrape_started_at?: Date | null;
   scrape_finished_at?: Date | null;
   created_at?: Date;
+  updated_at?: Date;
 }
 
 interface ApplicationDoc {
@@ -694,7 +709,12 @@ async function createOrResetQueuedJobPosting({
   return { jobPostingId: result._id.toString(), attempt };
 }
 
-function buildPlaceholderJobPosting(url: string, url_hash: string, attempt: number, now: Date) {
+function buildPlaceholderJobPosting(
+  url: string,
+  url_hash: string,
+  attempt: number,
+  now: Date,
+): JobPostingDoc {
   const domain = getDisplayDomain(url);
 
   return {

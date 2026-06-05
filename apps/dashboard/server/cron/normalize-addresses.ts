@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Filter } from 'mongodb';
 import { getCollection } from '../../lib/db.js';
 import { normalizeLocationForStorage } from '../../lib/addresses.js';
 import type { LocationNormalizationStatus } from '@joblog/shared';
@@ -23,13 +23,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const limit = parseLimit(req.query.limit);
   const col = await getCollection<JobPostingLocationDoc>('job_postings');
-  const candidates = await col.find({
+  const candidatesFilter = {
     location: { $type: 'string', $ne: '' },
     $or: [
       { location_normalization_status: { $exists: false } },
       { location_normalization_status: null },
     ],
-  }).limit(limit).toArray();
+  } as Filter<JobPostingLocationDoc>;
+  const candidates = await col.find(candidatesFilter).limit(limit).toArray();
 
   const counts: StatusCounts = {
     matched: 0,
@@ -42,6 +43,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const errors: string[] = [];
 
   for (const jobPosting of candidates) {
+    const jobPostingId = String(jobPosting._id);
     const originalLocation = jobPosting.location?.trim();
     if (!originalLocation) continue;
 
@@ -75,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     } catch (error) {
       failed++;
       errors.push(
-        `${jobPosting._id.toString()}: ${error instanceof Error ? error.message : String(error)}`,
+        `${jobPostingId}: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

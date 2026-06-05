@@ -28,7 +28,8 @@ function escapeHtml(value: string) {
 }
 
 function normalizeFrequencyDays(value: number | undefined) {
-  return Number.isFinite(value) && value > 0 ? Math.trunc(value) : 7;
+  const days = typeof value === 'number' ? value : NaN;
+  return Number.isFinite(days) && days > 0 ? Math.trunc(days) : 7;
 }
 
 function formatSnoozeDelay(days: number) {

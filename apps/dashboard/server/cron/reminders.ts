@@ -1,5 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ObjectId } from 'mongodb';
+import { ObjectId, type Filter } from 'mongodb';
 import { getCollection } from '../../lib/db.js';
 import { getEnv } from '../../lib/env.js';
 import { sendReminderEmail } from '../../lib/email.js';
@@ -62,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const now = new Date();
 
-  const due = await appCol.find({
+  const dueFilter = {
     'reminder.at': { $lte: now },
     $expr: { $lt: ['$reminder.sentCount', '$reminder.maxCount'] },
     $or: [
@@ -70,7 +70,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { 'reminder.snoozedUntil': { $lte: now } },
     ],
     status: { $nin: [...TERMINAL_STATUSES, 'offer'] },
-  }).toArray();
+  } as Filter<ReminderApplicationDoc>;
+
+  const due = await appCol.find(dueFilter).toArray();
 
   let sent = 0;
   let failed = 0;
