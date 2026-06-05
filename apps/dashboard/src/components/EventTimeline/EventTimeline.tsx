@@ -1,27 +1,9 @@
 import {
   EVENT_LABELS,
-  EVENT_PIPELINE,
-  TERMINAL_STATUSES,
   type ApplicationStatus,
   type EventType,
 } from '@joblog/shared';
-import {
-  PlusCircleIcon,
-  SendIcon,
-  MessageSquareIcon,
-  CalendarIcon,
-  CheckCircleIcon,
-  HeartHandshakeIcon,
-  MailIcon,
-  TrophyIcon,
-  ThumbsUpIcon,
-  ThumbsDownIcon,
-  XCircleIcon,
-  GhostIcon,
-  BanIcon,
-  StickyNoteIcon,
-  TrashIcon,
-} from 'lucide-react';
+import { PlusCircleIcon, TrashIcon } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import {
@@ -30,71 +12,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-
-const EVENT_ICONS: Partial<Record<EventType, React.ElementType>> & {
-  _fallback: React.ElementType;
-} = {
-  created: PlusCircleIcon,
-  applied: SendIcon,
-  response_received: MessageSquareIcon,
-  interview_scheduled: CalendarIcon,
-  interview_done: CheckCircleIcon,
-  thank_you_sent: HeartHandshakeIcon,
-  followup_sent: MailIcon,
-  offer_received: TrophyIcon,
-  offer_accepted: ThumbsUpIcon,
-  offer_declined: ThumbsDownIcon,
-  rejected: XCircleIcon,
-  ghosted: GhostIcon,
-  cancelled: BanIcon,
-  custom: StickyNoteIcon,
-  _fallback: StickyNoteIcon,
-};
-
-const EVENT_COLORS: Partial<Record<EventType, string>> = {
-  created: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
-  applied: 'text-amber-600 bg-amber-100 dark:bg-amber-900/40',
-  response_received: 'text-cyan-600 bg-cyan-100 dark:bg-cyan-900/40',
-  interview_scheduled: 'text-blue-600 bg-blue-100 dark:bg-blue-900/40',
-  interview_done: 'text-blue-600 bg-blue-100 dark:bg-blue-900/40',
-  thank_you_sent: 'text-pink-600 bg-pink-100 dark:bg-pink-900/40',
-  followup_sent: 'text-orange-600 bg-orange-100 dark:bg-orange-900/40',
-  offer_received: 'text-green-600 bg-green-100 dark:bg-green-900/40',
-  offer_accepted: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/40',
-  offer_declined: 'text-red-600 bg-red-100 dark:bg-red-900/40',
-  rejected: 'text-red-600 bg-red-100 dark:bg-red-900/40',
-  ghosted: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800',
-  cancelled: 'text-zinc-400 bg-zinc-100 dark:bg-zinc-800',
-  custom: 'text-slate-500 bg-slate-100 dark:bg-slate-800',
-};
-
-const FALLBACK_COLOR = 'text-slate-500 bg-slate-100 dark:bg-slate-800';
-
-function EventTypeIcon({
-  type,
-  size = 'md',
-}: {
-  type: EventType;
-  size?: 'sm' | 'md';
-}) {
-  const Icon = EVENT_ICONS[type] ?? EVENT_ICONS._fallback;
-  const colorClass = EVENT_COLORS[type] ?? FALLBACK_COLOR;
-  const box = size === 'sm' ? 'h-5 w-5' : 'h-7 w-7';
-  const iconSize = size === 'sm' ? '[&_svg]:!size-3' : '[&_svg]:size-4';
-  return (
-    <div
-      className={`flex items-center justify-center rounded-full flex-shrink-0 ${box} ${colorClass} ${iconSize}`}
-    >
-      <Icon />
-    </div>
-  );
-}
-
-interface EventItem {
-  type: EventType;
-  at: string;
-  meta: Record<string, unknown> | null;
-}
+import { EventTypeIcon } from './EventTypeIcon';
+import { EVENT_ICONS } from './event-icons';
+import { EditableEventDate } from './EditableEventDate';
+import {
+  ADDABLE_EVENTS,
+  getNextPipelineEvent,
+  getEventLabel,
+  type EventItem,
+} from './helpers';
 
 interface Props {
   events: EventItem[];
@@ -103,103 +29,6 @@ interface Props {
   onDeleteEvent: (type: EventType, at: string) => void;
   onConfirmFuture: (type: EventType) => void;
   onUpdateEventDate: (type: EventType, at: string, newAt: string) => void;
-}
-
-const ADDABLE_EVENTS: EventType[] = [
-  'applied',
-  'response_received',
-  'interview_scheduled',
-  'interview_done',
-  'thank_you_sent',
-  'followup_sent',
-  'offer_received',
-  'offer_accepted',
-  'offer_declined',
-  'rejected',
-  'ghosted',
-  'cancelled',
-  'custom',
-];
-
-function getNextPipelineEvent(
-  events: EventItem[],
-  currentStatus: ApplicationStatus,
-): EventType | null {
-  if ((TERMINAL_STATUSES as readonly string[]).includes(currentStatus))
-    return null;
-  const existing = new Set(events.map((e) => e.type));
-
-  if (existing.has('interview_scheduled') && !existing.has('interview_done')) {
-    return 'interview_done';
-  }
-  if (existing.has('interview_done') && !existing.has('thank_you_sent')) {
-    return 'thank_you_sent';
-  }
-  if (existing.has('thank_you_sent') && !existing.has('followup_sent')) {
-    return 'followup_sent';
-  }
-  if (existing.has('followup_sent') && !existing.has('response_received')) {
-    return 'response_received';
-  }
-
-  for (const step of EVENT_PIPELINE) {
-    if (!existing.has(step)) return step;
-  }
-  return null;
-}
-
-function EditableEventDate({
-  at,
-  onUpdate,
-}: {
-  at: string;
-  onUpdate: (newAt: string) => void;
-}) {
-  const [editing, setEditing] = useState(false);
-  const isFuture = new Date(at) > new Date();
-
-  if (editing) {
-    return (
-      <input
-        type="date"
-        defaultValue={at.slice(0, 10)}
-        className="text-xs h-5 w-32 border-b border-muted-foreground/50 bg-transparent focus:outline-none focus:border-foreground"
-        autoFocus
-        onChange={(e) => {
-          if (e.target.value) {
-            onUpdate(new Date(e.target.value + 'T12:00:00').toISOString());
-          }
-        }}
-        onBlur={() => setEditing(false)}
-      />
-    );
-  }
-
-  return (
-    <button
-      className={`text-xs ${isFuture ? 'text-blue-500' : 'text-muted-foreground'} hover:underline text-left`}
-      onClick={() => setEditing(true)}
-    >
-      {new Date(at).toLocaleDateString('fr-FR', {
-        day: 'numeric',
-        month: 'long',
-        year: 'numeric',
-      })}
-      {isFuture && <span className="ml-1 opacity-70">(à venir)</span>}
-    </button>
-  );
-}
-
-function getEventLabel(event: EventItem): string {
-  if (event.type === 'custom') {
-    return typeof event.meta?.label === 'string'
-      ? event.meta.label
-      : 'Note personnalisée';
-  }
-  return (
-    EVENT_LABELS[event.type] ??
-    (typeof event.meta?.label === 'string' ? event.meta.label : event.type)
-  );
 }
 
 export function EventTimeline({

@@ -6,30 +6,30 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
 import { Separator } from '@/components/ui/separator';
-import { StatusBadge } from './StatusBadge';
-import { SourceBadge } from './SourceBadge';
-import { EventTimeline } from './EventTimeline';
-import { ScrapeProgressTimeline } from './ScrapeProgressTimeline';
-import { AnalyzePanel } from './AnalyzePanel';
-import { EditJobPostingDialog } from './EditJobPostingDialog';
+import { StatusBadge } from '@/components/StatusBadge';
+import { SourceBadge } from '@/components/SourceBadge';
+import { EventTimeline } from '@/components/EventTimeline';
+import { ScrapeProgressTimeline } from '@/components/ScrapeProgressTimeline';
+import { AnalyzePanel } from '@/components/AnalyzePanel';
+import { EditJobPostingDialog } from '@/components/EditJobPostingDialog';
+import { StatusActions } from './StatusActions';
+import { ContactFields } from './ContactFields';
+import { NotesField } from './NotesField';
+import { ReminderFields } from './ReminderFields';
 import { api } from '@/lib/api';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import { toast } from 'sonner';
 import {
   APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS,
-  STATUS_EVENT, TERMINAL_STATUSES,
+  STATUS_EVENT,
   type ApplicationStatus, type ApplicationWithJob, type ContractType, type RemoteType,
   type EventType, type Cv,
 } from '@joblog/shared';
 import {
-  ExternalLinkIcon, BuildingIcon, SendIcon, CalendarIcon, TrophyIcon,
-  XCircleIcon, GhostIcon, BanIcon, PencilIcon, XIcon,
+  ExternalLinkIcon, BuildingIcon, PencilIcon, XIcon,
 } from 'lucide-react';
 
 interface Props {
@@ -59,7 +59,6 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
   const scrapeStatus = getJobScrapeStatus(jp);
   const scrapeReady = scrapeStatus === 'succeeded';
   const canEditJob = scrapeReady || scrapeStatus === 'failed';
-  const showScrapeTimeline = !scrapeReady;
 
   async function patch(body: Record<string, unknown>) {
     setIsSaving(true);
@@ -213,14 +212,12 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
         </SheetHeader>
 
         <div className="px-6 py-4 flex flex-col gap-6">
-          {showScrapeTimeline && (
+          {!scrapeReady && (
             <>
               <ScrapeProgressTimeline
                 status={scrapeStatus}
                 steps={jp?.scrape_steps}
                 startedAt={jp?.scrape_started_at}
-                createdAt={jp?.created_at}
-                attempts={jp?.scrape_attempts}
                 error={jp?.scrape_error}
                 isRetrying={isRetryingScrape}
                 onRetry={retryScrape}
@@ -256,85 +253,13 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 ))}
               </SelectContent>
             </Select>
-            {scrapeReady && application.status === 'saved' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'applied' })}>
-                  <SendIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Candidature envoyée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'rejected' })}>
-                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Refusée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
-                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Ghostée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'cancelled' })}>
-                  <BanIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Annuler
-                </Button>
-              </div>
-            )}
-            {scrapeReady && application.status === 'applied' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'interview' })}>
-                  <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Entretien reçu
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'rejected' })}>
-                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Refusée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
-                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Ghostée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'cancelled' })}>
-                  <BanIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Annuler
-                </Button>
-              </div>
-            )}
-            {scrapeReady && application.status === 'interview' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => addEvent('interview_scheduled')}>
-                  <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Nouvel entretien
-                </Button>
-                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'offer' })}>
-                  <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Offre reçue
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'rejected' })}>
-                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Refusée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
-                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Ghostée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'cancelled' })}>
-                  <BanIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Annuler
-                </Button>
-              </div>
-            )}
-            {scrapeReady && application.status === 'offer' && (
-              <div className="flex items-center gap-2 flex-wrap">
-                <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'accepted' })}>
-                  <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Acceptée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => addEvent('offer_declined')}>
-                  <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Refusée
-                </Button>
-                <Button variant="outline" size="sm" disabled={isSaving} onClick={() => patch({ status: 'ghosted' })}>
-                  <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
-                  Ghostée
-                </Button>
-              </div>
+            {scrapeReady && (
+              <StatusActions
+                status={application.status}
+                isSaving={isSaving}
+                onPatch={patch}
+                onAddEvent={addEvent}
+              />
             )}
           </section>
 
@@ -439,149 +364,5 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
       </SheetContent>
     </Sheet>
     </>
-  );
-}
-
-function ContactFields({
-  contact,
-  onSave,
-}: {
-  contact: ApplicationWithJob['contact'];
-  onSave: (c: ApplicationWithJob['contact']) => void;
-}) {
-  const [v, setV] = useState(contact ?? { name: null, role: null, email: null, phone: null });
-  const [dirty, setDirty] = useState(false);
-
-  function update(field: string, val: string) {
-    setV((prev) => ({ ...prev, [field]: val || null }));
-    setDirty(true);
-  }
-
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      {(['name', 'role', 'email', 'phone'] as const).map((field) => (
-        <div key={field} className="flex flex-col gap-1.5">
-          <Label className="text-xs capitalize">{fieldLabel(field)}</Label>
-          <Input
-            value={v[field] ?? ''}
-            onChange={(e) => update(field, e.target.value)}
-            onBlur={() => { if (dirty) { onSave(v); setDirty(false); } }}
-            className="h-8 text-sm"
-            placeholder="—"
-          />
-        </div>
-      ))}
-    </div>
-  );
-}
-
-function fieldLabel(f: string) {
-  const map: Record<string, string> = { name: 'Nom', role: 'Poste', email: 'Email', phone: 'Téléphone' };
-  return map[f] ?? f;
-}
-
-function NotesField({ value, onSave }: { value: string; onSave: (v: string) => void }) {
-  const [v, setV] = useState(value);
-  return (
-    <Textarea
-      value={v}
-      onChange={(e) => setV(e.target.value)}
-      onBlur={() => onSave(v)}
-      placeholder="Notes libres…"
-      className="resize-none text-sm min-h-24"
-    />
-  );
-}
-
-function computeNextAt(baseIso: string | null, frequencyDays: number): string {
-  const base = baseIso ? new Date(baseIso) : new Date();
-  const next = new Date(base.getTime() + frequencyDays * 24 * 60 * 60 * 1000);
-  return next.toISOString();
-}
-
-function ReminderFields({
-  reminder,
-  status,
-  events,
-  appliedAt,
-  onSave,
-}: {
-  reminder: ApplicationWithJob['reminder'];
-  status: ApplicationStatus;
-  events: ApplicationWithJob['events'];
-  appliedAt: ApplicationWithJob['appliedAt'];
-  onSave: (r: Partial<ApplicationWithJob['reminder']>) => void;
-}) {
-  const [frequencyDays, setFrequencyDays] = useState(reminder.frequencyDays);
-  const [at, setAt] = useState(reminder.at ?? null);
-
-  const isTerminal = TERMINAL_STATUSES.includes(status);
-
-  const followupEvents = events
-    .filter((e) => e.type === 'followup_sent')
-    .sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
-  const hasFollowup = followupEvents.length > 0;
-  const lastFollowupAt = hasFollowup ? followupEvents[0].at : null;
-
-  function handleFrequencyBlur(value: number) {
-    const days = value || 7;
-    setFrequencyDays(days);
-    const base = lastFollowupAt ?? appliedAt ?? null;
-    const nextAt = computeNextAt(base, days);
-    setAt(nextAt);
-    onSave({ frequencyDays: days, at: nextAt });
-  }
-
-  function handleLastFollowupChange(dateValue: string) {
-    if (!dateValue) return;
-    const newBase = new Date(dateValue + 'T12:00:00').toISOString();
-    const nextAt = computeNextAt(newBase, frequencyDays);
-    setAt(nextAt);
-    onSave({ at: nextAt });
-  }
-
-  return (
-    <div className={`flex flex-col gap-3 ${isTerminal ? 'opacity-50 pointer-events-none' : ''}`}>
-      {isTerminal && (
-        <p className="text-xs text-muted-foreground">Les relances sont désactivées pour ce statut.</p>
-      )}
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Fréquence (jours)</Label>
-          <Input
-            type="number"
-            min={1}
-            value={frequencyDays}
-            onChange={(e) => setFrequencyDays(Number(e.target.value) || 7)}
-            onBlur={(e) => handleFrequencyBlur(Number(e.target.value) || 7)}
-            className="h-8 text-sm"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Prochaine relance</Label>
-          <Input
-            type="date"
-            value={at ? new Date(at).toISOString().slice(0, 10) : ''}
-            onChange={(e) => {
-              const iso = e.target.value ? new Date(e.target.value + 'T12:00:00').toISOString() : null;
-              setAt(iso);
-              onSave({ at: iso });
-            }}
-            className="h-8 text-sm"
-          />
-        </div>
-      </div>
-      {hasFollowup && (
-        <div className="flex flex-col gap-1.5">
-          <Label className="text-xs">Dernière relance envoyée</Label>
-          <Input
-            type="date"
-            defaultValue={lastFollowupAt ? new Date(lastFollowupAt).toISOString().slice(0, 10) : ''}
-            onChange={(e) => handleLastFollowupChange(e.target.value)}
-            className="h-8 text-sm"
-          />
-        </div>
-      )}
-    </div>
   );
 }

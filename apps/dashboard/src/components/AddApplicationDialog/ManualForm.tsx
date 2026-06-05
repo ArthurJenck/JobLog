@@ -1,10 +1,4 @@
 import { useEffect, useState } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -15,48 +9,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { AddressInput } from '@/components/AddressInput';
-import { toast } from 'sonner';
-import { api, type LogoSearchResult, type UrlPasteUsage } from '@/lib/api';
+import { api, type LogoSearchResult } from '@/lib/api';
 import { getLogoUrlForDomain } from '@/lib/company-logo';
 import { CONTRACT_TYPES, CONTRACT_LABELS, REMOTE_TYPES, REMOTE_LABELS } from '@joblog/shared';
 
-interface Props {
-  open: boolean;
-  onClose: () => void;
-  onCreated: (applicationId: string) => void;
-}
-
-export function AddApplicationDialog({ open, onClose, onCreated }: Props) {
-  return (
-    <Dialog open={open} onOpenChange={(v) => !v && onClose()}>
-      <DialogContent className="sm:max-w-lg">
-        <DialogHeader>
-          <DialogTitle>Ajouter une candidature</DialogTitle>
-        </DialogHeader>
-        <Tabs defaultValue="url">
-          <TabsList className="w-full">
-            <TabsTrigger value="url" className="flex-1">
-              Coller une URL
-            </TabsTrigger>
-            <TabsTrigger value="manual" className="flex-1">
-              Saisie manuelle
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="manual">
-            <ManualForm onCreated={onCreated} />
-          </TabsContent>
-          <TabsContent value="url">
-            <UrlForm open={open} onCreated={onCreated} />
-          </TabsContent>
-        </Tabs>
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
+export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [isLoading, setIsLoading] = useState(false);
   const [companyMatches, setCompanyMatches] = useState<LogoSearchResult[]>([]);
   const [selectedCompany, setSelectedCompany] = useState<LogoSearchResult | null>(null);
@@ -261,141 +219,5 @@ function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
         {isLoading ? 'Enregistrement…' : 'Ajouter'}
       </Button>
     </form>
-  );
-}
-
-function UrlForm({
-  open,
-  onCreated,
-}: {
-  open: boolean;
-  onCreated: (id: string) => void;
-}) {
-  const [url, setUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [usage, setUsage] = useState<UrlPasteUsage | null>(null);
-  const [extensionUrl, setExtensionUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!open) return;
-
-    let cancelled = false;
-    api.jobPostings.getFromUrlUsage()
-      .then((data) => {
-        if (cancelled) return;
-        setUsage(data.usage);
-        setExtensionUrl(data.extensionUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setUsage(null);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    if (usage?.isBlocked) {
-      const message = "Limite d'ajout par URL atteinte pour aujourd'hui.";
-      setError(message);
-      toast.error('Récupération bloquée', { description: message });
-      return;
-    }
-
-    setError('');
-    setIsLoading(true);
-    try {
-      const result = await api.jobPostings.createFromUrl(url);
-      setUsage(result.usage);
-      setExtensionUrl(result.extensionUrl ?? null);
-      onCreated(result.applicationId);
-    } catch (err) {
-      const apiErr = err as {
-        usage?: UrlPasteUsage;
-        extensionUrl?: string | null;
-      };
-      if (apiErr.usage) setUsage(apiErr.usage);
-      if ('extensionUrl' in apiErr) setExtensionUrl(apiErr.extensionUrl ?? null);
-
-      const message = err instanceof Error ? err.message : 'Erreur inconnue';
-      setError(message);
-      toast.error('Récupération impossible', { description: message });
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  if (usage?.isBlocked) {
-    return (
-      <div className="flex flex-col gap-4 mt-4">
-        <UrlUsageNotice usage={usage} extensionUrl={extensionUrl} />
-        {extensionUrl && (
-          <Button type="button" variant="outline" className="w-full" asChild>
-            <a href={extensionUrl} target="_blank" rel="noreferrer">
-              Installer l'extension
-            </a>
-          </Button>
-        )}
-      </div>
-    );
-  }
-
-  return (
-    <form onSubmit={submit} className="flex flex-col gap-4 mt-4">
-      {/* TODO: REMETTRE QUAND EXTENSION ACCEPTEE DANS LE CHROME WEB STORE */}
-      {false && usage?.shouldWarn && (
-        <UrlUsageNotice usage={usage} extensionUrl={extensionUrl} />
-      )}
-      <div className="flex flex-col gap-1.5">
-        <Label>URL de l'offre</Label>
-        <Input
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          required
-          type="url"
-          placeholder="https://www.welcometothejungle.com/…"
-        />
-      </div>
-      {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button
-        type="submit"
-        disabled={isLoading}
-        className="w-full"
-      >
-        {isLoading ? 'Ajout…' : "Récupérer l'offre"}
-      </Button>
-    </form>
-  );
-}
-
-function UrlUsageNotice({
-  usage,
-  extensionUrl,
-}: {
-  usage: UrlPasteUsage;
-  extensionUrl: string | null;
-}) {
-  if (usage.isBlocked) {
-    return (
-      <div className="rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-950">
-        <p className="font-medium">Limite dashboard atteinte pour aujourd’hui.</p>
-        <p className="mt-1 text-amber-900/80">
-          L'extension reste disponible pour ajouter des offres sans consommer ce quota.
-          {!extensionUrl && ' Le lien d’installation sera ajouté dès qu’elle sera publiée.'}
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-      <span className="font-medium text-foreground">
-        {usage.count}/{usage.limit} ajouts par URL réussis aujourd’hui.
-      </span>{' '}
-      Installe l'extension pour ajouter les offres sans limite depuis les sites d’emploi.
-    </div>
   );
 }
