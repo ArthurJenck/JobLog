@@ -25,7 +25,6 @@ export function LandingHero() {
 
     const ENTRANCE_MS = 300 + 900 + 80;
     let scrollActive = false;
-    let timerId: ReturnType<typeof setTimeout>;
 
     const EASING = 'cubic-bezier(0.25,0.46,0.45,0.94)';
 
@@ -62,7 +61,7 @@ export function LandingHero() {
       applyScrollTransform();
     };
 
-    timerId = setTimeout(() => {
+    const timerId = setTimeout(() => {
       if (scrollActive) return;
       scrollActive = true;
       el.style.animation = 'none';
@@ -276,7 +275,7 @@ export function LandingHero() {
           }}
         >
           <img
-            src="/images/feature-1.png"
+            src="/images/feature-1.webp"
             alt="Tableau de bord JobLog"
             className="w-full h-auto block"
           />

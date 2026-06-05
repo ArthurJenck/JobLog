@@ -47,7 +47,7 @@ export function LandingPage() {
           title="Enregistrez une offre depuis n'importe quel site"
           description="L'extension JobLog s'intègre directement sur les 14 principaux sites d'emploi français. En un clic, la fiche est dans votre tableau de bord — ou collez simplement une URL pour que l'IA la remplisse automatiquement."
           bullets={FEATURE_1_BULLETS}
-          image="/images/feature-1.png"
+          image="/images/feature-1.webp"
           imageAlt="Tableau de bord des candidatures"
         />
         <LandingFeature
@@ -55,7 +55,7 @@ export function LandingPage() {
           title="Analysez votre CV face à chaque offre"
           description="JobLog compare votre CV à l'offre et identifie les compétences présentes, manquantes et à mettre en valeur. Gérez plusieurs versions de CV et adaptez votre candidature à chaque opportunité."
           bullets={FEATURE_2_BULLETS}
-          image="/images/feature-2.png"
+          image="/images/feature-2.webp"
           imageAlt="Interface d'analyse CV"
           reversed
         />

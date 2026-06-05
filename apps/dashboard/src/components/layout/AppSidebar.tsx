@@ -91,12 +91,12 @@ export function AppSidebar() {
               <StatRow
                 label="Postulées"
                 value={stats.applied ?? 0}
-                variant="blue"
+                variant="amber"
               />
               <StatRow
                 label="Entretiens"
                 value={stats.interview ?? 0}
-                variant="purple"
+                variant="blue"
               />
               <StatRow
                 label="Offres"
@@ -141,7 +141,7 @@ export function AppSidebar() {
   );
 }
 
-type StatVariant = 'blue' | 'purple' | 'green' | 'default';
+type StatVariant = 'amber' | 'blue' | 'green' | 'default';
 
 function StatRow({
   label,
@@ -154,9 +154,9 @@ function StatRow({
 }) {
   const variantClass: Record<StatVariant, string> = {
     default: '',
+    amber:
+      'bg-amber-100 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
     blue: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400',
-    purple:
-      'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400',
     green:
       'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400',
   };
