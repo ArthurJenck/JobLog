@@ -11,7 +11,7 @@ const TIER = {
   description: 'Toutes les fonctionnalités, sans carte bancaire.',
   features: [
     'Candidatures illimitées',
-    'Extension navigateur sur 14 sites',
+    'Extension navigateur sur 13 sites',
     'Import par URL & analyse CV par IA',
     'Relances automatiques email & push',
     'Gestion multi-CV',

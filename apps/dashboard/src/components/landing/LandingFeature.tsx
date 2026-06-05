@@ -17,6 +17,8 @@ interface LandingFeatureProps {
   bullets: Bullet[];
   image: string;
   imageAlt: string;
+  imageWidth: number;
+  imageHeight: number;
   reversed?: boolean;
 }
 
@@ -29,6 +31,8 @@ export function LandingFeature({
   bullets,
   image,
   imageAlt,
+  imageWidth,
+  imageHeight,
   reversed = false,
 }: LandingFeatureProps) {
   const { ref, inView } = useInView<HTMLElement>();
@@ -93,7 +97,14 @@ export function LandingFeature({
           )}
           style={reveal(1)}
         >
-          <img src={image} alt={imageAlt} className="w-full h-auto block" />
+          <img
+            src={image}
+            alt={imageAlt}
+            width={imageWidth}
+            height={imageHeight}
+            loading="lazy"
+            className="w-full h-auto block"
+          />
         </div>
       </div>
     </section>

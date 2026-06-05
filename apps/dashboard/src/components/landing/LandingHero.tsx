@@ -1,9 +1,9 @@
 import { Fragment, useEffect, useRef } from 'react';
 import { Link } from '@tanstack/react-router';
 
-const H1 = 'Toutes vos candidatures, capturées en un clic';
+const H1 = 'Le tracker de candidatures qui garde le fil';
 const SUBTITLE =
-  "Enregistrez une offre depuis n'importe quel site, suivez son avancement et analysez votre CV face à l'offre grâce à l'IA - sans jamais perdre le fil.";
+  "Enregistrez vos offres depuis les principaux sites d'emploi, pilotez votre suivi de candidatures, planifiez vos relances recruteur et analysez votre CV face à chaque offre grâce à l'IA.";
 
 const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';
 
@@ -107,6 +107,8 @@ export function LandingHero() {
         <img
           src="/images/left-cloud.png"
           aria-hidden="true"
+          width={2048}
+          height={1117}
           className="pointer-events-none select-none"
           style={{
             position: 'absolute',
@@ -122,6 +124,8 @@ export function LandingHero() {
         <img
           src="/images/right-cloud.png"
           aria-hidden="true"
+          width={2048}
+          height={1117}
           className="pointer-events-none select-none"
           style={{
             position: 'absolute',
@@ -276,7 +280,10 @@ export function LandingHero() {
         >
           <img
             src="/images/feature-1.webp"
-            alt="Tableau de bord JobLog"
+            alt="Tableau de bord JobLog pour le suivi de candidatures"
+            width={2880}
+            height={2000}
+            fetchPriority="high"
             className="w-full h-auto block"
           />
         </div>
