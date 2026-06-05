@@ -6,6 +6,9 @@ import {
   REMOTE_TYPES,
   EVENT_TYPES,
   SCRAPE_METHODS,
+  SCRAPE_STATUSES,
+  SCRAPE_STEP_KEYS,
+  SCRAPE_STEP_STATUSES,
   LOCATION_NORMALIZATION_STATUSES,
 } from './constants.js';
 
@@ -14,6 +17,14 @@ export const SalarySchema = z.object({
   max: z.number().nullable(),
   currency: z.string().nullable(),
   period: z.enum(['month', 'year']).nullable(),
+});
+
+export const ScrapeStepSchema = z.object({
+  key: z.enum(SCRAPE_STEP_KEYS),
+  label: z.string(),
+  status: z.enum(SCRAPE_STEP_STATUSES),
+  at: z.string().datetime().nullable(),
+  message: z.string().nullable().optional(),
 });
 
 export const LocationDetailsSchema = z.object({
@@ -49,6 +60,13 @@ export const JobPostingSchema = z.object({
   company_website: z.string().nullable(),
   scrape_method: z.enum(SCRAPE_METHODS),
   scraped_at: z.string().datetime(),
+  scrape_status: z.enum(SCRAPE_STATUSES).optional(),
+  scrape_steps: z.array(ScrapeStepSchema).optional(),
+  scrape_attempts: z.number().int().min(0).optional(),
+  scrape_error: z.string().nullable().optional(),
+  scrape_message_id: z.string().nullable().optional(),
+  scrape_started_at: z.string().datetime().nullable().optional(),
+  scrape_finished_at: z.string().datetime().nullable().optional(),
   created_at: z.string().datetime(),
   updated_at: z.string().datetime(),
 });
@@ -132,6 +150,7 @@ export const ApplicationWithJobSchema = ApplicationSchema.extend({
 });
 
 export type Salary = z.infer<typeof SalarySchema>;
+export type ScrapeStep = z.infer<typeof ScrapeStepSchema>;
 export type LocationDetails = z.infer<typeof LocationDetailsSchema>;
 export type JobPosting = z.infer<typeof JobPostingSchema>;
 export type JobPostingDraft = z.infer<typeof JobPostingDraftSchema>;

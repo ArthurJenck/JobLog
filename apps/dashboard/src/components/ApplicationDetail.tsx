@@ -14,10 +14,13 @@ import { Separator } from '@/components/ui/separator';
 import { StatusBadge } from './StatusBadge';
 import { SourceBadge } from './SourceBadge';
 import { EventTimeline } from './EventTimeline';
+import { ScrapeProgressTimeline } from './ScrapeProgressTimeline';
 import { AnalyzePanel } from './AnalyzePanel';
 import { EditJobPostingDialog } from './EditJobPostingDialog';
 import { api } from '@/lib/api';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
+import { getJobScrapeStatus } from '@/lib/scrape';
+import { toast } from 'sonner';
 import {
   APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS,
   STATUS_EVENT, TERMINAL_STATUSES,
@@ -39,6 +42,7 @@ interface Props {
 export function ApplicationDetail({ application, open, onClose, onUpdated }: Props) {
   const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [isRetryingScrape, setIsRetryingScrape] = useState(false);
   const [cancelAllOpen, setCancelAllOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
 
@@ -52,6 +56,10 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
   const jp = application.jobPosting;
   const logoUrl = getCompanyLogoUrl(jp, 80);
+  const scrapeStatus = getJobScrapeStatus(jp);
+  const scrapeReady = scrapeStatus === 'succeeded';
+  const canEditJob = scrapeReady || scrapeStatus === 'failed';
+  const showScrapeTimeline = !scrapeReady;
 
   async function patch(body: Record<string, unknown>) {
     setIsSaving(true);
@@ -87,6 +95,23 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
   async function updateEventDate(type: EventType, at: string, newAt: string) {
     await api.applications.updateEventDate(application!._id, { type, at, newAt });
     onUpdated();
+  }
+
+  async function retryScrape() {
+    setIsRetryingScrape(true);
+    try {
+      await api.jobPostings.retryFromUrl(application!._id);
+      toast.success('Relance lancée', {
+        description: "La récupération de l'offre reprend en arrière-plan.",
+      });
+      onUpdated();
+    } catch (err) {
+      toast.error('Relance impossible', {
+        description: err instanceof Error ? err.message : 'Erreur inconnue',
+      });
+    } finally {
+      setIsRetryingScrape(false);
+    }
   }
 
   return (
@@ -167,6 +192,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 variant="ghost"
                 size="icon"
                 className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                disabled={!canEditJob}
                 onClick={() => setEditJobOpen(true)}
                 aria-label="Modifier l'offre"
               >
@@ -187,6 +213,30 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
         </SheetHeader>
 
         <div className="px-6 py-4 flex flex-col gap-6">
+          {showScrapeTimeline && (
+            <>
+              <ScrapeProgressTimeline
+                status={scrapeStatus}
+                steps={jp?.scrape_steps}
+                startedAt={jp?.scrape_started_at}
+                createdAt={jp?.created_at}
+                attempts={jp?.scrape_attempts}
+                error={jp?.scrape_error}
+                isRetrying={isRetryingScrape}
+                onRetry={retryScrape}
+              />
+              {scrapeStatus === 'failed' && (
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setEditJobOpen(true)}>
+                    <PencilIcon className="h-3.5 w-3.5 mr-1.5" />
+                    Modifier manuellement
+                  </Button>
+                </div>
+              )}
+              <Separator />
+            </>
+          )}
+
           <section className="flex flex-col gap-3">
             <div className="flex items-center justify-between">
               <span className="text-sm font-medium">Statut</span>
@@ -195,7 +245,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
             <Select
               value={application.status}
               onValueChange={(v) => patch({ status: v })}
-              disabled={isSaving}
+              disabled={!scrapeReady || isSaving}
             >
               <SelectTrigger className="h-9">
                 <SelectValue />
@@ -206,7 +256,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 ))}
               </SelectContent>
             </Select>
-            {application.status === 'saved' && (
+            {scrapeReady && application.status === 'saved' && (
               <div className="flex items-center gap-2 flex-wrap">
                 <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'applied' })}>
                   <SendIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -226,7 +276,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 </Button>
               </div>
             )}
-            {application.status === 'applied' && (
+            {scrapeReady && application.status === 'applied' && (
               <div className="flex items-center gap-2 flex-wrap">
                 <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'interview' })}>
                   <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -246,7 +296,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 </Button>
               </div>
             )}
-            {application.status === 'interview' && (
+            {scrapeReady && application.status === 'interview' && (
               <div className="flex items-center gap-2 flex-wrap">
                 <Button variant="outline" size="sm" disabled={isSaving} onClick={() => addEvent('interview_scheduled')}>
                   <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -270,7 +320,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                 </Button>
               </div>
             )}
-            {application.status === 'offer' && (
+            {scrapeReady && application.status === 'offer' && (
               <div className="flex items-center gap-2 flex-wrap">
                 <Button size="sm" disabled={isSaving} onClick={() => patch({ status: 'accepted' })}>
                   <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -290,29 +340,33 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
           <Separator />
 
-          <section className="flex flex-col gap-3">
-            <span className="text-sm font-medium">CV associé</span>
-            <Select
-              value={application.cvId ?? '__none__'}
-              onValueChange={(v) => patch({ cvId: v === '__none__' ? null : v })}
-              disabled={isSaving}
-            >
-              <SelectTrigger className="h-9">
-                <SelectValue placeholder="Aucun CV associé" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="__none__">Aucun CV</SelectItem>
-                {cvs.map((cv) => (
-                  <SelectItem key={cv._id} value={cv._id}>{cv.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {application.cvId && (
-              <AnalyzePanel applicationId={application._id} cvId={application.cvId} />
-            )}
-          </section>
+          {scrapeReady && (
+            <>
+              <section className="flex flex-col gap-3">
+                <span className="text-sm font-medium">CV associé</span>
+                <Select
+                  value={application.cvId ?? '__none__'}
+                  onValueChange={(v) => patch({ cvId: v === '__none__' ? null : v })}
+                  disabled={isSaving}
+                >
+                  <SelectTrigger className="h-9">
+                    <SelectValue placeholder="Aucun CV associé" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">Aucun CV</SelectItem>
+                    {cvs.map((cv) => (
+                      <SelectItem key={cv._id} value={cv._id}>{cv.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {application.cvId && (
+                  <AnalyzePanel applicationId={application._id} cvId={application.cvId} />
+                )}
+              </section>
 
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           <section className="flex flex-col gap-3">
             <span className="text-sm font-medium">Contact</span>
@@ -324,16 +378,20 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
           <Separator />
 
-          <EventTimeline
-            events={application.events}
-            currentStatus={application.status}
-            onAddEvent={addEvent}
-            onDeleteEvent={deleteEvent}
-            onConfirmFuture={confirmFuture}
-            onUpdateEventDate={updateEventDate}
-          />
+          {scrapeReady && (
+            <>
+              <EventTimeline
+                events={application.events}
+                currentStatus={application.status}
+                onAddEvent={addEvent}
+                onDeleteEvent={deleteEvent}
+                onConfirmFuture={confirmFuture}
+                onUpdateEventDate={updateEventDate}
+              />
 
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           <section className="flex flex-col gap-3">
             <span className="text-sm font-medium">Notes</span>
@@ -345,18 +403,22 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
           <Separator />
 
-          <section className="flex flex-col gap-3">
-            <span className="text-sm font-medium">Relances</span>
-            <ReminderFields
-              reminder={application.reminder}
-              status={application.status}
-              events={application.events}
-              appliedAt={application.appliedAt}
-              onSave={(r) => patch({ reminder: r })}
-            />
-          </section>
+          {scrapeReady && (
+            <>
+              <section className="flex flex-col gap-3">
+                <span className="text-sm font-medium">Relances</span>
+                <ReminderFields
+                  reminder={application.reminder}
+                  status={application.status}
+                  events={application.events}
+                  appliedAt={application.appliedAt}
+                  onSave={(r) => patch({ reminder: r })}
+                />
+              </section>
 
-          <Separator />
+              <Separator />
+            </>
+          )}
 
           <div className="flex justify-end pb-2">
             <Button

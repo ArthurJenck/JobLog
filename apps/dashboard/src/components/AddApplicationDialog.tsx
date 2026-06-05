@@ -308,12 +308,10 @@ function UrlForm({
     setError('');
     setIsLoading(true);
     try {
-      const jp = await api.jobPostings.fromUrl(url);
-      if (jp.usage) setUsage(jp.usage);
-      if ('extensionUrl' in jp) setExtensionUrl(jp.extensionUrl ?? null);
-      const jobPostingId = (jp._id as string) ?? (jp.jobPostingId as string);
-      const appRes = await api.applications.create({ jobPostingId });
-      onCreated(appRes.applicationId);
+      const result = await api.jobPostings.createFromUrl(url);
+      setUsage(result.usage);
+      setExtensionUrl(result.extensionUrl ?? null);
+      onCreated(result.applicationId);
     } catch (err) {
       const apiErr = err as {
         usage?: UrlPasteUsage;
@@ -347,7 +345,8 @@ function UrlForm({
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4 mt-4">
-      {usage?.shouldWarn && (
+      {/* TODO: REMETTRE QUAND EXTENSION ACCEPTEE DANS LE CHROME WEB STORE */}
+      {false && usage?.shouldWarn && (
         <UrlUsageNotice usage={usage} extensionUrl={extensionUrl} />
       )}
       <div className="flex flex-col gap-1.5">
@@ -366,7 +365,7 @@ function UrlForm({
         disabled={isLoading}
         className="w-full"
       >
-        {isLoading ? 'Analyse en cours…' : "Récupérer l'offre"}
+        {isLoading ? 'Ajout…' : "Récupérer l'offre"}
       </Button>
     </form>
   );

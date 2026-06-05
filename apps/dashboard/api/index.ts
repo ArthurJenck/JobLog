@@ -69,6 +69,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     mod = await import('../server/job-postings/index.js');
   } else if (route === 'job-postings/from-url') {
     mod = await import('../server/job-postings/from-url.js');
+  } else if (route === 'job-postings/from-url/retry') {
+    mod = await import('../server/job-postings/from-url-retry.js');
   } else if (route === 'push/subscribe') {
     mod = await import('../server/push/subscribe.js');
   } else if (route === 'reminders/pending') {

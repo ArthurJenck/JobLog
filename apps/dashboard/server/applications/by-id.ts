@@ -90,7 +90,16 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const jpCol = await getCollection('job_postings');
     const jp = await jpCol.findOne({ _id: new ObjectId(String(app.jobPostingId)) });
 
-    return res.status(200).json({ ...app, _id: app._id.toString(), jobPosting: jp });
+    return res.status(200).json({
+      ...app,
+      _id: app._id.toString(),
+      jobPosting: jp
+        ? {
+            ...jp,
+            _id: jp._id.toString(),
+          }
+        : null,
+    });
   }
 
   if (req.method === 'PATCH') {
@@ -125,7 +134,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (!app) return res.status(404).json({ error: 'Not found' });
 
       const jpCol = await getCollection('job_postings');
-      const updates: Record<string, unknown> = { ...parsed.data, updated_at: new Date() };
+      const now = new Date();
+      const updates: Record<string, unknown> = {
+        ...parsed.data,
+        scrape_status: 'succeeded',
+        scrape_error: null,
+        scrape_finished_at: now,
+        updated_at: now,
+      };
       if (Object.prototype.hasOwnProperty.call(parsed.data, 'location')) {
         Object.assign(updates, await normalizeLocationForStorage(parsed.data.location));
       }

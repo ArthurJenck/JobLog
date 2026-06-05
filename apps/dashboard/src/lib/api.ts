@@ -19,6 +19,13 @@ export interface FromUrlMeta {
 
 export type FromUrlResponse = Record<string, unknown> & Partial<FromUrlMeta>;
 
+export interface FromUrlApplicationResponse extends FromUrlMeta {
+  applicationId: string;
+  jobPostingId: string;
+  scrapeStatus: 'queued' | 'processing' | 'succeeded' | 'failed';
+  cached?: boolean;
+}
+
 export interface LogoSearchResult {
   name: string;
   domain: string;
@@ -118,6 +125,12 @@ export const api = {
     },
     fromUrl(url: string): Promise<FromUrlResponse> {
       return request('/job-postings/from-url', { method: 'POST', body: JSON.stringify({ url }) });
+    },
+    createFromUrl(url: string): Promise<FromUrlApplicationResponse> {
+      return request('/job-postings/from-url', { method: 'POST', body: JSON.stringify({ url }) });
+    },
+    retryFromUrl(applicationId: string): Promise<FromUrlApplicationResponse> {
+      return request('/job-postings/from-url/retry', { method: 'POST', body: JSON.stringify({ applicationId }) });
     },
   },
   cvs: {

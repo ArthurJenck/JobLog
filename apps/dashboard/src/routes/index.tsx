@@ -7,6 +7,7 @@ import { ApplicationDetail } from '@/components/ApplicationDetail';
 import { AddApplicationDialog } from '@/components/AddApplicationDialog';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
+import { isScrapeActive } from '@/lib/scrape';
 import type { ApplicationWithJob, ApplicationStatus } from '@joblog/shared';
 import { APPLICATION_STATUSES } from '@joblog/shared';
 
@@ -134,8 +135,8 @@ export function IndexPage() {
     setIsError(false);
   }
 
-  const fetchApplications = useCallback(async () => {
-    setIsLoading(true);
+  const fetchApplications = useCallback(async (silent = false) => {
+    if (!silent) setIsLoading(true);
     try {
       const { data, total: t } = await api.applications.list(listParams);
       setApplications(data);
@@ -153,9 +154,21 @@ export function IndexPage() {
         setIsError(true);
       }
     } finally {
-      setIsLoading(false);
+      if (!silent) setIsLoading(false);
     }
   }, [listParams, navigate]);
+
+  const refreshActiveScrapes = useCallback(async () => {
+    await fetchApplications(true);
+    if (detailOpen && selectedApp && isScrapeActive(selectedApp)) {
+      try {
+        const updated = await api.applications.get(selectedApp._id);
+        setSelectedApp(updated);
+      } catch {
+        // The regular list refresh will surface broader loading errors.
+      }
+    }
+  }, [detailOpen, fetchApplications, selectedApp]);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,6 +201,20 @@ export function IndexPage() {
       cancelled = true;
     };
   }, [listParamsKey, listParams, navigate]);
+
+  const hasActiveScrapes =
+    applications.some(isScrapeActive) ||
+    (detailOpen && isScrapeActive(selectedApp));
+
+  useEffect(() => {
+    if (!hasActiveScrapes) return;
+
+    const interval = window.setInterval(() => {
+      void refreshActiveScrapes();
+    }, 2500);
+
+    return () => window.clearInterval(interval);
+  }, [hasActiveScrapes, refreshActiveScrapes]);
 
   useEffect(() => {
     const snoozeToast = readSnoozeToastFromUrl();
@@ -300,6 +327,11 @@ export function IndexPage() {
     await fetchApplications();
     const created = await api.applications.get(applicationId);
     openDetail(created);
+    if (isScrapeActive(created)) {
+      toast.success('Candidature ajoutée', {
+        description: "La récupération de l'offre continue en arrière-plan.",
+      });
+    }
   }
 
   return (

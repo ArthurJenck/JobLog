@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/table';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,8 +41,15 @@ import {
   ArrowUpIcon,
   ArrowDownIcon,
   ChevronDownIcon,
+  AlertCircleIcon,
+  LoaderCircleIcon,
 } from 'lucide-react';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
+import {
+  getJobScrapeStatus,
+  getScrapeStatusLabel,
+  isScrapeReady,
+} from '@/lib/scrape';
 import {
   APPLICATION_STATUSES,
   STATUS_LABELS,
@@ -50,6 +58,7 @@ import {
   type ApplicationWithJob,
   type ApplicationStatus,
   type JobSource,
+  type ScrapeStatus,
 } from '@joblog/shared';
 
 const DEFAULT_STATUSES = new Set<ApplicationStatus>([
@@ -120,9 +129,20 @@ export function ApplicationsTable({
         id: 'title',
         header: 'Poste',
         accessorFn: (row) => row.jobPosting?.title ?? '',
-        cell: ({ getValue }) => (
-          <span className="font-medium">{getValue() as string}</span>
-        ),
+        cell: ({ row, getValue }) => {
+          const scrapeStatus = getJobScrapeStatus(row.original.jobPosting);
+          const isPending =
+            scrapeStatus === 'queued' || scrapeStatus === 'processing';
+
+          return (
+            <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+              {isPending && (
+                <LoaderCircleIcon className="h-3.5 w-3.5 shrink-0 animate-spin text-amber-600" />
+              )}
+              <span className="truncate">{getValue() as string}</span>
+            </span>
+          );
+        },
       },
       {
         id: 'company',
@@ -163,9 +183,14 @@ export function ApplicationsTable({
         id: 'status',
         header: 'Statut',
         accessorKey: 'status',
-        cell: ({ getValue }) => (
-          <StatusBadge status={getValue() as ApplicationStatus} />
-        ),
+        cell: ({ row, getValue }) => {
+          const scrapeStatus = getJobScrapeStatus(row.original.jobPosting);
+          if (scrapeStatus !== 'succeeded') {
+            return <ScrapeStatusBadge status={scrapeStatus} />;
+          }
+
+          return <StatusBadge status={getValue() as ApplicationStatus} />;
+        },
       },
       {
         id: 'nextInterview',
@@ -524,14 +549,41 @@ function dateStatus(iso: string): 'past' | 'today' | 'future' {
   return 'future';
 }
 
+function ScrapeStatusBadge({ status }: { status: ScrapeStatus }) {
+  const isFailed = status === 'failed';
+  const isActive = status === 'queued' || status === 'processing';
+
+  return (
+    <Badge
+      variant={isFailed ? 'destructive' : 'outline'}
+      className={
+        isActive
+          ? 'border-amber-300 bg-amber-50 text-amber-900'
+          : isFailed
+            ? 'text-white'
+            : undefined
+      }
+    >
+      {isFailed ? (
+        <AlertCircleIcon className="mr-1 h-3 w-3" />
+      ) : (
+        <LoaderCircleIcon className="mr-1 h-3 w-3 animate-spin" />
+      )}
+      {getScrapeStatusLabel(status)}
+    </Badge>
+  );
+}
+
 const THANK_YOU_WINDOW_DAYS = 7;
-const GHOST_STALE_DAYS = 30;
+const GHOST_STALE_DAYS = 14;
 
 function daysSince(iso: string): number {
   return (Date.now() - new Date(iso).getTime()) / 86400000;
 }
 
 function getSuggestion(app: ApplicationWithJob): string | null {
+  if (!isScrapeReady(app)) return null;
+
   if ((TERMINAL_STATUSES as readonly string[]).includes(app.status))
     return null;
 

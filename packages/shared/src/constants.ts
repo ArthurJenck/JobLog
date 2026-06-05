@@ -205,6 +205,31 @@ export const SCRAPE_METHODS = [
 ] as const
 export type ScrapeMethod = (typeof SCRAPE_METHODS)[number]
 
+export const SCRAPE_STATUSES = [
+    'queued',
+    'processing',
+    'succeeded',
+    'failed',
+] as const
+export type ScrapeStatus = (typeof SCRAPE_STATUSES)[number]
+
+export const SCRAPE_STEP_KEYS = [
+    'created',
+    'fetch',
+    'extract',
+    'normalize',
+    'complete',
+] as const
+export type ScrapeStepKey = (typeof SCRAPE_STEP_KEYS)[number]
+
+export const SCRAPE_STEP_STATUSES = [
+    'pending',
+    'processing',
+    'succeeded',
+    'failed',
+] as const
+export type ScrapeStepStatus = (typeof SCRAPE_STEP_STATUSES)[number]
+
 export const GEMINI_DAILY_QUOTA = 1500
 export const GEMINI_SCRAPE_RESERVE = 100
 export const GEMINI_MODEL = 'gemini-2.5-flash-lite'

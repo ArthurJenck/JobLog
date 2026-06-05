@@ -58,9 +58,14 @@ export function LandingNavbar() {
           <div className="flex-none">
             <a
               href="#"
-              className="font-semibold text-xl leading-none text-[rgb(26,22,21)]"
+              className="flex items-center gap-2 leading-none text-[rgb(26,22,21)]"
             >
-              JobLog
+              <img
+                src="/icon-cropped.svg"
+                alt="Logo JobLog"
+                className="h-8 w-8 relative bottom-1"
+              />
+              <span className="font-semibold text-xl">JobLog</span>
             </a>
           </div>
 
