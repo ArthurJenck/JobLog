@@ -19,7 +19,7 @@ export default defineConfig({
     excludeSources: ['apps/dashboard/**'],
   },
   manifest: {
-    name: 'JobLog',
+    name: "JobLog - Tracker d'offres d'emploi",
     description: "Sauvegardez des offres d'emploi directement depuis votre navigateur.",
     icons: {
       '16': 'icon-16.png',

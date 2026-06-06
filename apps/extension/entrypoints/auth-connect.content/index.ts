@@ -1,8 +1,7 @@
 export default defineContentScript({
   matches: [
     'https://joblog.arthurjenck.com/*',
-    'http://localhost:3000/*',
-    'http://localhost:5173/*',
+    ...(import.meta.env.DEV ? ['http://localhost:3000/*', 'http://localhost:5173/*'] : []),
   ],
   main() {
     window.addEventListener('message', async (event) => {
