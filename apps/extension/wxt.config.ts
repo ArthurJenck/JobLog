@@ -14,6 +14,10 @@ const hostPermissions = Array.from(new Set([
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  zip: {
+    sourcesRoot: '../..',
+    excludeSources: ['apps/dashboard/**'],
+  },
   manifest: {
     name: 'JobLog',
     description: "Sauvegardez des offres d'emploi directement depuis votre navigateur.",
@@ -25,6 +29,15 @@ export default defineConfig({
     },
     permissions: ['storage', 'activeTab', 'alarms'],
     host_permissions: hostPermissions,
+    browser_specific_settings: {
+      gecko: {
+        id: 'joblog@arthurjenck.com',
+        strict_min_version: '115.0',
+        data_collection_permissions: {
+          required: ['websiteContent'],
+        },
+      },
+    },
     action: {
       default_popup: 'popup.html',
       default_title: 'JobLog',

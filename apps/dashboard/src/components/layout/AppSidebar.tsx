@@ -11,6 +11,7 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarSeparator,
+  useSidebar,
 } from '@/components/ui/sidebar';
 import {
   BriefcaseIcon,
@@ -37,6 +38,7 @@ type Stats = {
 export function AppSidebar() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { isMobile, setOpenMobile } = useSidebar();
   const [stats, setStats] = useState<Stats>({ total: 0 });
 
   useEffect(() => {
@@ -68,7 +70,7 @@ export function AppSidebar() {
               {navItems.map((item) => (
                 <SidebarMenuItem key={item.to}>
                   <SidebarMenuButton asChild isActive={pathname === item.to}>
-                    <Link to={item.to}>
+                    <Link to={item.to} onClick={() => { if (isMobile) setOpenMobile(false); }}>
                       <item.icon className="h-4 w-4" />
                       <span>{item.label}</span>
                     </Link>
@@ -112,7 +114,7 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link to="/privacy">
+              <Link to="/privacy" onClick={() => { if (isMobile) setOpenMobile(false); }}>
                 <span className="text-xs text-muted-foreground">
                   Confidentialité
                 </span>

@@ -1,5 +1,5 @@
 import { createContext } from 'react';
-import { createRootRoute, Outlet, redirect, useRouterState } from '@tanstack/react-router';
+import { createRootRoute, Outlet, redirect } from '@tanstack/react-router';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
@@ -32,15 +32,9 @@ export const Route = createRootRoute({
 });
 
 export function RootLayout() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { hasSession } = Route.useRouteContext() as { hasSession: boolean };
-  const isStandalonePublicPage =
-    pathname === '/login' ||
-    pathname === '/privacy' ||
-    pathname.startsWith('/auth') ||
-    (pathname === '/' && !hasSession);
 
-  if (isStandalonePublicPage) {
+  if (!hasSession) {
     return (
       <SessionContext.Provider value={hasSession}>
         <TooltipProvider>
