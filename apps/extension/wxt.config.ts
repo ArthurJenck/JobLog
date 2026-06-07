@@ -1,9 +1,12 @@
+import { existsSync, readFileSync } from 'node:fs';
 import { defineConfig } from 'wxt';
 
 const isProd = process.env.NODE_ENV === 'production';
+const mode = process.env.NODE_ENV ?? 'development';
+const apiUrl = process.env.VITE_API_URL ?? readEnvValue('VITE_API_URL');
 
-const apiHostPermission = process.env.VITE_API_URL
-  ? `${new URL(process.env.VITE_API_URL).origin}/*`
+const apiHostPermission = apiUrl
+  ? toExtensionMatchPattern(apiUrl)
   : 'https://joblog.arthurjenck.com/*';
 
 const hostPermissions = Array.from(new Set([
@@ -50,3 +53,43 @@ export default defineConfig({
     },
   },
 });
+
+function readEnvValue(key: string) {
+  for (const filename of [`.env.${mode}.local`, `.env.${mode}`, '.env.local', '.env']) {
+    const url = new URL(filename, import.meta.url);
+    if (!existsSync(url)) continue;
+
+    const match = readFileSync(url, 'utf8')
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.startsWith(`${key}=`));
+
+    if (!match) continue;
+    return unquoteEnvValue(match.slice(key.length + 1));
+  }
+
+  return undefined;
+}
+
+function unquoteEnvValue(value: string) {
+  const trimmed = value.trim();
+  if (
+    (trimmed.startsWith('"') && trimmed.endsWith('"')) ||
+    (trimmed.startsWith("'") && trimmed.endsWith("'"))
+  ) {
+    return trimmed.slice(1, -1);
+  }
+
+  return trimmed;
+}
+
+function toExtensionMatchPattern(rawUrl: string) {
+  const url = new URL(rawUrl);
+  const localhostHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+
+  if (localhostHosts.has(url.hostname)) {
+    return `${url.protocol}//${url.hostname}/*`;
+  }
+
+  return `${url.origin}/*`;
+}

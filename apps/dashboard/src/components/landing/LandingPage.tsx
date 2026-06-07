@@ -20,7 +20,7 @@ import {
 const FEATURE_1_BULLETS = [
   {
     icon: MousePointerClick,
-    label: "Extension navigateur sur 13 sites d'emploi",
+    label: "Extension navigateur sur 16 sites d'emploi",
   },
   { icon: Link2, label: 'Import automatique en collant une URL' },
   { icon: Workflow, label: 'Statut mis à jour automatiquement' },
@@ -54,7 +54,7 @@ export function LandingPage() {
         <LandingFeature
           eyebrow="Capture en 1 clic"
           title="Enregistrez une offre depuis n'importe quel site"
-          description="L'extension JobLog s'intègre directement sur 13 sites d'emploi français et internationaux. En un clic, la fiche est dans votre tableau de bord de candidatures — ou collez simplement une URL pour que l'IA la remplisse automatiquement."
+          description="L'extension JobLog s'intègre directement sur 16 sites d'emploi français et internationaux. En un clic, la fiche est dans votre tableau de bord de candidatures — ou collez simplement une URL pour que l'IA la remplisse automatiquement."
           bullets={FEATURE_1_BULLETS}
           image="/images/feature-1.webp"
           imageAlt="Tableau de bord de suivi de candidatures"

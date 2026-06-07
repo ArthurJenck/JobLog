@@ -1,8 +1,13 @@
+import { API_BASE } from '../../utils/api-base';
+
+const apiMatchPattern = toExtensionMatchPattern(API_BASE);
+
 export default defineContentScript({
-  matches: [
+  matches: Array.from(new Set([
     'https://joblog.arthurjenck.com/*',
+    apiMatchPattern,
     ...(import.meta.env.DEV ? ['http://localhost:3000/*', 'http://localhost:5173/*'] : []),
-  ],
+  ])),
   main() {
     window.addEventListener('message', async (event) => {
       if (event.source !== window) return;
@@ -28,3 +33,14 @@ export default defineContentScript({
     });
   },
 });
+
+function toExtensionMatchPattern(rawUrl: string) {
+  const url = new URL(rawUrl);
+  const localhostHosts = new Set(['localhost', '127.0.0.1', '0.0.0.0']);
+
+  if (localhostHosts.has(url.hostname)) {
+    return `${url.protocol}//${url.hostname}/*`;
+  }
+
+  return `${url.origin}/*`;
+}

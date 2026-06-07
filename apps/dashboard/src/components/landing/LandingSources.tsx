@@ -15,6 +15,9 @@ const SOURCES = [
   { id: 'cadremploi', label: 'Cadremploi' },
   { id: 'talent', label: 'Talent' },
   { id: 'lesjeudis', label: 'LesJeudis' },
+  { id: 'asfored', label: 'Asfored' },
+  { id: 'livremploi', label: 'Livremploi' },
+  { id: 'profilculture', label: 'ProfilCulture' },
 ];
 
 const EASE = 'cubic-bezier(0.25, 0.46, 0.45, 0.94)';

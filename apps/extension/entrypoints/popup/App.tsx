@@ -47,7 +47,7 @@ export default function App() {
     return (
       <div className="popup">
         <div className="header">
-          <div className="logo">JL</div>
+          <img src="/icon-cropped.svg" alt="Logo JobLog" className="logo" />
           <span className="title">JobLog</span>
         </div>
         <p className="hint">Connecte-toi pour sauvegarder des offres.</p>
@@ -61,7 +61,7 @@ export default function App() {
   return (
     <div className="popup">
       <div className="header">
-        <div className="logo">JL</div>
+        <img src="/icon-cropped.svg" alt="Logo JobLog" className="logo" />
         <span className="title">JobLog</span>
         <a
           href={`${API_BASE}`}

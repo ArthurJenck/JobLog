@@ -16,6 +16,9 @@ const SOURCE_LABELS: Record<JobSource, string> = {
   cadremploi: 'Cadremploi',
   talent: 'Talent',
   lesjeudis: 'LesJeudis',
+  asfored: 'Asfored',
+  livremploi: 'Livremploi',
+  profilculture: 'ProfilCulture',
   paste: 'URL',
   manual: 'Manuel',
 };
@@ -34,6 +37,9 @@ const SOURCE_LOGOS: Partial<Record<JobSource, string>> = {
   cadremploi: '/icons/cadremploi.webp',
   talent: '/icons/talent.webp',
   lesjeudis: '/icons/lesjeudis.webp',
+  asfored: '/icons/asfored.webp',
+  livremploi: '/icons/livremploi.webp',
+  profilculture: '/icons/profilculture.webp',
 };
 
 export function SourceBadge({ source }: { source: JobSource }) {

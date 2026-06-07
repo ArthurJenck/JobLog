@@ -12,6 +12,9 @@ export const JOB_SOURCES = [
     'cadremploi',
     'talent',
     'lesjeudis',
+    'asfored',
+    'livremploi',
+    'profilculture',
     'paste',
     'manual',
 ] as const

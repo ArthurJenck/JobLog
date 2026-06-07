@@ -29,16 +29,11 @@ body {
 }
 
 .logo {
-  width: 28px;
-  height: 28px;
-  background: #0f0f0f;
-  color: #fff;
-  border-radius: 7px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 11px;
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  position: relative;
+  bottom: 2px;
   flex-shrink: 0;
 }
 
