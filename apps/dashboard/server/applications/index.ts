@@ -3,10 +3,13 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
+import { buildStatusChangeUpdates } from '../../lib/application-status.js';
 import {
   APPLICATION_STATUSES,
   ACTIVE_STATUSES,
   INTERVIEW_CONCLUDING_EVENTS,
+  type ApplicationStatus,
+  type EventType,
 } from '@joblog/shared';
 
 const CreateApplicationSchema = z.object({
@@ -14,6 +17,22 @@ const CreateApplicationSchema = z.object({
   status: z.enum(APPLICATION_STATUSES).default('saved'),
   cvId: z.string().nullable().optional(),
 });
+
+const BulkStatusSchema = z.object({
+  ids: z.array(z.string()).min(1),
+  status: z.enum(APPLICATION_STATUSES),
+});
+
+const BulkDeleteSchema = z.object({
+  ids: z.array(z.string()).min(1),
+});
+
+interface ApplicationStatusDoc {
+  _id: ObjectId;
+  status: ApplicationStatus;
+  appliedAt?: Date | null;
+  events?: Array<{ type: EventType; at: Date; meta: unknown }>;
+}
 
 const SORT_FIELD_MAP: Record<string, string> = {
   title: 'title',
@@ -186,7 +205,13 @@ async function _handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH') {
-    const { cancelAll, excludeId } = req.body as { cancelAll?: boolean; excludeId?: string };
+    const { cancelAll, excludeId, bulkStatus, bulkDelete } = req.body as {
+      cancelAll?: boolean;
+      excludeId?: string;
+      bulkStatus?: { ids: string[]; status: ApplicationStatus };
+      bulkDelete?: { ids: string[] };
+    };
+
     if (cancelAll) {
       const filter: Record<string, unknown> = { userId, status: { $in: ACTIVE_STATUSES } };
       if (excludeId && ObjectId.isValid(excludeId)) {
@@ -196,6 +221,36 @@ async function _handler(req: VercelRequest, res: VercelResponse) {
       await col2.updateMany(filter, { $set: { status: 'cancelled', 'reminder.at': null, updated_at: new Date() } });
       return res.status(200).json({ ok: true });
     }
+
+    if (bulkStatus) {
+      const parsed = BulkStatusSchema.safeParse(bulkStatus);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const objectIds = parsed.data.ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+      if (objectIds.length === 0) return res.status(200).json({ ok: true, updated: 0 });
+
+      const col2 = await getCollection<ApplicationStatusDoc>('applications');
+      const docs = await col2.find({ userId, _id: { $in: objectIds } }).toArray();
+      await Promise.all(
+        docs.map((doc) =>
+          col2.updateOne({ _id: doc._id }, { $set: buildStatusChangeUpdates(doc, parsed.data.status) }),
+        ),
+      );
+      return res.status(200).json({ ok: true, updated: docs.length });
+    }
+
+    if (bulkDelete) {
+      const parsed = BulkDeleteSchema.safeParse(bulkDelete);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const objectIds = parsed.data.ids.filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+      if (objectIds.length === 0) return res.status(200).json({ ok: true, deleted: 0 });
+
+      const col2 = await getCollection('applications');
+      const result = await col2.deleteMany({ userId, _id: { $in: objectIds } });
+      return res.status(200).json({ ok: true, deleted: result.deletedCount });
+    }
+
     return res.status(400).json({ error: 'Invalid patch body' });
   }
 

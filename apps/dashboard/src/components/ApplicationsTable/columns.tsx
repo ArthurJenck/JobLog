@@ -2,6 +2,7 @@ import { type ColumnDef } from '@tanstack/react-table';
 import { LoaderCircleIcon } from 'lucide-react';
 import { StatusBadge } from '@/components/StatusBadge';
 import { SourceBadge } from '@/components/SourceBadge';
+import { Checkbox } from '@/components/ui/checkbox';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import {
@@ -14,6 +15,29 @@ import { ScrapeStatusBadge } from './ScrapeStatusBadge';
 import { fmtDate, dateStatus } from './date-utils';
 
 export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
+  {
+    id: 'select',
+    header: ({ table }) => (
+      <Checkbox
+        checked={
+          table.getIsAllPageRowsSelected() ||
+          (table.getIsSomePageRowsSelected() && 'indeterminate')
+        }
+        onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Tout sélectionner"
+      />
+    ),
+    cell: ({ row }) => (
+      <Checkbox
+        checked={row.getIsSelected()}
+        onCheckedChange={(value) => row.toggleSelected(!!value)}
+        onClick={(e) => e.stopPropagation()}
+        aria-label="Sélectionner la ligne"
+      />
+    ),
+    enableSorting: false,
+  },
   {
     id: 'title',
     header: 'Poste',
@@ -130,7 +154,7 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
   {
     id: 'appliedAt',
     header: 'Candidature',
-    accessorFn: (row) => row.appliedAt ?? row.created_at,
+    accessorFn: (row) => row.appliedAt,
     cell: ({ getValue }) => {
       const v = getValue() as string | null;
       return v ? (

@@ -1,18 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { AddressInput } from '@/components/AddressInput';
 import { api, type LogoSearchResult } from '@/lib/api';
 import { getLogoUrlForDomain } from '@/lib/company-logo';
-import { CONTRACT_TYPES, CONTRACT_LABELS, REMOTE_TYPES, REMOTE_LABELS } from '@joblog/shared';
+import { JobPostingFields } from '@/components/JobPostingFields';
+
+const LAST_CONTRACT_TYPE_KEY = 'joblog:lastContractType';
 
 export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
   const [isLoading, setIsLoading] = useState(false);
@@ -26,7 +19,7 @@ export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
     company_website: '',
     location: '',
     url: '',
-    contract_type: '',
+    contract_type: localStorage.getItem(LAST_CONTRACT_TYPE_KEY) ?? '',
     remote: '',
   });
 
@@ -81,6 +74,11 @@ export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
     e.preventDefault();
     setIsLoading(true);
     try {
+      if (form.contract_type) {
+        localStorage.setItem(LAST_CONTRACT_TYPE_KEY, form.contract_type);
+      } else {
+        localStorage.removeItem(LAST_CONTRACT_TYPE_KEY);
+      }
       const jpRes = await api.jobPostings.create({
         url: form.url || `manual://joblog/${Date.now()}`,
         source: 'manual',
@@ -103,118 +101,62 @@ export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-4 mt-4">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex flex-col gap-1.5">
-          <Label>Poste *</Label>
-          <Input
-            value={form.title}
-            onChange={(e) => set('title', e.target.value)}
-            required
-            placeholder="Développeur Frontend"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Entreprise *</Label>
-          <div className="relative">
-            <Input
-              value={form.company}
-              onChange={(e) => setCompany(e.target.value)}
-              onFocus={() => setIsCompanyFocused(true)}
-              onBlur={() => window.setTimeout(() => setIsCompanyFocused(false), 120)}
-              required
-              placeholder="Acme Corp"
-              autoComplete="off"
-            />
-            {isCompanyFocused && (companyMatches.length > 0 || isSearchingCompany) && !selectedCompany && (
-              <div className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-20 overflow-hidden rounded-md border bg-popover shadow-md">
-                {isSearchingCompany && companyMatches.length === 0 && (
-                  <div className="px-3 py-2 text-xs text-muted-foreground">Recherche…</div>
-                )}
-                {companyMatches.map((match) => {
-                  const logoUrl = getLogoUrlForDomain(match.domain, 32);
+      <JobPostingFields
+        values={form}
+        onChange={(field, value) => set(field, value)}
+        renderCompanyField={() => (
+          <>
+            <div className="relative">
+              <Input
+                value={form.company}
+                onChange={(e) => setCompany(e.target.value)}
+                onFocus={() => setIsCompanyFocused(true)}
+                onBlur={() => window.setTimeout(() => setIsCompanyFocused(false), 120)}
+                required
+                placeholder="Acme Corp"
+                autoComplete="off"
+              />
+              {isCompanyFocused && (companyMatches.length > 0 || isSearchingCompany) && !selectedCompany && (
+                <div className="absolute left-0 right-0 top-[calc(100%+0.25rem)] z-20 overflow-hidden rounded-md border bg-popover shadow-md">
+                  {isSearchingCompany && companyMatches.length === 0 && (
+                    <div className="px-3 py-2 text-xs text-muted-foreground">Recherche…</div>
+                  )}
+                  {companyMatches.map((match) => {
+                    const logoUrl = getLogoUrlForDomain(match.domain, 32);
 
-                  return (
-                    <button
-                      key={match.domain}
-                      type="button"
-                      className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        selectCompany(match);
-                      }}
-                    >
-                      {logoUrl && (
-                        <img
-                          src={logoUrl}
-                          alt={`Logo ${match.name}`}
-                          className="h-5 w-5 rounded object-contain"
-                          referrerPolicy="origin"
-                          onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
-                        />
-                      )}
-                      <span className="min-w-0 flex-1 truncate">{match.name}</span>
-                      <span className="text-xs text-muted-foreground">{match.domain}</span>
-                    </button>
-                  );
-                })}
-              </div>
+                    return (
+                      <button
+                        key={match.domain}
+                        type="button"
+                        className="flex w-full items-center gap-2 px-3 py-2 text-left text-sm hover:bg-muted"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectCompany(match);
+                        }}
+                      >
+                        {logoUrl && (
+                          <img
+                            src={logoUrl}
+                            alt={`Logo ${match.name}`}
+                            className="h-5 w-5 rounded object-contain"
+                            referrerPolicy="origin"
+                            onError={(e) => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }}
+                          />
+                        )}
+                        <span className="min-w-0 flex-1 truncate">{match.name}</span>
+                        <span className="text-xs text-muted-foreground">{match.domain}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+            {selectedCompany && (
+              <span className="text-xs text-muted-foreground">Domaine: {selectedCompany.domain}</span>
             )}
-          </div>
-          {selectedCompany && (
-            <span className="text-xs text-muted-foreground">Domaine: {selectedCompany.domain}</span>
-          )}
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Lieu</Label>
-          <AddressInput
-            value={form.location}
-            onChange={(value) => set('location', value)}
-            placeholder="Paris, France"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>URL de l'offre</Label>
-          <Input
-            value={form.url}
-            onChange={(e) => set('url', e.target.value)}
-            placeholder="https://…"
-            type="url"
-          />
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Contrat</Label>
-          <Select
-            value={form.contract_type}
-            onValueChange={(v) => set('contract_type', v)}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Choisir…" />
-            </SelectTrigger>
-            <SelectContent>
-              {CONTRACT_TYPES.map((c) => (
-                <SelectItem key={c} value={c}>
-                  {CONTRACT_LABELS[c]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-        <div className="flex flex-col gap-1.5">
-          <Label>Remote</Label>
-          <Select value={form.remote} onValueChange={(v) => set('remote', v)}>
-            <SelectTrigger>
-              <SelectValue placeholder="Choisir…" />
-            </SelectTrigger>
-            <SelectContent>
-              {REMOTE_TYPES.map((r) => (
-                <SelectItem key={r} value={r}>
-                  {REMOTE_LABELS[r]}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
+          </>
+        )}
+      />
       <Button type="submit" disabled={isLoading} className="w-full">
         {isLoading ? 'Enregistrement…' : 'Ajouter'}
       </Button>

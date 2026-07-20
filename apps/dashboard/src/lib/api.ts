@@ -41,6 +41,11 @@ export interface AddressSearchResult {
   classification: number | null;
 }
 
+export interface SkillCount {
+  skill: string;
+  count: number;
+}
+
 export interface AnalysisResult {
   keywords_matched: string[];
   keywords_missing: string[];
@@ -115,6 +120,12 @@ export const api = {
     cancelAll(excludeId?: string): Promise<{ ok: boolean }> {
       return request('/applications', { method: 'PATCH', body: JSON.stringify({ cancelAll: true, excludeId }) });
     },
+    bulkStatus(ids: string[], status: string): Promise<{ ok: boolean; updated: number }> {
+      return request('/applications', { method: 'PATCH', body: JSON.stringify({ bulkStatus: { ids, status } }) });
+    },
+    bulkDelete(ids: string[]): Promise<{ ok: boolean; deleted: number }> {
+      return request('/applications', { method: 'PATCH', body: JSON.stringify({ bulkDelete: { ids } }) });
+    },
   },
   jobPostings: {
     create(body: Record<string, unknown>): Promise<{ jobPostingId: string; cached: boolean }> {
@@ -145,6 +156,10 @@ export const api = {
     },
     delete(id: string): Promise<{ ok: boolean }> {
       return request(`/cvs?id=${id}`, { method: 'DELETE' });
+    },
+    skills(cvId: string): Promise<{ present: SkillCount[]; missing: SkillCount[]; analyzedCount: number }> {
+      const qs = new URLSearchParams({ cvId });
+      return request(`/cvs/skills?${qs.toString()}`);
     },
   },
   analyses: {

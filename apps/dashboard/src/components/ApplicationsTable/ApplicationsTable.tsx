@@ -1,8 +1,9 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   useReactTable,
   getCoreRowModel,
   flexRender,
+  type RowSelectionState,
   type SortingState,
 } from '@tanstack/react-table';
 import {
@@ -13,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { api } from '@/lib/api';
 import type {
   ApplicationWithJob,
   ApplicationStatus,
@@ -20,6 +22,7 @@ import type {
 import { applicationColumns } from './columns';
 import { SortIcon } from './SortIcon';
 import { ApplicationsTableToolbar } from './ApplicationsTableToolbar';
+import { ApplicationsTableBulkBar } from './ApplicationsTableBulkBar';
 import { ApplicationsTablePagination } from './ApplicationsTablePagination';
 import { getSuggestion } from './suggestions';
 
@@ -42,6 +45,7 @@ interface Props {
   onPageChange: (p: number) => void;
   onRowClick: (app: ApplicationWithJob) => void;
   onAdd: () => void;
+  onBulkActionComplete: () => void;
   isLoading?: boolean;
   isError?: boolean;
 }
@@ -65,20 +69,25 @@ export function ApplicationsTable({
   onPageChange,
   onRowClick,
   onAdd,
+  onBulkActionComplete,
   isLoading,
   isError,
 }: Props) {
   const sorting: SortingState = [{ id: sortId, desc: sortDesc }];
+  const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   const columns = useMemo(() => applicationColumns, []);
 
   const table = useReactTable({
     data,
     columns,
-    state: { sorting },
+    state: { sorting, rowSelection },
     manualSorting: true,
     manualFiltering: true,
     manualPagination: true,
+    enableRowSelection: true,
+    getRowId: (row) => row._id,
+    onRowSelectionChange: setRowSelection,
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater;
       if (next.length > 0) {
@@ -88,19 +97,42 @@ export function ApplicationsTable({
     getCoreRowModel: getCoreRowModel(),
   });
 
+  const selectedIds = Object.keys(rowSelection).filter((id) => rowSelection[id]);
+
+  async function handleBulkStatusChange(status: ApplicationStatus) {
+    await api.applications.bulkStatus(selectedIds, status);
+    setRowSelection({});
+    onBulkActionComplete();
+  }
+
+  async function handleBulkDelete() {
+    await api.applications.bulkDelete(selectedIds);
+    setRowSelection({});
+    onBulkActionComplete();
+  }
+
   return (
     <div className="flex flex-col gap-4">
-      <ApplicationsTableToolbar
-        statuses={statuses}
-        searchText={searchText}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        onStatusesChange={onStatusesChange}
-        onSearchChange={onSearchChange}
-        onDateFromChange={onDateFromChange}
-        onDateToChange={onDateToChange}
-        onAdd={onAdd}
-      />
+      {selectedIds.length > 0 ? (
+        <ApplicationsTableBulkBar
+          count={selectedIds.length}
+          onStatusChange={handleBulkStatusChange}
+          onDelete={handleBulkDelete}
+          onClear={() => setRowSelection({})}
+        />
+      ) : (
+        <ApplicationsTableToolbar
+          statuses={statuses}
+          searchText={searchText}
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onStatusesChange={onStatusesChange}
+          onSearchChange={onSearchChange}
+          onDateFromChange={onDateFromChange}
+          onDateToChange={onDateToChange}
+          onAdd={onAdd}
+        />
+      )}
 
       <div className="rounded-md border">
         <Table>

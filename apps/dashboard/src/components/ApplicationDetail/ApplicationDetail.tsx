@@ -176,12 +176,24 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                   <span className="text-xs text-muted-foreground">{REMOTE_LABELS[jp.remote as RemoteType] ?? jp.remote}</span>
                 )}
                 {jp?.location && (
-                  <span className="text-xs text-muted-foreground">{jp.location}</span>
+                  <a
+                    href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(jp.location)}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2"
+                  >
+                    {jp.location}
+                  </a>
                 )}
                 {jp?.url && (
-                  <a href={jp.url} target="_blank" rel="noreferrer" className="text-xs text-muted-foreground hover:text-foreground flex items-center gap-1">
+                  <a
+                    href={jp.url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md border px-2 py-1 text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
                     <ExternalLinkIcon className="h-3 w-3" />
-                    Offre
+                    Voir l'offre
                   </a>
                 )}
               </div>

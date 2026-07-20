@@ -1,5 +1,5 @@
 import { Link, useRouter, useRouterState } from '@tanstack/react-router';
-import { useEffect, useState } from 'react';
+import { Fragment } from 'react';
 import {
   Sidebar,
   SidebarContent,
@@ -18,9 +18,11 @@ import {
   FileTextIcon,
   SettingsIcon,
   LogOutIcon,
+  ExternalLinkIcon,
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { api } from '@/lib/api';
+import { getExtensionStoreUrl } from '@/lib/extension-url';
+import { resetSessionCache, useStats } from '@/lib/app-context';
 
 const navItems = [
   { to: '/', label: 'Candidatures', icon: BriefcaseIcon },
@@ -28,25 +30,12 @@ const navItems = [
   { to: '/settings', label: 'Paramètres', icon: SettingsIcon },
 ];
 
-type Stats = {
-  total: number;
-  applied?: number;
-  interview?: number;
-  offer?: number;
-};
-
 export function AppSidebar() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
-  const [stats, setStats] = useState<Stats>({ total: 0 });
-
-  useEffect(() => {
-    api.stats
-      .get()
-      .then(setStats)
-      .catch(() => {});
-  }, []);
+  const { stats } = useStats();
+  const extensionUrl = isMobile ? null : getExtensionStoreUrl();
 
   return (
     <Sidebar>
@@ -67,15 +56,27 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item) => (
-                <SidebarMenuItem key={item.to}>
-                  <SidebarMenuButton asChild isActive={pathname === item.to}>
-                    <Link to={item.to} onClick={() => { if (isMobile) setOpenMobile(false); }}>
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.label}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
+              {navItems.map((item, index) => (
+                <Fragment key={item.to}>
+                  <SidebarMenuItem>
+                    <SidebarMenuButton asChild isActive={pathname === item.to}>
+                      <Link to={item.to} onClick={() => { if (isMobile) setOpenMobile(false); }}>
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.label}</span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                  {index === 0 && extensionUrl && (
+                    <SidebarMenuItem>
+                      <SidebarMenuButton asChild>
+                        <a href={extensionUrl} target="_blank" rel="noreferrer">
+                          <ExternalLinkIcon className="h-4 w-4" />
+                          <span>Extension</span>
+                        </a>
+                      </SidebarMenuButton>
+                    </SidebarMenuItem>
+                  )}
+                </Fragment>
               ))}
             </SidebarMenu>
           </SidebarGroupContent>
@@ -128,6 +129,7 @@ export function AppSidebar() {
                   method: 'POST',
                   credentials: 'include',
                 });
+                resetSessionCache();
                 await router.invalidate();
                 router.navigate({ to: '/login' });
               }}

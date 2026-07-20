@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
-import { SessionContext } from './__root';
+import { SessionContext, useStats } from '@/lib/app-context';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { ApplicationsTable } from '@/components/ApplicationsTable';
 import { ApplicationDetail } from '@/components/ApplicationDetail';
@@ -79,6 +79,7 @@ function formatSnoozeToastDelay(days?: number) {
 
 export function IndexPage() {
   const navigate = useNavigate();
+  const { refreshStats } = useStats();
   const search = Route.useSearch();
   const openedSearchAppId = useRef<string | null>(null);
   const shownToast = useRef<string | null>(null);
@@ -316,6 +317,7 @@ export function IndexPage() {
 
   async function refreshDetail() {
     await fetchApplications();
+    void refreshStats();
     if (selectedApp) {
       const updated = await api.applications.get(selectedApp._id);
       setSelectedApp(updated);
@@ -325,6 +327,7 @@ export function IndexPage() {
   async function handleCreated(applicationId: string) {
     setAddOpen(false);
     await fetchApplications();
+    void refreshStats();
     const created = await api.applications.get(applicationId);
     openDetail(created);
     if (isScrapeActive(created)) {
@@ -332,6 +335,11 @@ export function IndexPage() {
         description: "La récupération de l'offre continue en arrière-plan.",
       });
     }
+  }
+
+  async function handleBulkActionComplete() {
+    await fetchApplications();
+    void refreshStats();
   }
 
   return (
@@ -357,6 +365,7 @@ export function IndexPage() {
         onPageChange={setPage}
         onRowClick={openDetail}
         onAdd={() => setAddOpen(true)}
+        onBulkActionComplete={handleBulkActionComplete}
         isLoading={isLoading}
         isError={isError}
       />

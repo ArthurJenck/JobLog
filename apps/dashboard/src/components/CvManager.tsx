@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { CvUpload } from './CvUpload';
+import { CvSkillsPanel } from './CvSkillsPanel';
 import { api } from '@/lib/api';
 import type { Cv } from '@joblog/shared';
 import { FileTextIcon, Trash2Icon, PencilIcon, CheckIcon, XIcon } from 'lucide-react';
@@ -68,7 +69,7 @@ export function CvManager() {
   }
 
   return (
-    <div className="flex flex-col gap-4 max-w-lg">
+    <div className="flex flex-col gap-4 max-w-3xl">
       {cvs.length === 0 ? (
         <CvUpload onUploaded={() => load()} />
       ) : (
@@ -149,6 +150,9 @@ export function CvManager() {
               </div>
             ))}
           </div>
+
+          <Separator />
+          <CvSkillsPanel cvs={cvs} />
         </>
       )}
     </div>
