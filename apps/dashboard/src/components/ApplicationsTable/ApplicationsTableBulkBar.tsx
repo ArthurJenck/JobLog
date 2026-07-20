@@ -16,7 +16,11 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Trash2Icon, XIcon } from 'lucide-react';
-import { APPLICATION_STATUSES, STATUS_LABELS, type ApplicationStatus } from '@joblog/shared';
+import {
+  APPLICATION_STATUSES,
+  STATUS_LABELS,
+  type ApplicationStatus,
+} from '@joblog/shared';
 
 interface Props {
   count: number;
@@ -25,11 +29,16 @@ interface Props {
   onClear: () => void;
 }
 
-export function ApplicationsTableBulkBar({ count, onStatusChange, onDelete, onClear }: Props) {
+export function ApplicationsTableBulkBar({
+  count,
+  onStatusChange,
+  onDelete,
+  onClear,
+}: Props) {
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <div className="flex items-center gap-3 rounded-md border bg-muted/40 px-3 py-2">
+    <div className="flex items-center gap-3 px-3 py-0.5">
       <Button
         variant="ghost"
         size="icon"
@@ -42,7 +51,10 @@ export function ApplicationsTableBulkBar({ count, onStatusChange, onDelete, onCl
       <span className="text-sm font-medium">
         {count} sélectionnée{count > 1 ? 's' : ''}
       </span>
-      <Select value="" onValueChange={(v) => onStatusChange(v as ApplicationStatus)}>
+      <Select
+        value=""
+        onValueChange={(v) => onStatusChange(v as ApplicationStatus)}
+      >
         <SelectTrigger className="h-8 w-48 text-sm">
           <SelectValue placeholder="Changer le statut" />
         </SelectTrigger>
@@ -67,13 +79,19 @@ export function ApplicationsTableBulkBar({ count, onStatusChange, onDelete, onCl
       <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
         <DialogContent className="sm:max-w-sm">
           <DialogHeader>
-            <DialogTitle>Supprimer {count} candidature{count > 1 ? 's' : ''} ?</DialogTitle>
+            <DialogTitle>
+              Supprimer {count} candidature{count > 1 ? 's' : ''} ?
+            </DialogTitle>
             <DialogDescription>
               Cette action est définitive et ne peut pas être annulée.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button variant="outline" size="sm" onClick={() => setConfirmOpen(false)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setConfirmOpen(false)}
+            >
               Annuler
             </Button>
             <Button

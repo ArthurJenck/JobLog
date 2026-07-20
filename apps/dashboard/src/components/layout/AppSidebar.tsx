@@ -64,7 +64,12 @@ export function AppSidebar() {
                 <Fragment key={item.to}>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === item.to}>
-                      <Link to={item.to} onClick={() => { if (isMobile) setOpenMobile(false); }}>
+                      <Link
+                        to={item.to}
+                        onClick={() => {
+                          if (isMobile) setOpenMobile(false);
+                        }}
+                      >
                         <item.icon className="h-4 w-4" />
                         <span>{item.label}</span>
                       </Link>
@@ -119,7 +124,12 @@ export function AppSidebar() {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton asChild>
-              <Link to="/privacy" onClick={() => { if (isMobile) setOpenMobile(false); }}>
+              <Link
+                to="/privacy"
+                onClick={() => {
+                  if (isMobile) setOpenMobile(false);
+                }}
+              >
                 <span className="text-xs text-muted-foreground">
                   Confidentialité
                 </span>
