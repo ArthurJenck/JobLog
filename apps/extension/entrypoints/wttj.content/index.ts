@@ -12,7 +12,7 @@ export default defineContentScript({
 });
 
 function isJobPage() {
-  return window.location.pathname.includes('/jobs/') || window.location.pathname.includes('/jobs-matches');
+  return window.location.pathname.includes('/jobs/');
 }
 
 function extract(): JobPostingDraft {
