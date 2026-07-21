@@ -135,6 +135,14 @@ export function ApplicationsTable({
 
       <div className="rounded-md border">
         <Table>
+          <colgroup>
+            {table.getVisibleLeafColumns().map((column) => (
+              <col
+                key={column.id}
+                style={column.id === 'select' ? { width: 32 } : undefined}
+              />
+            ))}
+          </colgroup>
           <TableHeader>
             {table.getHeaderGroups().map((hg) => (
               <TableRow key={hg.id}>
