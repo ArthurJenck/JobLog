@@ -31,6 +31,8 @@ export async function ensureIndexes() {
     ),
     db.collection('jina_usage').createIndex({ date: 1, alertedAt: 1 }),
 
+    db.collection('firecrawl_usage').createIndex({ month: 1 }, { unique: true }),
+
     db.collection('notification_settings').createIndex({ userId: 1 }, { unique: true }),
 
     db.collection('extension_tokens').createIndex({ tokenHash: 1 }, { unique: true }),

@@ -29,14 +29,12 @@ const queue = new QueueClient();
 let didRegisterDevConsumer = false;
 
 const URL_USAGE_KIND = 'url_paste';
-// TODO: RETIRER QUAND EXTENSION ACCEPTEE DANS LE CHROME WEB STORE (remettre 3)
-const URL_USAGE_WARNING_AT = Number.MAX_SAFE_INTEGER;
-// TODO: RETIRER QUAND EXTENSION ACCEPTEE DANS LE CHROME WEB STORE (remettre 5)
-// TODO: QUAND EXTENSION ACCEPTEE DANS LE CHROME WEB STORE, remplacer JINA par Firecrawl
-//       pour avoir des scrapes mensuels et ne plus dépendre d'un bucket à renflouer
-const URL_USAGE_LIMIT = Number.MAX_SAFE_INTEGER;
+const URL_USAGE_WARNING_AT = 12;
+const URL_USAGE_LIMIT = 15;
 const JINA_ALERT_THRESHOLD_DEFAULT = 8_000_000;
 const JINA_READER_URL = 'https://r.jina.ai/';
+const FIRECRAWL_API_URL = 'https://api.firecrawl.dev/v2/scrape';
+const FIRECRAWL_MONTHLY_SOFT_CAP = 900;
 const MAX_MARKDOWN_CHARS_FOR_GEMINI = 18_000;
 const MAX_DESCRIPTION_CHARS = 10_000;
 const PARIS_TIME_ZONE = 'Europe/Paris';
@@ -196,6 +194,33 @@ interface JinaUsageDoc {
   created_at: Date;
   updated_at: Date;
 }
+
+interface FirecrawlUsageDoc {
+  month: string;
+  calls: number;
+  successCalls: number;
+  failureCalls: number;
+  lastStatus: number | null;
+  lastErrorCode?: string;
+  lastErrorAt?: Date;
+  alertedAt: Date | null;
+  created_at: Date;
+  updated_at: Date;
+}
+
+type ScrapeResult = {
+  ok: true;
+  markdown: string;
+  status: number;
+  errorCode: null;
+  provider: ScrapeMethod;
+} | {
+  ok: false;
+  markdown: null;
+  status: number | null;
+  errorCode: string;
+  provider: ScrapeMethod;
+};
 
 export class UrlScrapeHttpError extends Error {
   status: number;
@@ -539,44 +564,27 @@ export async function processUrlScrapeMessage(
       },
     );
 
-    const jinaApiKey = getEnv('JINA_API_KEY');
-    if (!jinaApiKey) {
-      throw new ScrapeFailure('jina_missing_api_key', 'Service de récupération temporairement indisponible.');
-    }
+    const scrapeResult = await scrapeWithFallback(message.url);
 
-    const jinaResult = await fetchJinaMarkdown(message.url, jinaApiKey);
-    await recordJinaUsage({
-      apiKey: jinaApiKey,
-      status: jinaResult.status,
-      outputChars: jinaResult.markdown?.length ?? 0,
-      errorCode: jinaResult.errorCode,
-    });
-
-    if (!jinaResult.ok) {
-      const status = jinaResult.errorCode === 'jina_auth_error' ||
-        jinaResult.errorCode === 'jina_balance_error' ||
-        jinaResult.errorCode === 'jina_rate_limited' ||
-        jinaResult.errorCode === 'jina_unavailable' ||
-        jinaResult.errorCode === 'jina_fetch_failed'
-        ? 503
-        : 422;
+    if (!scrapeResult.ok) {
+      const status = isTransientScrapeError(scrapeResult.errorCode) ? 503 : 422;
 
       throw new ScrapeFailure(
-        jinaResult.errorCode,
+        scrapeResult.errorCode,
         status === 503
           ? 'Service de récupération temporairement indisponible.'
           : unreadableUrlMessage(message.url),
-        jinaResult.status,
+        scrapeResult.status,
       );
     }
 
     if (isBlockedOrErrorContent({
       title: '',
       company: '',
-      content: jinaResult.markdown,
-      status: jinaResult.status,
+      content: scrapeResult.markdown,
+      status: scrapeResult.status,
     })) {
-      throw new ScrapeFailure('site_blocks_reader', blockedScrapeMessage(message.url), jinaResult.status);
+      throw new ScrapeFailure('site_blocks_reader', blockedScrapeMessage(message.url), scrapeResult.status);
     }
 
     steps = markStep(steps, 'fetch', 'succeeded', new Date());
@@ -593,7 +601,7 @@ export async function processUrlScrapeMessage(
       throw new ScrapeFailure('gemini_quota_exceeded', "Quota d'analyse atteint, réessayez demain.");
     }
 
-    const extraction = await extractWithGemini(jinaResult.markdown, message.url, geminiApiKey);
+    const extraction = await extractWithGemini(scrapeResult.markdown, message.url, geminiApiKey);
     if (!extraction) {
       throw new ScrapeFailure('gemini_extraction_failed', "Impossible d'extraire les informations principales de cette offre.");
     }
@@ -625,7 +633,7 @@ export async function processUrlScrapeMessage(
           requirements: extraction.requirements,
           keywords: extraction.keywords,
           company_website: extraction.company_website,
-          scrape_method: 'jina',
+          scrape_method: scrapeResult.provider,
           scraped_at: now,
           scrape_status: 'succeeded',
           scrape_steps: steps,
@@ -933,17 +941,7 @@ function isBlockedLegacyJobPosting(jobPosting: JobPostingDoc) {
   });
 }
 
-async function fetchJinaMarkdown(url: string, apiKey: string): Promise<{
-  ok: true;
-  markdown: string;
-  status: number;
-  errorCode: null;
-} | {
-  ok: false;
-  markdown: null;
-  status: number | null;
-  errorCode: string;
-}> {
+async function fetchJinaMarkdown(url: string, apiKey: string): Promise<ScrapeResult> {
   try {
     const resp = await fetch(`${JINA_READER_URL}${url}`, {
       headers: {
@@ -962,16 +960,18 @@ async function fetchJinaMarkdown(url: string, apiKey: string): Promise<{
         markdown: null,
         status: resp.status,
         errorCode: classifyJinaHttpError(resp.status, text),
+        provider: 'jina',
       };
     }
 
-    return { ok: true, markdown: text, status: resp.status, errorCode: null };
+    return { ok: true, markdown: text, status: resp.status, errorCode: null, provider: 'jina' };
   } catch {
     return {
       ok: false,
       markdown: null,
       status: null,
       errorCode: 'jina_fetch_failed',
+      provider: 'jina',
     };
   }
 }
@@ -992,6 +992,124 @@ function classifyJinaHttpError(status: number, body: string) {
   }
   if (status >= 500) return 'jina_unavailable';
   return 'jina_target_unreadable';
+}
+
+async function fetchFirecrawlMarkdown(url: string, apiKey: string): Promise<ScrapeResult> {
+  try {
+    const resp = await fetch(FIRECRAWL_API_URL, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${apiKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ url, formats: ['markdown'], onlyMainContent: true }),
+      signal: AbortSignal.timeout(25_000),
+    });
+
+    const text = await resp.text();
+    if (!resp.ok) {
+      return {
+        ok: false,
+        markdown: null,
+        status: resp.status,
+        errorCode: classifyFirecrawlHttpError(resp.status, text),
+        provider: 'firecrawl',
+      };
+    }
+
+    const data = JSON.parse(text) as { data?: { markdown?: string; metadata?: { statusCode?: number } } };
+    const markdown = data.data?.markdown;
+    if (!markdown) {
+      return {
+        ok: false,
+        markdown: null,
+        status: resp.status,
+        errorCode: 'firecrawl_target_unreadable',
+        provider: 'firecrawl',
+      };
+    }
+
+    return {
+      ok: true,
+      markdown,
+      status: data.data?.metadata?.statusCode ?? resp.status,
+      errorCode: null,
+      provider: 'firecrawl',
+    };
+  } catch {
+    return {
+      ok: false,
+      markdown: null,
+      status: null,
+      errorCode: 'firecrawl_fetch_failed',
+      provider: 'firecrawl',
+    };
+  }
+}
+
+function classifyFirecrawlHttpError(status: number, body: string) {
+  const text = body.toLowerCase();
+  if (status === 401 || text.includes('unauthorized') || text.includes('invalid api key')) {
+    return 'firecrawl_auth_error';
+  }
+  if (status === 402 || text.includes('insufficient credits') || text.includes('payment required')) {
+    return 'firecrawl_quota_exhausted';
+  }
+  if (status === 429 || text.includes('rate limit')) {
+    return 'firecrawl_rate_limited';
+  }
+  if (status >= 500) return 'firecrawl_unavailable';
+  return 'firecrawl_target_unreadable';
+}
+
+function isFirecrawlTransientError(errorCode: string) {
+  return errorCode === 'firecrawl_auth_error' ||
+    errorCode === 'firecrawl_quota_exhausted' ||
+    errorCode === 'firecrawl_rate_limited' ||
+    errorCode === 'firecrawl_unavailable' ||
+    errorCode === 'firecrawl_fetch_failed';
+}
+
+function isTransientScrapeError(errorCode: string) {
+  return errorCode === 'jina_auth_error' ||
+    errorCode === 'jina_balance_error' ||
+    errorCode === 'jina_rate_limited' ||
+    errorCode === 'jina_unavailable' ||
+    errorCode === 'jina_fetch_failed' ||
+    isFirecrawlTransientError(errorCode);
+}
+
+async function scrapeWithFallback(url: string): Promise<ScrapeResult> {
+  const firecrawlApiKey = getEnv('FIRECRAWL_API_KEY');
+
+  if (firecrawlApiKey) {
+    const reserved = await reserveFirecrawlSlot();
+    if (reserved) {
+      const result = await fetchFirecrawlMarkdown(url, firecrawlApiKey);
+      await recordFirecrawlUsage({ status: result.status, errorCode: result.errorCode });
+
+      if (result.ok) return result;
+
+      if (!isFirecrawlTransientError(result.errorCode)) return result;
+
+      await releaseFirecrawlSlot();
+    }
+  }
+
+  const jinaApiKey = getEnv('JINA_API_KEY');
+  if (!jinaApiKey) {
+    throw new ScrapeFailure('jina_missing_api_key', 'Service de récupération temporairement indisponible.');
+  }
+
+  const jinaResult = await fetchJinaMarkdown(url, jinaApiKey);
+  await recordJinaUsage({
+    apiKey: jinaApiKey,
+    status: jinaResult.status,
+    outputChars: jinaResult.markdown?.length ?? 0,
+    errorCode: jinaResult.errorCode,
+  });
+
+  return jinaResult;
 }
 
 async function extractWithGemini(
@@ -1036,7 +1154,7 @@ async function extractWithGemini(
 }
 
 function buildGeminiPrompt(url: string, markdown: string) {
-  return `Extrait les informations principales de cette offre d'emploi depuis le markdown Jina ci-dessous.
+  return `Extrait les informations principales de cette offre d'emploi depuis le markdown ci-dessous.
 Réponds uniquement en JSON strict avec ces clés:
 {
   "readable": boolean,
@@ -1258,7 +1376,7 @@ function unreadableUrlMessage(url: string) {
     return "LinkedIn est illisible automatiquement ou bloque la récupération serveur. L'extension reste le chemin le plus fiable.";
   }
 
-  return "Impossible de lire cette URL automatiquement. Le site peut bloquer la récupération serveur, être indisponible, ou renvoyer une page que Jina ne peut pas convertir.";
+  return "Impossible de lire cette URL automatiquement. Le site peut bloquer la récupération serveur, être indisponible, ou renvoyer une page que le service de lecture ne peut pas convertir.";
 }
 
 async function getUrlUsage(userId: string): Promise<UrlUsage> {
@@ -1396,6 +1514,80 @@ async function recordJinaUsage({
 
 function estimateTokens(chars: number) {
   return Math.max(0, Math.ceil(chars / 4));
+}
+
+async function reserveFirecrawlSlot(): Promise<boolean> {
+  const col = await getCollection<FirecrawlUsageDoc>('firecrawl_usage');
+  const month = getParisMonthKey();
+  const now = new Date();
+
+  const result = await col.findOneAndUpdate(
+    { month, calls: { $lt: FIRECRAWL_MONTHLY_SOFT_CAP } },
+    {
+      $inc: { calls: 1 },
+      $set: { updated_at: now },
+      $setOnInsert: {
+        month,
+        successCalls: 0,
+        failureCalls: 0,
+        lastStatus: null,
+        alertedAt: null,
+        created_at: now,
+      },
+    },
+    { upsert: true, returnDocument: 'after' },
+  );
+
+  return result !== null;
+}
+
+async function releaseFirecrawlSlot() {
+  const col = await getCollection<FirecrawlUsageDoc>('firecrawl_usage');
+  const month = getParisMonthKey();
+
+  await col.updateOne(
+    { month, calls: { $gt: 0 } },
+    { $inc: { calls: -1 }, $set: { updated_at: new Date() } },
+  );
+}
+
+async function recordFirecrawlUsage({
+  status,
+  errorCode,
+}: {
+  status: number | null;
+  errorCode: string | null;
+}) {
+  const col = await getCollection<FirecrawlUsageDoc>('firecrawl_usage');
+  const month = getParisMonthKey();
+  const now = new Date();
+  const isSuccess = !errorCode;
+
+  await col.updateOne(
+    { month },
+    {
+      $inc: {
+        successCalls: isSuccess ? 1 : 0,
+        failureCalls: isSuccess ? 0 : 1,
+      },
+      $set: {
+        updated_at: now,
+        lastStatus: status,
+        ...(errorCode ? { lastErrorCode: errorCode, lastErrorAt: now } : {}),
+      },
+      $setOnInsert: {
+        month,
+        calls: 0,
+        alertedAt: null,
+        created_at: now,
+      },
+    },
+    { upsert: true },
+  );
+}
+
+function getParisMonthKey(date = new Date()) {
+  return getParisDateKey(date).slice(0, 7);
 }
 
 function getJinaAlertThreshold() {

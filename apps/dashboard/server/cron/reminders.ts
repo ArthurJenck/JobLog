@@ -7,6 +7,7 @@ import { sendEmail } from '../../lib/resend.js';
 import { TERMINAL_STATUSES } from '@joblog/shared';
 
 const JINA_ALERT_THRESHOLD_DEFAULT = 8_000_000;
+const FIRECRAWL_MONTHLY_SOFT_CAP = 900;
 const PARIS_TIME_ZONE = 'Europe/Paris';
 
 interface ReminderApplicationDoc {
@@ -47,6 +48,13 @@ interface JinaUsageDoc {
   alertedAt: Date | null;
 }
 
+interface FirecrawlUsageDoc {
+  month: string;
+  calls: number;
+  lastErrorCode?: string;
+  alertedAt: Date | null;
+}
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const authHeader = req.headers['authorization'];
   if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
@@ -79,6 +87,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   let skipped = 0;
   const errors: string[] = [];
   let jinaAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
+  let firecrawlAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
 
   for (const app of due) {
     try {
@@ -146,12 +155,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     };
   }
 
+  try {
+    firecrawlAlert = await checkFirecrawlUsageAlerts();
+  } catch (error) {
+    firecrawlAlert = {
+      checked: false,
+      sent: 0,
+      error: error instanceof Error ? error.message : String(error),
+    };
+  }
+
   return res.status(200).json({
     processed: due.length,
     sent,
     failed,
     skipped,
     jinaAlert,
+    firecrawlAlert,
     errors: errors.slice(0, 10),
   });
 }
@@ -224,6 +244,46 @@ async function checkJinaUsageAlerts() {
   );
 
   return { checked: true, sent: 1 };
+}
+
+async function checkFirecrawlUsageAlerts() {
+  const to = getEnv('JINA_ALERT_EMAIL');
+  if (!to) return { checked: true, sent: 0, skipped: 'missing_jina_alert_email' };
+
+  const col = await getCollection<FirecrawlUsageDoc>('firecrawl_usage');
+  const month = getParisMonthKey();
+  const doc = await col.findOne({
+    month,
+    alertedAt: null,
+    $or: [
+      { calls: { $gte: FIRECRAWL_MONTHLY_SOFT_CAP } },
+      { lastErrorCode: { $in: ['firecrawl_auth_error', 'firecrawl_quota_exhausted'] } },
+    ],
+  });
+
+  if (!doc) return { checked: true, sent: 0 };
+
+  const calls = Number(doc.calls ?? 0).toLocaleString('fr-FR');
+  const lastError = doc.lastErrorCode ? escapeHtml(String(doc.lastErrorCode)) : 'aucune';
+
+  await sendEmail({
+    from: getEnv('RESEND_ALERT_FROM') ?? getEnv('RESEND_FROM') ?? 'JobLog <noreply@arthurjenck.com>',
+    to,
+    subject: `JobLog - alerte Firecrawl ${month}`,
+    html: `
+<p>Le quota mensuel gratuit Firecrawl approche de sa limite pour JobLog.</p>
+<p>${calls} appels ce mois-ci, dernière erreur: ${lastError}.</p>
+<p>Seuil configuré: ${FIRECRAWL_MONTHLY_SOFT_CAP.toLocaleString('fr-FR')} appels. Les scrapes basculent automatiquement sur Jina au-delà.</p>
+`,
+  });
+
+  await col.updateOne({ _id: doc._id }, { $set: { alertedAt: new Date() } });
+
+  return { checked: true, sent: 1 };
+}
+
+function getParisMonthKey(date = new Date()) {
+  return getParisDateKey(date).slice(0, 7);
 }
 
 function getJinaAlertThreshold() {
