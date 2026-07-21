@@ -208,7 +208,10 @@ export function ApplicationsTable({
                     className={`transition-colors group-hover:bg-muted/50 ${suggestion ? '' : 'border-b'}`}
                   >
                     {row.getVisibleCells().map((cell) => (
-                      <td key={cell.id} className="p-4 align-middle">
+                      <td
+                        key={cell.id}
+                        className={`p-4 align-middle ${cell.column.id === 'select' ? 'pr-0' : ''}`}
+                      >
                         {flexRender(
                           cell.column.columnDef.cell,
                           cell.getContext(),
