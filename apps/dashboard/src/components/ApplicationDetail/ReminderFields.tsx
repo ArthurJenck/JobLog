@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  TERMINAL_STATUSES,
+  REMINDER_ELIGIBLE_STATUSES,
   type ApplicationStatus,
   type ApplicationWithJob,
 } from '@joblog/shared';
@@ -29,7 +29,7 @@ export function ReminderFields({
   const [frequencyDays, setFrequencyDays] = useState(reminder.frequencyDays);
   const [at, setAt] = useState(reminder.at ?? null);
 
-  const isTerminal = TERMINAL_STATUSES.includes(status);
+  const isTerminal = !REMINDER_ELIGIBLE_STATUSES.includes(status);
 
   const followupEvents = events
     .filter((e) => e.type === 'followup_sent')

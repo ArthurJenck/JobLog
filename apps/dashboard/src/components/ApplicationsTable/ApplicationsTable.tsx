@@ -15,10 +15,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { api } from '@/lib/api';
-import type {
-  ApplicationWithJob,
-  ApplicationStatus,
-} from '@joblog/shared';
+import type { ApplicationWithJob, ApplicationStatus } from '@joblog/shared';
 import { applicationColumns } from './columns';
 import { SortIcon } from './SortIcon';
 import { ApplicationsTableToolbar } from './ApplicationsTableToolbar';
@@ -97,7 +94,9 @@ export function ApplicationsTable({
     getCoreRowModel: getCoreRowModel(),
   });
 
-  const selectedIds = Object.keys(rowSelection).filter((id) => rowSelection[id]);
+  const selectedIds = Object.keys(rowSelection).filter(
+    (id) => rowSelection[id],
+  );
 
   async function handleBulkStatusChange(status: ApplicationStatus) {
     await api.applications.bulkStatus(selectedIds, status);
@@ -143,7 +142,7 @@ export function ApplicationsTable({
                   <TableHead key={header.id}>
                     {header.column.getCanSort() ? (
                       <button
-                        className="flex items-center gap-1 hover:text-foreground transition-colors"
+                        className="flex items-center gap-1 hover:text-foreground transition-colors text-left"
                         onClick={header.column.getToggleSortingHandler()}
                       >
                         {flexRender(

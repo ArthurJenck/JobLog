@@ -1,9 +1,10 @@
-import { STATUS_EVENT, TERMINAL_STATUSES, type ApplicationStatus, type EventType } from '@joblog/shared';
+import { STATUS_EVENT, TERMINAL_STATUSES, REMINDER_ELIGIBLE_STATUSES, type ApplicationStatus, type EventType } from '@joblog/shared';
 
 interface StatusChangeSource {
   status: ApplicationStatus;
   appliedAt?: Date | null;
   events?: Array<{ type: EventType; at: Date; meta: unknown }>;
+  reminder?: { at?: Date | null; frequencyDays?: number } | null;
 }
 
 export function buildStatusChangeUpdates(app: StatusChangeSource, newStatus: ApplicationStatus) {
@@ -15,6 +16,9 @@ export function buildStatusChangeUpdates(app: StatusChangeSource, newStatus: App
 
   if (TERMINAL_STATUSES.includes(newStatus)) {
     updates['reminder.at'] = null;
+  } else if (REMINDER_ELIGIBLE_STATUSES.includes(newStatus) && !app.reminder?.at) {
+    const frequencyDays = app.reminder?.frequencyDays ?? 7;
+    updates['reminder.at'] = new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
   }
 
   if (newStatus !== app.status) {

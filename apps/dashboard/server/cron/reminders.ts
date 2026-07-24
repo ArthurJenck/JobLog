@@ -4,7 +4,7 @@ import { getCollection } from '../../lib/db.js';
 import { getEnv } from '../../lib/env.js';
 import { sendReminderEmail } from '../../lib/email.js';
 import { sendEmail } from '../../lib/resend.js';
-import { TERMINAL_STATUSES } from '@joblog/shared';
+import { REMINDER_ELIGIBLE_STATUSES } from '@joblog/shared';
 
 const JINA_ALERT_THRESHOLD_DEFAULT = 8_000_000;
 const FIRECRAWL_MONTHLY_SOFT_CAP = 900;
@@ -77,7 +77,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { 'reminder.snoozedUntil': null },
       { 'reminder.snoozedUntil': { $lte: now } },
     ],
-    status: { $nin: [...TERMINAL_STATUSES, 'offer'] },
+    status: { $in: REMINDER_ELIGIBLE_STATUSES },
   } as Filter<ReminderApplicationDoc>;
 
   const due = await appCol.find(dueFilter).toArray();

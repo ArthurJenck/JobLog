@@ -7,6 +7,7 @@ import { buildStatusChangeUpdates } from '../../lib/application-status.js';
 import {
   APPLICATION_STATUSES,
   ACTIVE_STATUSES,
+  REMINDER_ELIGIBLE_STATUSES,
   INTERVIEW_CONCLUDING_EVENTS,
   type ApplicationStatus,
   type EventType,
@@ -32,6 +33,7 @@ interface ApplicationStatusDoc {
   status: ApplicationStatus;
   appliedAt?: Date | null;
   events?: Array<{ type: EventType; at: Date; meta: unknown }>;
+  reminder?: { at?: Date | null; frequencyDays?: number } | null;
 }
 
 const SORT_FIELD_MAP: Record<string, string> = {
@@ -268,6 +270,7 @@ async function _handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const now = new Date();
+    const reminderFrequencyDays = 7;
     const doc = {
       userId,
       jobPostingId,
@@ -278,8 +281,10 @@ async function _handler(req: VercelRequest, res: VercelResponse) {
       notes: null,
       events: [{ type: 'created', at: now, meta: null }],
       reminder: {
-        at: null,
-        frequencyDays: 7,
+        at: REMINDER_ELIGIBLE_STATUSES.includes(status)
+          ? new Date(now.getTime() + reminderFrequencyDays * 24 * 60 * 60 * 1000)
+          : null,
+        frequencyDays: reminderFrequencyDays,
         maxCount: 3,
         sentCount: 0,
         snoozedUntil: null,

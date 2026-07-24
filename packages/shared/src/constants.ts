@@ -45,6 +45,7 @@ export const STATUS_LABELS: Record<ApplicationStatus, string> = {
 
 export const ACTIVE_STATUSES: ApplicationStatus[] = ['saved', 'applied', 'interview', 'offer']
 export const TERMINAL_STATUSES: ApplicationStatus[] = ['rejected', 'ghosted', 'cancelled', 'accepted']
+export const REMINDER_ELIGIBLE_STATUSES: ApplicationStatus[] = ['applied', 'interview']
 
 export const CONTRACT_TYPES = [
     'cdi',

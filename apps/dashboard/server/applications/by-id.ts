@@ -4,7 +4,7 @@ import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
 import { normalizeLocationForStorage } from '../../lib/addresses.js';
-import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS, TERMINAL_STATUSES, resolveStatusOnEvent, deriveStatusFromEvents, type ApplicationStatus, type EventType } from '@joblog/shared';
+import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS, TERMINAL_STATUSES, REMINDER_ELIGIBLE_STATUSES, resolveStatusOnEvent, deriveStatusFromEvents, type ApplicationStatus, type EventType } from '@joblog/shared';
 
 const PatchApplicationSchema = z.object({
   status: z.enum(APPLICATION_STATUSES).optional(),
@@ -70,6 +70,12 @@ interface ApplicationDoc {
   jobPostingId: string;
   status: ApplicationStatus;
   events?: Array<{ type: EventType; at: Date; meta: unknown }>;
+  reminder?: { at?: Date | null; frequencyDays?: number } | null;
+}
+
+function computeReminderInitAt(app: ApplicationDoc) {
+  const frequencyDays = app.reminder?.frequencyDays ?? 7;
+  return new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
 }
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -116,7 +122,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const app = await col.findOne(appFilter);
         if (!app) return res.status(404).json({ error: 'Not found' });
         const newStatus = resolveStatusOnEvent(app.status, parsed.data.type);
-        if (newStatus) setOps['status'] = newStatus;
+        if (newStatus) {
+          setOps['status'] = newStatus;
+          if (REMINDER_ELIGIBLE_STATUSES.includes(newStatus) && !app.reminder?.at) {
+            setOps['reminder.at'] = computeReminderInitAt(app);
+          }
+        }
       }
 
       await col.updateOne(appFilter, {
@@ -199,15 +210,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     if (status !== undefined) {
+      const app = await col.findOne(appFilter);
+      if (!app) return res.status(404).json({ error: 'Not found' });
+
       updates['status'] = status;
       if (status === 'applied' && !parsed.data.appliedAt) {
         updates['appliedAt'] = new Date();
       }
       if (TERMINAL_STATUSES.includes(status)) {
         updates['reminder.at'] = null;
+      } else if (REMINDER_ELIGIBLE_STATUSES.includes(status) && !app.reminder?.at) {
+        updates['reminder.at'] = computeReminderInitAt(app);
       }
-      const app = await col.findOne(appFilter);
-      if (!app) return res.status(404).json({ error: 'Not found' });
       if (status !== app.status) {
         const newType = STATUS_EVENT[status];
         if (newType) {
