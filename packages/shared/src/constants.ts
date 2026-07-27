@@ -235,6 +235,7 @@ export const SCRAPE_STEP_STATUSES = [
 ] as const
 export type ScrapeStepStatus = (typeof SCRAPE_STEP_STATUSES)[number]
 
-export const GEMINI_DAILY_QUOTA = 1500
-export const GEMINI_SCRAPE_RESERVE = 100
+export const GEMINI_DAILY_QUOTA = 200
+export const GEMINI_SCRAPE_RESERVE = 50
+export const GEMINI_USER_DAILY_QUOTA = 25
 export const GEMINI_MODEL = 'gemini-2.5-flash-lite'

@@ -5,7 +5,7 @@ import { getCollection } from '../lib/db.js';
 import { getEnv } from '../lib/env.js';
 import { sha256 } from '../lib/hash.js';
 import { requireSession } from '../lib/session.js';
-import { GEMINI_DAILY_QUOTA, GEMINI_MODEL } from '@joblog/shared';
+import { GEMINI_DAILY_QUOTA, GEMINI_MODEL, GEMINI_USER_DAILY_QUOTA } from '@joblog/shared';
 
 const Schema = z.object({
   cvId: z.string(),
@@ -18,6 +18,16 @@ const LookupSchema = Schema.pick({ cvId: true, applicationId: true });
 
 const ANALYSIS_PROMPT_VERSION = 'requirements-evidence-v1.1';
 const MIN_COMPARISON_TEXT_LENGTH = 40;
+const ANALYSIS_USAGE_KIND = 'cv_analysis';
+
+interface UsageLimitDoc {
+  userId: string;
+  date: string;
+  kind: string;
+  count: number;
+  created_at: Date;
+  updated_at: Date;
+}
 
 interface RequirementAnalysis {
   keyword: string;
@@ -135,12 +145,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json({ analysis: null });
   }
 
-  const withinQuota = await checkAndIncrementQuota();
-  if (!withinQuota) {
-    return res.status(429).json({
-      code: 'quota_exceeded',
-      error: "Quota d'analyse atteint, réessayez demain.",
-    });
+  if (!isAdmin(session.user.email)) {
+    const quotaCheck = await checkAndIncrementQuota(session.user.id);
+    if (quotaCheck === 'user_limit') {
+      return res.status(429).json({
+        code: 'quota_exceeded',
+        error: `Tu as atteint ta limite quotidienne de ${getUserDailyQuota()} analyses, réessaie demain.`,
+      });
+    }
+    if (quotaCheck === 'global_limit') {
+      return res.status(429).json({
+        code: 'quota_exceeded',
+        error: "Quota d'analyse atteint pour aujourd'hui, réessayez demain.",
+      });
+    }
   }
 
   const geminiResult = await callGemini(cv.content as string, comparisonText, model);
@@ -191,6 +209,21 @@ function getGeminiModel() {
   return getEnv('GEMINI_MODEL') ?? GEMINI_MODEL;
 }
 
+function getDailyQuota() {
+  const raw = Number(getEnv('GEMINI_DAILY_QUOTA'));
+  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : GEMINI_DAILY_QUOTA;
+}
+
+function getUserDailyQuota() {
+  const raw = Number(getEnv('GEMINI_USER_DAILY_QUOTA'));
+  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : GEMINI_USER_DAILY_QUOTA;
+}
+
+function isAdmin(email: string | undefined) {
+  const admin = (getEnv('ADMIN_MAIL') ?? '').replace(/^mailto:/, '').trim().toLowerCase();
+  return !!admin && !!email && email.trim().toLowerCase() === admin;
+}
+
 function normalizeComparisonText(value: unknown) {
   return typeof value === 'string'
     ? value.replace(/\s+/g, ' ').trim()
@@ -201,17 +234,39 @@ function hasComparableJobText(value: string) {
   return value.length >= MIN_COMPARISON_TEXT_LENGTH;
 }
 
-async function checkAndIncrementQuota(): Promise<boolean> {
-  const col = await getCollection('quota_usage');
-  const today = new Date().toISOString().slice(0, 10);
+type QuotaCheckResult = 'ok' | 'user_limit' | 'global_limit';
 
-  const result = await col.findOneAndUpdate(
-    { date: today, calls: { $lt: GEMINI_DAILY_QUOTA } },
+async function checkAndIncrementQuota(userId: string): Promise<QuotaCheckResult> {
+  const today = new Date().toISOString().slice(0, 10);
+  const usageCol = await getCollection<UsageLimitDoc>('usage_limits');
+  const now = new Date();
+
+  const userResult = await usageCol.findOneAndUpdate(
+    { userId, date: today, kind: ANALYSIS_USAGE_KIND, count: { $lt: getUserDailyQuota() } },
+    {
+      $inc: { count: 1 },
+      $set: { updated_at: now },
+      $setOnInsert: { userId, date: today, kind: ANALYSIS_USAGE_KIND, created_at: now },
+    },
+    { upsert: true, returnDocument: 'after' }
+  );
+  if (!userResult) return 'user_limit';
+
+  const quotaCol = await getCollection('quota_usage');
+  const globalResult = await quotaCol.findOneAndUpdate(
+    { date: today, calls: { $lt: getDailyQuota() } },
     { $inc: { calls: 1 }, $setOnInsert: { date: today } },
     { upsert: true, returnDocument: 'after' }
   );
+  if (!globalResult) {
+    await usageCol.updateOne(
+      { userId, date: today, kind: ANALYSIS_USAGE_KIND },
+      { $inc: { count: -1 } }
+    );
+    return 'global_limit';
+  }
 
-  return result !== null;
+  return 'ok';
 }
 
 type GeminiCallResult =
