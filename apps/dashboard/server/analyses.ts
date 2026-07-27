@@ -16,7 +16,7 @@ const Schema = z.object({
 
 const LookupSchema = Schema.pick({ cvId: true, applicationId: true });
 
-const ANALYSIS_PROMPT_VERSION = 'requirements-evidence-v1';
+const ANALYSIS_PROMPT_VERSION = 'requirements-evidence-v1.1';
 const MIN_COMPARISON_TEXT_LENGTH = 40;
 
 interface RequirementAnalysis {
@@ -317,7 +317,6 @@ function normalizeAnalysisResult(raw: unknown, cvText: string): AnalysisResult |
     const requestedPresent = candidate.present === true;
     const present = requestedPresent
       && evidence !== null
-      && containsNormalized(cvText, evidence)
       && keywordAppearsInText(keyword, cvText);
     correctedByEvidence ||= requestedPresent && !present;
 
