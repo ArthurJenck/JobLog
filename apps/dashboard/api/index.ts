@@ -60,6 +60,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     mod = await import('../server/cvs/index.js');
   } else if (route === 'cvs/skills') {
     mod = await import('../server/cvs/skills.js');
+  } else if (route === 'platforms') {
+    mod = await import('../server/platforms/index.js');
+  } else if (route === 'platforms/metadata') {
+    mod = await import('../server/platforms/metadata.js');
   } else if (route === 'applications') {
     mod = await import('../server/applications/index.js');
   } else if (route === 'applications/stats') {

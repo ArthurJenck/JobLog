@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as PlatformsRouteImport } from './routes/platforms'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as CvRouteImport } from './routes/cv'
 import { Route as IndexRouteImport } from './routes/index'
@@ -24,6 +25,11 @@ const SettingsRoute = SettingsRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PlatformsRoute = PlatformsRouteImport.update({
+  id: '/platforms',
+  path: '/platforms',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -51,6 +57,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/cv': typeof CvRoute
   '/login': typeof LoginRoute
+  '/platforms': typeof PlatformsRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/auth/connect': typeof AuthConnectRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/cv': typeof CvRoute
   '/login': typeof LoginRoute
+  '/platforms': typeof PlatformsRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/auth/connect': typeof AuthConnectRoute
@@ -68,20 +76,36 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/cv': typeof CvRoute
   '/login': typeof LoginRoute
+  '/platforms': typeof PlatformsRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/auth/connect': typeof AuthConnectRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/cv' | '/login' | '/privacy' | '/settings' | '/auth/connect'
+  fullPaths:
+    | '/'
+    | '/cv'
+    | '/login'
+    | '/platforms'
+    | '/privacy'
+    | '/settings'
+    | '/auth/connect'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/cv' | '/login' | '/privacy' | '/settings' | '/auth/connect'
+  to:
+    | '/'
+    | '/cv'
+    | '/login'
+    | '/platforms'
+    | '/privacy'
+    | '/settings'
+    | '/auth/connect'
   id:
     | '__root__'
     | '/'
     | '/cv'
     | '/login'
+    | '/platforms'
     | '/privacy'
     | '/settings'
     | '/auth/connect'
@@ -91,6 +115,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   CvRoute: typeof CvRoute
   LoginRoute: typeof LoginRoute
+  PlatformsRoute: typeof PlatformsRoute
   PrivacyRoute: typeof PrivacyRoute
   SettingsRoute: typeof SettingsRoute
   AuthConnectRoute: typeof AuthConnectRoute
@@ -110,6 +135,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/platforms': {
+      id: '/platforms'
+      path: '/platforms'
+      fullPath: '/platforms'
+      preLoaderRoute: typeof PlatformsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -147,6 +179,7 @@ const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   CvRoute: CvRoute,
   LoginRoute: LoginRoute,
+  PlatformsRoute: PlatformsRoute,
   PrivacyRoute: PrivacyRoute,
   SettingsRoute: SettingsRoute,
   AuthConnectRoute: AuthConnectRoute,

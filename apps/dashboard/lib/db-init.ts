@@ -13,6 +13,8 @@ export async function ensureIndexes() {
 
     db.collection('cvs').createIndex({ userId: 1 }),
 
+    db.collection('platforms').createIndex({ userId: 1, createdAt: -1 }),
+
     db.collection('cv_analyses').createIndex(
       { cvHash: 1, jobPostingId: 1 },
       { unique: true }

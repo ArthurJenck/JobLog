@@ -16,6 +16,7 @@ import {
 import {
   BriefcaseIcon,
   FileTextIcon,
+  CompassIcon,
   SettingsIcon,
   LogOutIcon,
   ExternalLinkIcon,
@@ -27,8 +28,11 @@ import { resetSessionCache, useStats } from '@/lib/app-context';
 const navItems = [
   { to: '/', label: 'Candidatures', icon: BriefcaseIcon },
   { to: '/cv', label: 'CV', icon: FileTextIcon },
+  { to: '/platforms', label: 'Plateformes', icon: CompassIcon },
   { to: '/settings', label: 'Paramètres', icon: SettingsIcon },
 ];
+
+const EXTENSION_LINK_AFTER = '/platforms';
 
 export function AppSidebar() {
   const router = useRouter();
@@ -56,7 +60,7 @@ export function AppSidebar() {
         <SidebarGroup>
           <SidebarGroupContent>
             <SidebarMenu>
-              {navItems.map((item, index) => (
+              {navItems.map((item) => (
                 <Fragment key={item.to}>
                   <SidebarMenuItem>
                     <SidebarMenuButton asChild isActive={pathname === item.to}>
@@ -66,7 +70,7 @@ export function AppSidebar() {
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                  {index === 0 && extensionUrl && (
+                  {item.to === EXTENSION_LINK_AFTER && extensionUrl && (
                     <SidebarMenuItem>
                       <SidebarMenuButton asChild>
                         <a href={extensionUrl} target="_blank" rel="noreferrer">

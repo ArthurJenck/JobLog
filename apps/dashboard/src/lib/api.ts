@@ -41,6 +41,17 @@ export interface AddressSearchResult {
   classification: number | null;
 }
 
+export interface Platform {
+  _id: string;
+  userId: string;
+  name: string;
+  url: string;
+  domain: string | null;
+  faviconUrl: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface SkillCount {
   skill: string;
   count: number;
@@ -160,6 +171,24 @@ export const api = {
     skills(cvId: string): Promise<{ present: SkillCount[]; missing: SkillCount[]; analyzedCount: number }> {
       const qs = new URLSearchParams({ cvId });
       return request(`/cvs/skills?${qs.toString()}`);
+    },
+  },
+  platforms: {
+    list(): Promise<{ data: Platform[] }> {
+      return request('/platforms');
+    },
+    create(body: { url: string; name: string; domain?: string | null; faviconUrl?: string | null }): Promise<{ platformId: string }> {
+      return request('/platforms', { method: 'POST', body: JSON.stringify(body) });
+    },
+    update(id: string, body: { name?: string; url?: string }): Promise<{ ok: boolean }> {
+      return request(`/platforms?id=${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    },
+    delete(id: string): Promise<{ ok: boolean }> {
+      return request(`/platforms?id=${id}`, { method: 'DELETE' });
+    },
+    metadata(url: string): Promise<{ name: string; faviconUrl: string | null; domain: string }> {
+      const qs = new URLSearchParams({ url });
+      return request(`/platforms/metadata?${qs.toString()}`);
     },
   },
   analyses: {
