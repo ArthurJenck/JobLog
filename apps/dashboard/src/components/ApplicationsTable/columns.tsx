@@ -4,7 +4,6 @@ import { StatusBadge } from '@/components/StatusBadge';
 import { SourceBadge } from '@/components/SourceBadge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { playToggle } from '@/lib/sound';
-import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import {
   INTERVIEW_CONCLUDING_EVENTS,
@@ -13,6 +12,7 @@ import {
   type JobSource,
 } from '@joblog/shared';
 import { ScrapeStatusBadge } from './ScrapeStatusBadge';
+import { CompanyCell } from './CompanyCell';
 import { fmtDate, dateStatus } from './date-utils';
 
 export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
@@ -70,26 +70,12 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
     id: 'company',
     header: 'Entreprise',
     accessorFn: (row) => row.jobPosting?.company ?? '',
-    cell: ({ row, getValue }) => {
-      const logoUrl = getCompanyLogoUrl(row.original.jobPosting, 40);
-      const company = getValue() as string;
-      return (
-        <div className="flex items-center gap-2">
-          {logoUrl && (
-            <img
-              src={logoUrl}
-              alt={`Logo ${company || 'entreprise'}`}
-              className="h-5 w-5 rounded object-contain"
-              referrerPolicy="origin"
-              onError={(e) => {
-                (e.currentTarget as HTMLImageElement).style.display = 'none';
-              }}
-            />
-          )}
-          <span>{company}</span>
-        </div>
-      );
-    },
+    cell: ({ row, getValue }) => (
+      <CompanyCell
+        jobPosting={row.original.jobPosting}
+        company={getValue() as string}
+      />
+    ),
   },
   {
     id: 'source',

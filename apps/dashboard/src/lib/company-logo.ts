@@ -1,4 +1,6 @@
+import { useEffect, useState } from 'react';
 import type { JobPosting } from '@joblog/shared';
+import { api } from '@/lib/api';
 
 const LOGO_DEV_TOKEN = import.meta.env.VITE_LOGO_DEV_TOKEN?.trim();
 
@@ -9,6 +11,50 @@ export function getCompanyLogoUrl(
   if (!jobPosting?.company_website) return null;
 
   return getLogoUrlForDomain(jobPosting.company_website, size);
+}
+
+const companyDomainCache = new Map<string, Promise<string | null>>();
+
+function searchCompanyDomain(company: string) {
+  const key = company.trim().toLowerCase();
+  if (!key) return Promise.resolve(null);
+
+  let pending = companyDomainCache.get(key);
+  if (!pending) {
+    pending = api.logos
+      .search(company)
+      .then((res) => res.data[0]?.domain ?? null)
+      .catch(() => null);
+    companyDomainCache.set(key, pending);
+  }
+  return pending;
+}
+
+export function useCompanyLogoUrl(
+  jobPosting: Pick<JobPosting, 'company_website'> | null | undefined,
+  company: string | null | undefined,
+  size: number
+) {
+  const directUrl = getCompanyLogoUrl(jobPosting, size);
+  const [fallbackDomain, setFallbackDomain] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (directUrl || !company) {
+      setFallbackDomain(null);
+      return;
+    }
+
+    let cancelled = false;
+    searchCompanyDomain(company).then((domain) => {
+      if (!cancelled) setFallbackDomain(domain);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [directUrl, company]);
+
+  if (directUrl) return directUrl;
+  return fallbackDomain ? getLogoUrlForDomain(fallbackDomain, size) : null;
 }
 
 export function getLogoUrlForDomain(value: string | null | undefined, size: number) {
