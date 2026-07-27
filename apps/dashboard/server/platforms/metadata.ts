@@ -24,6 +24,13 @@ function extractDomain(rawUrl: string) {
   return new URL(rawUrl).hostname.replace(/^www\./i, '').toLowerCase();
 }
 
+function prettyNameFromDomain(domain: string) {
+  const labels = domain.split('.').filter(Boolean);
+  const label = labels.length > 1 ? labels[labels.length - 2] : labels[0];
+  if (!label) return domain;
+  return label.charAt(0).toUpperCase() + label.slice(1);
+}
+
 function resolveAbsoluteUrl(href: string, base: string) {
   try {
     return new URL(href, base).toString();
@@ -103,7 +110,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const domain = extractDomain(pageUrl);
-  const fallback = { name: domain, faviconUrl: logoDevFallback(domain), domain };
+  const fallback = { name: prettyNameFromDomain(domain), faviconUrl: logoDevFallback(domain), domain };
 
   try {
     const resp = await fetch(pageUrl, {

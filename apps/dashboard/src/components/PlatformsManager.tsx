@@ -5,7 +5,17 @@ import { Separator } from '@/components/ui/separator';
 import { AddPlatformForm } from './AddPlatformForm';
 import { api } from '@/lib/api';
 import type { Platform } from '@/lib/api';
-import { ExternalLinkIcon, GlobeIcon, PencilIcon, Trash2Icon, CheckIcon, XIcon } from 'lucide-react';
+import {
+  ExternalLinkIcon,
+  GlobeIcon,
+  PencilIcon,
+  Trash2Icon,
+  CheckIcon,
+  XIcon,
+  ArrowUpIcon,
+  ArrowDownIcon,
+} from 'lucide-react';
+import { toast } from 'sonner';
 
 export function PlatformsManager() {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
@@ -65,7 +75,30 @@ export function PlatformsManager() {
   }
 
   function openAll() {
-    platforms.forEach((platform) => window.open(platform.url, '_blank', 'noopener'));
+    platforms.forEach((platform) => {
+      const link = document.createElement('a');
+      link.href = platform.url;
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.click();
+    });
+  }
+
+  async function move(index: number, direction: -1 | 1) {
+    const target = index + direction;
+    if (target < 0 || target >= platforms.length) return;
+
+    const reordered = [...platforms];
+    const [moved] = reordered.splice(index, 1);
+    reordered.splice(target, 0, moved);
+    setPlatforms(reordered);
+
+    try {
+      await api.platforms.reorder(reordered.map((p) => p._id));
+    } catch {
+      toast.error('Impossible de réorganiser les plateformes');
+      load();
+    }
   }
 
   async function handlePlatformAdded() {
@@ -79,15 +112,22 @@ export function PlatformsManager() {
 
   return (
     <div className="flex flex-col gap-4 max-w-3xl">
-      <div className="flex items-center justify-between gap-2">
-        <Button onClick={openAll} disabled={platforms.length === 0}>
-          <ExternalLinkIcon className="h-4 w-4" />
-          Ouvrir toutes les plateformes
-        </Button>
-        {platforms.length > 0 && (
-          <Button variant="outline" size="sm" onClick={() => setShowAdd((v) => !v)}>
-            {showAdd ? 'Annuler' : '+ Ajouter une plateforme'}
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center justify-between gap-2">
+          <Button onClick={openAll} disabled={platforms.length === 0}>
+            <ExternalLinkIcon className="h-4 w-4" />
+            Ouvrir toutes les plateformes
           </Button>
+          {platforms.length > 0 && (
+            <Button variant="outline" size="sm" onClick={() => setShowAdd((v) => !v)}>
+              {showAdd ? 'Annuler' : '+ Ajouter une plateforme'}
+            </Button>
+          )}
+        </div>
+        {platforms.length > 0 && (
+          <p className="text-xs text-muted-foreground">
+            Si certains onglets ne s'ouvrent pas : autorisez les popups et redirections pour ce site dans les réglages de votre navigateur.
+          </p>
         )}
       </div>
 
@@ -104,11 +144,33 @@ export function PlatformsManager() {
         </p>
       ) : (
         <div className="flex flex-col gap-2">
-          {platforms.map((platform) => (
+          {platforms.map((platform, index) => (
             <div
               key={platform._id}
               className="flex items-center gap-3 rounded-lg border px-4 py-3"
             >
+              {renamingId !== platform._id && (
+                <div className="flex flex-col flex-shrink-0">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-7 text-muted-foreground hover:text-foreground"
+                    disabled={index === 0}
+                    onClick={() => move(index, -1)}
+                  >
+                    <ArrowUpIcon className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-5 w-7 text-muted-foreground hover:text-foreground"
+                    disabled={index === platforms.length - 1}
+                    onClick={() => move(index, 1)}
+                  >
+                    <ArrowDownIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              )}
               {platform.faviconUrl && !brokenFavicons.has(platform._id) ? (
                 <img
                   src={platform.faviconUrl}

@@ -48,6 +48,7 @@ export interface Platform {
   url: string;
   domain: string | null;
   faviconUrl: string | null;
+  order: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -182,6 +183,9 @@ export const api = {
     },
     update(id: string, body: { name?: string; url?: string }): Promise<{ ok: boolean }> {
       return request(`/platforms?id=${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    },
+    reorder(order: string[]): Promise<{ ok: boolean }> {
+      return request('/platforms', { method: 'PATCH', body: JSON.stringify({ order }) });
     },
     delete(id: string): Promise<{ ok: boolean }> {
       return request(`/platforms?id=${id}`, { method: 'DELETE' });

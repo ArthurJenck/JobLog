@@ -16,6 +16,10 @@ const UpdatePlatformSchema = z.object({
   url: z.string().url().optional(),
 });
 
+const ReorderPlatformsSchema = z.object({
+  order: z.array(z.string()).min(1),
+});
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = await requireSession(req, res);
   if (!session) return;
@@ -24,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const col = await getCollection('platforms');
 
   if (req.method === 'GET') {
-    const platforms = await col.find({ userId }).sort({ createdAt: -1 }).toArray();
+    const platforms = await col.find({ userId }).sort({ order: 1, createdAt: -1 }).toArray();
     return res.status(200).json({
       data: platforms.map((p) => ({ ...p, _id: p._id.toString() })),
     });
@@ -36,6 +40,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const { url, name, domain, faviconUrl } = parsed.data;
     const now = new Date();
+    const order = await col.countDocuments({ userId });
 
     const doc = {
       userId,
@@ -43,6 +48,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       url,
       domain: domain ?? null,
       faviconUrl: faviconUrl ?? null,
+      order,
       createdAt: now,
       updatedAt: now,
     };
@@ -52,8 +58,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH') {
-    const { id } = req.query as { id: string };
-    if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
+    const { id } = req.query as { id?: string };
+
+    if (!id) {
+      const parsed = ReorderPlatformsSchema.safeParse(req.body);
+      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+      const ids = parsed.data.order;
+      if (!ids.every((platformId) => ObjectId.isValid(platformId))) {
+        return res.status(400).json({ error: 'Invalid id in order' });
+      }
+
+      await Promise.all(
+        ids.map((platformId, index) =>
+          col.updateOne(
+            { _id: new ObjectId(platformId), userId },
+            { $set: { order: index, updatedAt: new Date() } },
+          ),
+        ),
+      );
+      return res.status(200).json({ ok: true });
+    }
+
+    if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
 
     const parsed = UpdatePlatformSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
