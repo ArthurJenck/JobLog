@@ -74,14 +74,16 @@ export function PlatformsManager() {
     setRenameValue('');
   }
 
+  function openInNewTab(url: string) {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.click();
+  }
+
   function openAll() {
-    platforms.forEach((platform) => {
-      const link = document.createElement('a');
-      link.href = platform.url;
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.click();
-    });
+    platforms.forEach((platform) => openInNewTab(platform.url));
   }
 
   async function move(index: number, direction: -1 | 1) {
@@ -119,14 +121,19 @@ export function PlatformsManager() {
             Ouvrir toutes les plateformes
           </Button>
           {platforms.length > 0 && (
-            <Button variant="outline" size="sm" onClick={() => setShowAdd((v) => !v)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowAdd((v) => !v)}
+            >
               {showAdd ? 'Annuler' : '+ Ajouter une plateforme'}
             </Button>
           )}
         </div>
         {platforms.length > 0 && (
           <p className="text-xs text-muted-foreground">
-            Si certains onglets ne s'ouvrent pas : autorisez les popups et redirections pour ce site dans les réglages de votre navigateur.
+            Si certains onglets ne s'ouvrent pas : autorisez les popups et
+            redirections pour ce site dans les réglages de votre navigateur.
           </p>
         )}
       </div>
@@ -150,24 +157,24 @@ export function PlatformsManager() {
               className="flex items-center gap-3 rounded-lg border px-4 py-3"
             >
               {renamingId !== platform._id && (
-                <div className="flex flex-col flex-shrink-0">
+                <div className="flex flex-col shrink-0">
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-7 text-muted-foreground hover:text-foreground"
+                    className="h-5 w-7 text-muted-foreground hover:text-foreground [&_svg]:size-auto"
                     disabled={index === 0}
                     onClick={() => move(index, -1)}
                   >
-                    <ArrowUpIcon className="h-3.5 w-3.5" />
+                    <ArrowUpIcon size={16} />
                   </Button>
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-5 w-7 text-muted-foreground hover:text-foreground"
+                    className="h-5 w-7 text-muted-foreground hover:text-foreground [&_svg]:size-auto"
                     disabled={index === platforms.length - 1}
                     onClick={() => move(index, 1)}
                   >
-                    <ArrowDownIcon className="h-3.5 w-3.5" />
+                    <ArrowDownIcon size={16} />
                   </Button>
                 </div>
               )}
@@ -175,13 +182,13 @@ export function PlatformsManager() {
                 <img
                   src={platform.faviconUrl}
                   alt=""
-                  className="h-5 w-5 rounded flex-shrink-0"
+                  className="h-5 w-5 rounded shrink-0"
                   onError={() =>
                     setBrokenFavicons((prev) => new Set(prev).add(platform._id))
                   }
                 />
               ) : (
-                <GlobeIcon className="h-5 w-5 text-muted-foreground flex-shrink-0" />
+                <GlobeIcon className="h-5 w-5 text-muted-foreground shrink-0" />
               )}
               <div className="flex-1 min-w-0">
                 {renamingId === platform._id ? (
@@ -196,17 +203,31 @@ export function PlatformsManager() {
                       className="h-7 text-sm"
                       autoFocus
                     />
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => confirmRename(platform._id)}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={() => confirmRename(platform._id)}
+                    >
                       <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelRename}>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-7 w-7"
+                      onClick={cancelRename}
+                    >
                       <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                     </Button>
                   </div>
                 ) : (
                   <>
-                    <p className="text-sm font-medium truncate">{platform.name}</p>
-                    <p className="text-xs text-muted-foreground truncate">{platform.url}</p>
+                    <p className="text-sm font-medium truncate">
+                      {platform.name}
+                    </p>
+                    <p className="text-xs text-muted-foreground truncate">
+                      {platform.url}
+                    </p>
                   </>
                 )}
               </div>
@@ -215,7 +236,15 @@ export function PlatformsManager() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-foreground flex-shrink-0"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
+                    onClick={() => openInNewTab(platform.url)}
+                  >
+                    <ExternalLinkIcon className="h-3.5 w-3.5" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
                     onClick={() => startRename(platform)}
                   >
                     <PencilIcon className="h-3.5 w-3.5" />
@@ -223,7 +252,7 @@ export function PlatformsManager() {
                   <Button
                     variant="ghost"
                     size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
+                    className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
                     onClick={() => deletePlatform(platform._id)}
                   >
                     <Trash2Icon className="h-3.5 w-3.5" />
