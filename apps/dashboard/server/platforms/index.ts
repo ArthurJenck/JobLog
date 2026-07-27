@@ -14,10 +14,16 @@ const CreatePlatformSchema = z.object({
 const UpdatePlatformSchema = z.object({
   name: z.string().min(1).optional(),
   url: z.string().url().optional(),
+  clicked: z.literal(true).optional(),
+  checked: z.boolean().optional(),
 });
 
 const ReorderPlatformsSchema = z.object({
   order: z.array(z.string()).min(1),
+});
+
+const ClickAllPlatformsSchema = z.object({
+  clickAll: z.literal(true),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -49,6 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       domain: domain ?? null,
       faviconUrl: faviconUrl ?? null,
       order,
+      lastClickedAt: null,
+      checkedAt: null,
       createdAt: now,
       updatedAt: now,
     };
@@ -61,6 +69,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { id } = req.query as { id?: string };
 
     if (!id) {
+      if (req.body && typeof req.body === 'object' && 'clickAll' in req.body) {
+        const parsed = ClickAllPlatformsSchema.safeParse(req.body);
+        if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+        await col.updateMany(
+          { userId },
+          { $set: { lastClickedAt: new Date(), updatedAt: new Date() } },
+        );
+        return res.status(200).json({ ok: true });
+      }
+
       const parsed = ReorderPlatformsSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
@@ -84,13 +103,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const parsed = UpdatePlatformSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    if (Object.keys(parsed.data).length === 0) {
+
+    const { name, url, clicked, checked } = parsed.data;
+    const update: Record<string, unknown> = {};
+    if (name !== undefined) update.name = name;
+    if (url !== undefined) update.url = url;
+    if (clicked) update.lastClickedAt = new Date();
+    if (checked !== undefined) update.checkedAt = checked ? new Date() : null;
+
+    if (Object.keys(update).length === 0) {
       return res.status(400).json({ error: 'Nothing to update' });
     }
+    update.updatedAt = new Date();
 
     const result = await col.updateOne(
       { _id: new ObjectId(id), userId },
-      { $set: { ...parsed.data, updatedAt: new Date() } },
+      { $set: update },
     );
     if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
     return res.status(200).json({ ok: true });

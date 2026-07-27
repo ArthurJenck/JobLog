@@ -49,6 +49,8 @@ export interface Platform {
   domain: string | null;
   faviconUrl: string | null;
   order: number;
+  lastClickedAt: string | null;
+  checkedAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -186,6 +188,15 @@ export const api = {
     },
     reorder(order: string[]): Promise<{ ok: boolean }> {
       return request('/platforms', { method: 'PATCH', body: JSON.stringify({ order }) });
+    },
+    markClicked(id: string): Promise<{ ok: boolean }> {
+      return request(`/platforms?id=${id}`, { method: 'PATCH', body: JSON.stringify({ clicked: true }) });
+    },
+    markAllClicked(): Promise<{ ok: boolean }> {
+      return request('/platforms', { method: 'PATCH', body: JSON.stringify({ clickAll: true }) });
+    },
+    setChecked(id: string, checked: boolean): Promise<{ ok: boolean }> {
+      return request(`/platforms?id=${id}`, { method: 'PATCH', body: JSON.stringify({ checked }) });
     },
     delete(id: string): Promise<{ ok: boolean }> {
       return request(`/platforms?id=${id}`, { method: 'DELETE' });
