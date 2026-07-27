@@ -68,6 +68,11 @@ export function PlatformsManager() {
     platforms.forEach((platform) => window.open(platform.url, '_blank', 'noopener'));
   }
 
+  async function handlePlatformAdded() {
+    await load();
+    setShowAdd(true);
+  }
+
   if (isLoading) {
     return <p className="text-sm text-muted-foreground">Chargement…</p>;
   }
@@ -79,19 +84,16 @@ export function PlatformsManager() {
           <ExternalLinkIcon className="h-4 w-4" />
           Ouvrir toutes les plateformes
         </Button>
-        <Button variant="outline" size="sm" onClick={() => setShowAdd((v) => !v)}>
-          {showAdd ? 'Annuler' : '+ Ajouter une plateforme'}
-        </Button>
+        {platforms.length > 0 && (
+          <Button variant="outline" size="sm" onClick={() => setShowAdd((v) => !v)}>
+            {showAdd ? 'Annuler' : '+ Ajouter une plateforme'}
+          </Button>
+        )}
       </div>
 
-      {showAdd && (
+      {(platforms.length === 0 || showAdd) && (
         <>
-          <AddPlatformForm
-            onAdded={() => {
-              setShowAdd(false);
-              load();
-            }}
-          />
+          <AddPlatformForm onAdded={handlePlatformAdded} />
           <Separator />
         </>
       )}

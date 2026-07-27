@@ -51,6 +51,12 @@ export function AddPlatformForm({ onAdded }: { onAdded: () => void }) {
     try {
       await api.platforms.create({ url, name: trimmed, domain, faviconUrl });
       onAdded();
+      setUrl('');
+      setName('');
+      setFaviconUrl(null);
+      setDomain(null);
+      setFaviconBroken(false);
+      setStep('url');
     } catch {
       toast.error("Impossible d'ajouter cette plateforme");
     } finally {
