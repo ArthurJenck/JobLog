@@ -18,7 +18,7 @@ export function reminderMessage(lastClickedAt: string | null): string | null {
   const d = daysSince(lastClickedAt);
 
   if (d === null) {
-    return "Vous n'avez pas encore regardé les offres ici — c'est le moment de commencer !";
+    return "Vous n'avez pas encore regardé les offres ici, c'est le moment de commencer !";
   }
   if (d === 0) {
     return null;
