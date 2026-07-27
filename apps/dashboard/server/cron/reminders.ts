@@ -70,7 +70,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const now = new Date();
 
-  const dueFilter = {
+  const dueFilter: Filter<ReminderApplicationDoc> = {
     'reminder.at': { $lte: now },
     $expr: { $lt: ['$reminder.sentCount', '$reminder.maxCount'] },
     $or: [
@@ -78,7 +78,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       { 'reminder.snoozedUntil': { $lte: now } },
     ],
     status: { $in: REMINDER_ELIGIBLE_STATUSES },
-  } as Filter<ReminderApplicationDoc>;
+  };
 
   const due = await appCol.find(dueFilter).toArray();
 

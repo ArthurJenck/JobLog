@@ -30,6 +30,7 @@ const BulkDeleteSchema = z.object({
 
 interface ApplicationStatusDoc {
   _id: ObjectId;
+  userId: string;
   status: ApplicationStatus;
   appliedAt?: Date | null;
   events?: Array<{ type: EventType; at: Date; meta: unknown }>;
