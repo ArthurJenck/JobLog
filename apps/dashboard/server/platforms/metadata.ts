@@ -78,7 +78,7 @@ function decodeHtmlEntities(value: string) {
 }
 
 function logoDevFallback(domain: string) {
-  const key = getEnv('LOGO_DEV_SECRET_KEY');
+  const key = getEnv('VITE_LOGO_DEV_TOKEN');
   if (!key) return null;
   const params = new URLSearchParams({ token: key, size: '64', format: 'png', fallback: '404' });
   return `https://img.logo.dev/${encodeURIComponent(domain)}?${params.toString()}`;

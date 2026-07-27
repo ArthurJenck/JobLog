@@ -126,14 +126,14 @@ export function PlatformRow({
                 </span>
               </TooltipTrigger>
               <TooltipContent>
-                Visitez la plateforme en cliquant sur le bouton de
-                redirection pour pouvoir la valider
+                Utilise le bouton de redirection ci-contre pour pouvoir valider
               </TooltipContent>
             </Tooltip>
           ) : (
             <Checkbox
               checked={checkedToday}
               onCheckedChange={(value) => handleToggle(value === true)}
+              className="border-green-600 data-[state=checked]:bg-green-600"
             />
           )}
         </div>
