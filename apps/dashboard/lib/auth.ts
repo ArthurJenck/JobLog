@@ -83,6 +83,18 @@ export async function getAuth() {
         },
       },
     },
+    databaseHooks: {
+      user: {
+        create: {
+          before: async (user) => {
+            if (user.firstName || !user.name) return { data: user };
+
+            const firstName = user.name.trim().split(/\s+/)[0];
+            return { data: { ...user, firstName } };
+          },
+        },
+      },
+    },
   });
 
   return _auth;

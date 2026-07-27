@@ -252,9 +252,9 @@ export function PlatformsManager() {
       )}
 
       {celebrationMessage && (
-        <Card className="border-green-600/30 bg-green-600/5 shadow-none">
-          <CardContent className="flex items-center gap-3 py-4">
-            <PartyPopperIcon className="h-5 w-5 text-green-600 shrink-0" />
+        <Card className="border-green-600/40 bg-green-600/5 shadow-none">
+          <CardContent className="flex items-center gap-3 py-4 text-green-600">
+            <PartyPopperIcon className="h-5 w-5  shrink-0" />
             <p className="text-sm font-medium">{celebrationMessage}</p>
           </CardContent>
         </Card>
