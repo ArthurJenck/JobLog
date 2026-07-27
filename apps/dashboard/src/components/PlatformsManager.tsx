@@ -25,6 +25,7 @@ import { toast } from 'sonner';
 import { isSameLocalDay } from '@/lib/platformReminder';
 import { randomCelebration } from '@/lib/celebrationMessages';
 import { celebrate } from '@/lib/confetti';
+import { playComplete, playDelete } from '@/lib/sound';
 
 function isValidUrl(value: string) {
   try {
@@ -84,6 +85,7 @@ export function PlatformsManager() {
   useEffect(() => {
     if (allChecked && !wasAllChecked.current) {
       celebrate();
+      playComplete();
     }
     wasAllChecked.current = allChecked;
   }, [allChecked]);
@@ -91,6 +93,7 @@ export function PlatformsManager() {
   async function deletePlatform(id: string) {
     if (!confirm('Supprimer cette plateforme ?')) return;
     await api.platforms.delete(id);
+    playDelete();
     load();
   }
 

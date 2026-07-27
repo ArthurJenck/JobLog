@@ -22,6 +22,7 @@ import { api } from '@/lib/api';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import { toast } from 'sonner';
+import { playAccepted, playReject, playStatusChange, playDelete } from '@/lib/sound';
 import {
   APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS,
   STATUS_EVENT,
@@ -65,7 +66,14 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
     try {
       await api.applications.patch(application!._id, body);
       onUpdated();
-      if (body.status === 'accepted') setCancelAllOpen(true);
+      if (body.status === 'accepted') {
+        setCancelAllOpen(true);
+        playAccepted();
+      } else if (body.status === 'rejected' || body.status === 'ghosted' || body.status === 'cancelled') {
+        playReject();
+      } else if (body.status) {
+        playStatusChange();
+      }
     } finally {
       setIsSaving(false);
     }
@@ -364,6 +372,7 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
               onClick={async () => {
                 if (confirm('Supprimer cette candidature ?')) {
                   await api.applications.delete(application._id);
+                  playDelete();
                   onUpdated();
                   onClose();
                 }

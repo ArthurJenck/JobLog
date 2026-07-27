@@ -4,6 +4,7 @@ import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { GlobeIcon, Loader2Icon } from 'lucide-react';
 import { toast } from 'sonner';
+import { playAdd } from '@/lib/sound';
 
 function isValidUrl(value: string) {
   try {
@@ -50,6 +51,7 @@ export function AddPlatformForm({ onAdded }: { onAdded: () => void }) {
     setIsSubmitting(true);
     try {
       await api.platforms.create({ url, name: trimmed, domain, faviconUrl });
+      playAdd();
       onAdded();
       setUrl('');
       setName('');

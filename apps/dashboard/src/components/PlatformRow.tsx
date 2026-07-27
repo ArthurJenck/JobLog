@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { Platform } from '@/lib/api';
 import { isSameLocalDay, reminderMessage } from '@/lib/platformReminder';
 import { burstAt } from '@/lib/confetti';
+import { playCheck } from '@/lib/sound';
 import {
   ExternalLinkIcon,
   GlobeIcon,
@@ -73,6 +74,7 @@ export function PlatformRow({
     onToggleChecked(checked);
     if (checked && rowRef.current) {
       burstAt(rowRef.current);
+      playCheck();
     }
   }
 

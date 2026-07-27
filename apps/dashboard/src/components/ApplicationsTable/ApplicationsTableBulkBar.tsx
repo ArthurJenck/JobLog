@@ -21,6 +21,7 @@ import {
   STATUS_LABELS,
   type ApplicationStatus,
 } from '@joblog/shared';
+import { playDelete } from '@/lib/sound';
 
 interface Props {
   count: number;
@@ -99,6 +100,7 @@ export function ApplicationsTableBulkBar({
               size="sm"
               onClick={() => {
                 setConfirmOpen(false);
+                playDelete();
                 onDelete();
               }}
             >

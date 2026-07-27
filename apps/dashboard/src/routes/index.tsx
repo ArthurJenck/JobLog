@@ -6,6 +6,7 @@ import { ApplicationsTable } from '@/components/ApplicationsTable';
 import { ApplicationDetail } from '@/components/ApplicationDetail';
 import { AddApplicationDialog } from '@/components/AddApplicationDialog';
 import { toast } from 'sonner';
+import { playAdd } from '@/lib/sound';
 import { api } from '@/lib/api';
 import { isScrapeActive } from '@/lib/scrape';
 import type { ApplicationWithJob, ApplicationStatus } from '@joblog/shared';
@@ -326,6 +327,7 @@ export function IndexPage() {
 
   async function handleCreated(applicationId: string) {
     setAddOpen(false);
+    playAdd();
     await fetchApplications();
     void refreshStats();
     const created = await api.applications.get(applicationId);
