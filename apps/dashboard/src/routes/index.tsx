@@ -318,7 +318,7 @@ export function IndexPage() {
   }
 
   async function refreshDetail() {
-    await fetchApplications();
+    await fetchApplications(true);
     void refreshStats();
     if (selectedApp) {
       const updated = await api.applications.get(selectedApp._id);

@@ -87,6 +87,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
+  if (
+    req.method === 'POST' &&
+    jobDescriptionOverride &&
+    !hasComparableJobText(storedJobDescription)
+  ) {
+    const now = new Date();
+    await jpCol.updateOne(
+      { _id: jp._id },
+      {
+        $set: {
+          description: jobDescriptionOverride,
+          description_source: 'manual',
+          scrape_status: 'succeeded',
+          scrape_error: null,
+          scrape_error_code: null,
+          scrape_error_category: null,
+          scrape_finished_at: now,
+          updated_at: now,
+        },
+      },
+    );
+  }
+
   const jobDescriptionHash = sha256(comparisonText);
 
   const cached = !force ? await analysesCol.findOne({
@@ -120,13 +143,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     });
   }
 
-  const result = await callGemini(cv.content as string, comparisonText, model);
-  if (!result) {
-    return res.status(503).json({
-      code: 'analysis_unavailable',
-      error: "Service d'analyse temporairement indisponible, réessayez plus tard.",
+  const geminiResult = await callGemini(cv.content as string, comparisonText, model);
+  if (!geminiResult.ok) {
+    if (geminiResult.reason === 'provider_http' && geminiResult.status === 429) {
+      return res.status(429).json({
+        code: 'quota_exceeded',
+        error: "Quota d'analyse atteint, réessayez demain.",
+      });
+    }
+    if (geminiResult.reason === 'provider_http' || geminiResult.reason === 'network') {
+      return res.status(503).json({
+        code: 'analysis_unavailable',
+        error: "Service d'analyse temporairement indisponible, réessayez plus tard.",
+      });
+    }
+    return res.status(502).json({
+      code: 'analysis_failed',
+      error: "L'analyse n'a pas pu être produite, réessayez.",
     });
   }
+  const result = geminiResult.result;
 
   await analysesCol.updateOne(
     { cvHash, jobPostingId },
@@ -178,7 +214,11 @@ async function checkAndIncrementQuota(): Promise<boolean> {
   return result !== null;
 }
 
-async function callGemini(cvText: string, jobDescription: string, model: string): Promise<AnalysisResult | null> {
+type GeminiCallResult =
+  | { ok: true; result: AnalysisResult }
+  | { ok: false; reason: 'provider_http' | 'network' | 'provider_empty' | 'invalid_json' | 'normalize_empty'; status?: number };
+
+async function callGemini(cvText: string, jobDescription: string, model: string): Promise<GeminiCallResult> {
   const prompt = `Tu es un assistant de recrutement. Compare ce CV à cette offre.
 Réponds en JSON strict :
 {
@@ -222,14 +262,24 @@ Offre: """${jobDescription.slice(0, 4000)}"""`;
       }
     );
 
-    if (!resp.ok) return null;
+    if (!resp.ok) return { ok: false, reason: 'provider_http', status: resp.status };
     const data = await resp.json() as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
     const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
-    if (!text) return null;
+    if (!text) return { ok: false, reason: 'provider_empty' };
 
-    return normalizeAnalysisResult(JSON.parse(text), cvText);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      return { ok: false, reason: 'invalid_json' };
+    }
+
+    const result = normalizeAnalysisResult(parsed, cvText);
+    if (!result) return { ok: false, reason: 'normalize_empty' };
+
+    return { ok: true, result };
   } catch {
-    return null;
+    return { ok: false, reason: 'network' };
   }
 }
 

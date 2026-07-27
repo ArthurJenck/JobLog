@@ -4,6 +4,11 @@ import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from '@/components/ui/tooltip';
 import type { Platform } from '@/lib/api';
 import { isSameLocalDay, reminderMessage } from '@/lib/platformReminder';
 import { burstAt } from '@/lib/confetti';
@@ -113,11 +118,24 @@ export function PlatformRow({
       )}
       {!isEditing && (
         <div className="flex items-center gap-2 shrink-0">
-          <Checkbox
-            checked={checkedToday}
-            disabled={!openedToday && !checkedToday}
-            onCheckedChange={(value) => handleToggle(value === true)}
-          />
+          {!openedToday && !checkedToday ? (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <span className="inline-flex cursor-not-allowed">
+                  <Checkbox checked={checkedToday} disabled />
+                </span>
+              </TooltipTrigger>
+              <TooltipContent>
+                Visitez la plateforme en cliquant sur le bouton de
+                redirection pour pouvoir la valider
+              </TooltipContent>
+            </Tooltip>
+          ) : (
+            <Checkbox
+              checked={checkedToday}
+              onCheckedChange={(value) => handleToggle(value === true)}
+            />
+          )}
         </div>
       )}
       <div

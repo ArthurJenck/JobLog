@@ -37,6 +37,14 @@ interface ApplicationStatusDoc {
   reminder?: { at?: Date | null; frequencyDays?: number } | null;
 }
 
+async function resolveDefaultCvId(userId: string): Promise<string | null> {
+  const cvCol = await getCollection('cvs');
+  const cvs = await cvCol.find({ userId }, { projection: { _id: 1, isDefault: 1 } }).toArray();
+  if (cvs.length === 0) return null;
+  const defaultCv = cvs.find((cv) => cv.isDefault) ?? (cvs.length === 1 ? cvs[0] : null);
+  return defaultCv ? defaultCv._id.toString() : null;
+}
+
 const SORT_FIELD_MAP: Record<string, string> = {
   title: 'title',
   company: 'company',
@@ -275,7 +283,7 @@ async function _handler(req: VercelRequest, res: VercelResponse) {
     const doc = {
       userId,
       jobPostingId,
-      cvId: cvId ?? null,
+      cvId: cvId ?? await resolveDefaultCvId(userId),
       status,
       appliedAt: status === 'applied' ? now : null,
       contact: null,

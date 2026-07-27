@@ -48,6 +48,20 @@ interface Props {
   onUpdated: () => void;
 }
 
+function scrapeFailureHint(category: ApplicationWithJob['jobPosting']['scrape_error_category']) {
+  switch (category) {
+    case 'site_blocked':
+      return "L'offre n'a pas pu être récupérée automatiquement (site bloqué). Colle le texte de l'offre ci-dessous pour analyser quand même.";
+    case 'service_unavailable':
+      return 'Récupération momentanément indisponible. Réessaie plus tard ou colle le texte de l’offre pour analyser quand même.';
+    case 'extraction_failed':
+    case 'no_content':
+      return "Le contenu de l'offre n'a pas pu être extrait. Colle le texte de l'offre ci-dessous pour analyser quand même.";
+    default:
+      return "La récupération de l'offre a échoué. Colle le texte de l'offre ci-dessous pour analyser quand même.";
+  }
+}
+
 export function ApplicationDetail({ application, open, onClose, onUpdated }: Props) {
   const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -68,6 +82,8 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
   const scrapeStatus = getJobScrapeStatus(jp);
   const scrapeReady = scrapeStatus === 'succeeded';
   const canEditJob = scrapeReady || scrapeStatus === 'failed';
+  const defaultCv = cvs.find((cv) => cv.isDefault) ?? (cvs.length === 1 ? cvs[0] : undefined);
+  const effectiveCvId = application.cvId ?? defaultCv?._id ?? null;
 
   async function patch(body: Record<string, unknown>) {
     setIsSaving(true);
@@ -296,12 +312,12 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
           <Separator />
 
-          {scrapeReady && (
+          {(scrapeReady || scrapeStatus === 'failed') && (
             <>
               <section className="flex flex-col gap-3">
                 <span className="text-sm font-medium">CV associé</span>
                 <Select
-                  value={application.cvId ?? '__none__'}
+                  value={effectiveCvId ?? '__none__'}
                   onValueChange={(v) => patch({ cvId: v === '__none__' ? null : v })}
                   disabled={isSaving}
                 >
@@ -315,8 +331,13 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
                     ))}
                   </SelectContent>
                 </Select>
-                {application.cvId && (
-                  <AnalyzePanel applicationId={application._id} cvId={application.cvId} />
+                {!scrapeReady && (
+                  <p className="text-xs text-muted-foreground">
+                    {scrapeFailureHint(jp?.scrape_error_category)}
+                  </p>
+                )}
+                {effectiveCvId && (
+                  <AnalyzePanel applicationId={application._id} cvId={effectiveCvId} />
                 )}
               </section>
 

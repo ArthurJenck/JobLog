@@ -131,6 +131,7 @@ interface JobPostingDoc {
   location_normalization_status?: LocationNormalizationStatus | null;
   location_normalized_at?: Date | null;
   description?: unknown;
+  description_source?: 'scrape' | 'manual';
   contract_type?: ContractType | null;
   remote?: RemoteType | null;
   salary?: NormalizedExtraction['salary'];
@@ -143,6 +144,8 @@ interface JobPostingDoc {
   scrape_steps?: ScrapeStep[];
   scrape_attempts?: number;
   scrape_error?: string | null;
+  scrape_error_code?: string | null;
+  scrape_error_category?: ScrapeErrorCategory | null;
   scrape_message_id?: string | null;
   scrape_started_at?: Date | null;
   scrape_finished_at?: Date | null;
@@ -258,6 +261,32 @@ class ScrapeFailure extends Error {
     this.code = code;
     this.providerStatus = providerStatus;
   }
+}
+
+type ScrapeErrorCategory = 'site_blocked' | 'service_unavailable' | 'extraction_failed' | 'no_content' | 'other';
+
+function classifyErrorCategory(code: string): ScrapeErrorCategory {
+  if (code === 'site_blocks_reader' || code.endsWith('_target_unreadable')) {
+    return 'site_blocked';
+  }
+  if (
+    code.endsWith('_unavailable') ||
+    code.endsWith('_rate_limited') ||
+    code.endsWith('_fetch_failed') ||
+    code.endsWith('_auth_error') ||
+    code.endsWith('_balance_error') ||
+    code.endsWith('_quota_exhausted') ||
+    code === 'gemini_missing_api_key' ||
+    code === 'gemini_quota_exceeded' ||
+    code === 'jina_missing_api_key' ||
+    code === 'queue_unavailable'
+  ) {
+    return 'service_unavailable';
+  }
+  if (code === 'gemini_extraction_failed') {
+    return 'extraction_failed';
+  }
+  return 'other';
 }
 
 export function parseFromUrlRequest(body: unknown) {
@@ -475,6 +504,8 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
         scrape_steps: buildInitialSteps(now),
         scrape_attempts: attempt,
         scrape_error: null,
+        scrape_error_code: null,
+        scrape_error_category: null,
         scrape_message_id: null,
         scrape_started_at: null,
         scrape_finished_at: null,
@@ -558,6 +589,8 @@ export async function processUrlScrapeMessage(
           scrape_started_at: startedAt,
           scrape_finished_at: null,
           scrape_error: null,
+          scrape_error_code: null,
+          scrape_error_category: null,
           scrape_message_id: metadata?.messageId ?? job.scrape_message_id ?? null,
           updated_at: startedAt,
         },
@@ -627,6 +660,7 @@ export async function processUrlScrapeMessage(
           company: extraction.company,
           ...locationNormalization,
           description: extraction.description,
+          description_source: 'scrape',
           contract_type: extraction.contract_type,
           remote: extraction.remote,
           salary: extraction.salary,
@@ -638,6 +672,8 @@ export async function processUrlScrapeMessage(
           scrape_status: 'succeeded',
           scrape_steps: steps,
           scrape_error: null,
+          scrape_error_code: null,
+          scrape_error_category: null,
           scrape_finished_at: now,
           updated_at: now,
         },
@@ -680,6 +716,8 @@ async function createOrResetQueuedJobPosting({
           scrape_steps: placeholder.scrape_steps,
           scrape_attempts: attempt,
           scrape_error: null,
+          scrape_error_code: null,
+          scrape_error_category: null,
           scrape_message_id: null,
           scrape_started_at: null,
           scrape_finished_at: null,
@@ -748,6 +786,8 @@ function buildPlaceholderJobPosting(
     scrape_steps: buildInitialSteps(now),
     scrape_attempts: attempt,
     scrape_error: null,
+    scrape_error_code: null,
+    scrape_error_category: null,
     scrape_message_id: null,
     scrape_started_at: null,
     scrape_finished_at: null,
@@ -862,6 +902,8 @@ async function markScrapeFailed({
         scrape_status: 'failed',
         scrape_steps: failedSteps,
         scrape_error: message,
+        scrape_error_code: code,
+        scrape_error_category: classifyErrorCategory(code),
         scrape_finished_at: now,
         updated_at: now,
       },

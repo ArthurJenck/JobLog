@@ -85,6 +85,8 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
         setError(apiError.message ?? 'Aucune donnée à comparer avec votre CV.');
       } else if (apiError.status === 503) {
         setError(apiError.message ?? "Service d'analyse temporairement indisponible, réessayez plus tard.");
+      } else if (apiError.code === 'analysis_failed') {
+        setError(apiError.message ?? "L'analyse n'a pas pu être produite, réessayez.");
       } else {
         setError(e instanceof Error ? e.message : 'Erreur inconnue');
       }

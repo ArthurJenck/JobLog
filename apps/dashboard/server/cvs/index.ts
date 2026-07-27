@@ -11,8 +11,9 @@ const CreateCvSchema = z.object({
   content: z.string().min(1),
 });
 
-const RenameCvSchema = z.object({
-  label: z.string().min(1),
+const UpdateCvSchema = z.object({
+  label: z.string().min(1).optional(),
+  isDefault: z.boolean().optional(),
 });
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
@@ -53,12 +54,22 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { id } = req.query as { id: string };
     if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
 
-    const parsed = RenameCvSchema.safeParse(req.body);
+    const parsed = UpdateCvSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+
+    const { label, isDefault } = parsed.data;
+
+    if (isDefault) {
+      await col.updateMany({ userId }, { $set: { isDefault: false } });
+    }
+
+    const update: Record<string, unknown> = {};
+    if (label !== undefined) update.label = label;
+    if (isDefault !== undefined) update.isDefault = isDefault;
 
     const result = await col.updateOne(
       { _id: new ObjectId(id), userId },
-      { $set: { label: parsed.data.label } },
+      { $set: update },
     );
     if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
     return res.status(200).json({ ok: true });

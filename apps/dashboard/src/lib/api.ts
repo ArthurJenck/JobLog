@@ -165,7 +165,7 @@ export const api = {
     create(body: { label: string; filename: string; content: string }): Promise<{ cvId: string }> {
       return request('/cvs', { method: 'POST', body: JSON.stringify(body) });
     },
-    update(id: string, body: { label: string }): Promise<{ ok: boolean }> {
+    update(id: string, body: { label?: string; isDefault?: boolean }): Promise<{ ok: boolean }> {
       return request(`/cvs?id=${id}`, { method: 'PATCH', body: JSON.stringify(body) });
     },
     delete(id: string): Promise<{ ok: boolean }> {

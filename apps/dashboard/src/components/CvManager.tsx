@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
@@ -56,6 +57,11 @@ export function CvManager() {
     if (!trimmed) return;
     await api.cvs.update(id, { label: trimmed });
     setRenamingId(null);
+    load();
+  }
+
+  async function setDefault(id: string) {
+    await api.cvs.update(id, { isDefault: true });
     load();
   }
 
@@ -119,7 +125,12 @@ export function CvManager() {
                     </div>
                   ) : (
                     <>
-                      <p className="text-sm font-medium truncate">{cv.label}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium truncate">{cv.label}</p>
+                        {cv.isDefault && (
+                          <Badge variant="secondary" className="flex-shrink-0">Par défaut</Badge>
+                        )}
+                      </div>
                       <p className="text-xs text-muted-foreground truncate">{cv.filename}</p>
                     </>
                   )}
@@ -129,6 +140,16 @@ export function CvManager() {
                     <p className="text-xs text-muted-foreground flex-shrink-0">
                       {new Date(cv.uploadedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
                     </p>
+                    {cvs.length > 1 && !cv.isDefault && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-xs text-muted-foreground hover:text-foreground flex-shrink-0"
+                        onClick={() => setDefault(cv._id)}
+                      >
+                        Définir par défaut
+                      </Button>
+                    )}
                     <Button
                       variant="ghost"
                       size="icon"

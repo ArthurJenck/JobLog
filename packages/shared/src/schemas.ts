@@ -52,6 +52,7 @@ export const JobPostingSchema = z.object({
   location_normalization_status: z.enum(LOCATION_NORMALIZATION_STATUSES).nullable().optional(),
   location_normalized_at: z.string().datetime().nullable().optional(),
   description: z.string().nullable(),
+  description_source: z.enum(['scrape', 'manual']).optional(),
   contract_type: z.enum(CONTRACT_TYPES).nullable(),
   remote: z.enum(REMOTE_TYPES).nullable(),
   salary: SalarySchema.nullable(),
@@ -64,6 +65,14 @@ export const JobPostingSchema = z.object({
   scrape_steps: z.array(ScrapeStepSchema).optional(),
   scrape_attempts: z.number().int().min(0).optional(),
   scrape_error: z.string().nullable().optional(),
+  scrape_error_code: z.string().nullable().optional(),
+  scrape_error_category: z.enum([
+    'site_blocked',
+    'service_unavailable',
+    'extraction_failed',
+    'no_content',
+    'other',
+  ]).nullable().optional(),
   scrape_message_id: z.string().nullable().optional(),
   scrape_started_at: z.string().datetime().nullable().optional(),
   scrape_finished_at: z.string().datetime().nullable().optional(),
@@ -133,6 +142,7 @@ export const CvSchema = z.object({
   content: z.string(),
   content_hash: z.string(),
   uploadedAt: z.string().datetime(),
+  isDefault: z.boolean().optional(),
 });
 
 export const CvAnalysisSchema = z.object({
