@@ -53,8 +53,14 @@ export function PlatformRow({
   onFaviconError,
 }: PlatformRowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } =
-    useSortable({ id: platform._id });
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: platform._id });
 
   const openedToday = isSameLocalDay(platform.lastClickedAt);
   const checkedToday = isSameLocalDay(platform.checkedAt);
@@ -83,20 +89,22 @@ export function PlatformRow({
       ref={setRefs}
       style={style}
       className={cn(
-        'flex items-center gap-3 rounded-lg border px-4 py-3 bg-background',
+        'group/row relative flex items-center gap-3 rounded-lg border px-4 py-3 bg-background',
         isDragging && 'opacity-60',
       )}
     >
       {!isEditing && (
+        <button
+          type="button"
+          className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-7 w-7 rounded-full border bg-background text-muted-foreground shadow-sm opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 hover:text-foreground cursor-grab active:cursor-grabbing touch-none transition-opacity"
+          {...attributes}
+          {...listeners}
+        >
+          <GripVerticalIcon size={16} />
+        </button>
+      )}
+      {!isEditing && (
         <div className="flex items-center gap-2 shrink-0">
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground cursor-grab active:cursor-grabbing touch-none"
-            {...attributes}
-            {...listeners}
-          >
-            <GripVerticalIcon size={16} />
-          </button>
           <Checkbox
             checked={checkedToday}
             disabled={!openedToday && !checkedToday}
@@ -135,10 +143,20 @@ export function PlatformRow({
                   placeholder="Nom"
                   autoFocus
                 />
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onConfirmEdit}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={onConfirmEdit}
+                >
                   <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                 </Button>
-                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onCancelEdit}>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-7 w-7"
+                  onClick={onCancelEdit}
+                >
                   <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                 </Button>
               </div>
@@ -164,9 +182,13 @@ export function PlatformRow({
                   )}
                 />
               </span>
-              <p className="text-xs text-muted-foreground truncate">{platform.url}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {platform.url}
+              </p>
               {reminder && (
-                <p className="text-xs text-muted-foreground/80 mt-0.5">{reminder}</p>
+                <p className="text-xs text-muted-foreground/80 mt-0.5">
+                  {reminder}
+                </p>
               )}
             </>
           )}
