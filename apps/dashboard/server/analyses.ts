@@ -274,34 +274,35 @@ type GeminiCallResult =
   | { ok: false; reason: 'provider_http' | 'network' | 'provider_empty' | 'invalid_json' | 'normalize_empty'; status?: number };
 
 async function callGemini(cvText: string, jobDescription: string, model: string): Promise<GeminiCallResult> {
-  const prompt = `Tu es un assistant de recrutement. Compare ce CV à cette offre.
-Réponds en JSON strict :
+  const prompt = `You are a recruiting assistant. Compare this CV against this job posting.
+Respond in strict JSON:
 {
   "requirements": [
     {
       "keyword": "...",
       "present": true,
-      "evidence": "court extrait exact du CV"
+      "evidence": "short exact excerpt from the CV"
     }
   ],
   "insights": "..."
 }
 
-Règles :
-- requirements : 5 à 12 skills/technos importantes de l'offre.
-- requirements doit contenir uniquement des compétences, technos, frameworks, langages, outils ou méthodes demandés par l'offre ; pas de titre de poste, séniorité, soft skill vague ou formulation marketing.
-- present=true uniquement si la compétence est explicitement présente dans le CV.
-- Ne déduis jamais une compétence depuis l'offre, le titre du poste, ou une compétence voisine.
-- Pour les technologies/frameworks/langages/outils, exige le terme exact ou une variante typographique évidente dans le CV.
-- evidence doit être un court extrait exact du CV quand present=true, sinon null.
-- Si tu ne trouves pas d'extrait exact du CV pour evidence, present doit être false.
-- Si une compétence semble implicite/logique mais n'est pas écrite dans le CV, present doit être false ; mentionne dans insights qu'il faut l'ajouter explicitement si c'est vrai.
-- Vérifie la cohérence avant de répondre : tout item present=true doit avoir evidence non-null, tout item absent doit avoir present=false et evidence=null.
-- Les insights doivent être cohérents avec requirements : ne dis jamais qu'une compétence est absente si present=true.
-- insights : 3-5 lignes max, conseils concrets, en français.
+Rules:
+- requirements: 5 to 12 important skills/technologies from the posting.
+- requirements must only contain skills, technologies, frameworks, languages, tools, or methods requested by the posting; not job titles, seniority, vague soft skills, or marketing phrasing.
+- present=true only if the skill is explicitly present in the CV, or if a tool/technology mentioned in the CV implies it with near-certainty (the confidence level a recruiter would accept without argument, e.g. a relational database engine implies SQL, a framework implies its base language).
+- Never make this connection based on mere thematic proximity, popularity, or a "neighboring" but unguaranteed skill (e.g. do not infer Kubernetes from Docker, GraphQL from REST, or Vue from React); when in doubt, present=false.
+- Never infer a skill from the job posting or the job title.
+- For technologies/frameworks/languages/tools, require the exact term, an obvious typographic variant, or the near-certain implication described above in the CV.
+- evidence must be a short exact excerpt from the CV when present=true (the excerpt that justifies the direct presence or the implication), otherwise null.
+- If you cannot find an exact excerpt from the CV for evidence, present must be false.
+- If a skill seems implicit/logical but is not written in the CV and is not near-certainly implied by a mentioned tool either, present must be false; mention in insights that it should be added explicitly if true.
+- Check consistency before answering: every present=true item must have non-null evidence, every absent item must have present=false and evidence=null.
+- insights must be consistent with requirements: never say a skill is absent if present=true.
+- insights: 3-5 lines max, concrete advice, written in French.
 
 CV: """${cvText.slice(0, 6000)}"""
-Offre: """${jobDescription.slice(0, 4000)}"""`;
+Job posting: """${jobDescription.slice(0, 4000)}"""`;
 
   try {
     const resp = await fetch(
@@ -329,7 +330,7 @@ Offre: """${jobDescription.slice(0, 4000)}"""`;
       return { ok: false, reason: 'invalid_json' };
     }
 
-    const result = normalizeAnalysisResult(parsed, cvText);
+    const result = normalizeAnalysisResult(parsed);
     if (!result) return { ok: false, reason: 'normalize_empty' };
 
     return { ok: true, result };
@@ -338,7 +339,7 @@ Offre: """${jobDescription.slice(0, 4000)}"""`;
   }
 }
 
-function normalizeAnalysisResult(raw: unknown, cvText: string): AnalysisResult | null {
+function normalizeAnalysisResult(raw: unknown): AnalysisResult | null {
   if (!raw || typeof raw !== 'object') return null;
 
   const parsed = raw as {
@@ -370,9 +371,7 @@ function normalizeAnalysisResult(raw: unknown, cvText: string): AnalysisResult |
       ? candidate.evidence.trim()
       : null;
     const requestedPresent = candidate.present === true;
-    const present = requestedPresent
-      && evidence !== null
-      && keywordAppearsInText(keyword, cvText);
+    const present = requestedPresent && evidence !== null;
     correctedByEvidence ||= requestedPresent && !present;
 
     const key = normalizeCompactText(keyword);
@@ -418,33 +417,6 @@ function toStringArray(value: unknown) {
   return Array.isArray(value)
     ? value.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
     : [];
-}
-
-function keywordAppearsInText(keyword: string, text: string) {
-  return containsNormalized(text, keyword);
-}
-
-function containsNormalized(text: string, search: string) {
-  const haystack = normalizeText(text);
-  const needle = normalizeText(search);
-  if (needle.length <= 1) return false;
-
-  if (` ${haystack} `.includes(` ${needle} `)) return true;
-
-  const compactNeedle = normalizeCompactText(search);
-  if (compactNeedle.length <= 1) return false;
-
-  const words = haystack.split(' ').filter(Boolean);
-  const needleWordCount = needle.split(' ').filter(Boolean).length;
-  const maxWindowSize = Math.min(Math.max(needleWordCount + 1, 1), 8);
-
-  for (let size = 1; size <= maxWindowSize; size += 1) {
-    for (let index = 0; index + size <= words.length; index += 1) {
-      if (words.slice(index, index + size).join('') === compactNeedle) return true;
-    }
-  }
-
-  return false;
 }
 
 function normalizeText(value: string) {

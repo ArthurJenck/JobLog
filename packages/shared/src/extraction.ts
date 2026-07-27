@@ -10,6 +10,14 @@ export function parseContractType(raw: string): ContractType | null {
   return null;
 }
 
+export function canonicalizeSkillKey(raw: string): string {
+  return raw
+    .normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/[^a-z0-9+#]+/g, '');
+}
+
 export function parseRemote(raw: string): RemoteType | null {
   const r = raw.toLowerCase();
   if (
