@@ -175,6 +175,10 @@ export const api = {
       const qs = new URLSearchParams({ cvId });
       return request(`/cvs/skills?${qs.toString()}`);
     },
+    resetAnalyses(cvId: string): Promise<{ deleted: number }> {
+      const qs = new URLSearchParams({ cvId });
+      return request(`/cvs/skills?${qs.toString()}`, { method: 'DELETE' });
+    },
   },
   platforms: {
     list(): Promise<{ data: Platform[] }> {

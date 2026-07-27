@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { Button } from '@/components/ui/button';
 import {
   Select,
   SelectContent,
@@ -48,24 +49,40 @@ export function CvSkillsPanel({ cvs }: Props) {
     };
   }, [effectiveCvId]);
 
+  async function resetAnalyses() {
+    if (!effectiveCvId) return;
+    if (!confirm('Réinitialiser les analyses de ce CV ? Elles seront recalculées à la demande depuis chaque candidature.')) return;
+    await api.cvs.resetAnalyses(effectiveCvId);
+    setPresent([]);
+    setMissing([]);
+    setAnalyzedCount(0);
+  }
+
   if (cvs.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-3 max-w-3xl">
       <div className="flex items-center justify-between gap-3">
         <p className="text-sm font-medium">Compétences des offres analysées</p>
-        <Select value={effectiveCvId ?? ''} onValueChange={setSelectedCvId}>
-          <SelectTrigger className="h-8 w-56 text-sm">
-            <SelectValue placeholder="Choisir un CV" />
-          </SelectTrigger>
-          <SelectContent>
-            {cvs.map((cv) => (
-              <SelectItem key={cv._id} value={cv._id}>
-                {cv.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <div className="flex items-center gap-2">
+          {analyzedCount > 0 && (
+            <Button variant="ghost" size="sm" onClick={() => { void resetAnalyses(); }} className="h-8 text-xs text-muted-foreground">
+              Réinitialiser les analyses
+            </Button>
+          )}
+          <Select value={effectiveCvId ?? ''} onValueChange={setSelectedCvId}>
+            <SelectTrigger className="h-8 w-56 text-sm">
+              <SelectValue placeholder="Choisir un CV" />
+            </SelectTrigger>
+            <SelectContent>
+              {cvs.map((cv) => (
+                <SelectItem key={cv._id} value={cv._id}>
+                  {cv.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </div>
 
       {isLoading ? (
