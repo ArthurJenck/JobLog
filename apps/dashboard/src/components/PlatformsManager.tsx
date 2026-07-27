@@ -17,12 +17,22 @@ import {
 } from 'lucide-react';
 import { toast } from 'sonner';
 
+function isValidUrl(value: string) {
+  try {
+    const parsed = new URL(value);
+    return parsed.protocol === 'http:' || parsed.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
 export function PlatformsManager() {
   const [platforms, setPlatforms] = useState<Platform[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [showAdd, setShowAdd] = useState(false);
-  const [renamingId, setRenamingId] = useState<string | null>(null);
-  const [renameValue, setRenameValue] = useState('');
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editUrl, setEditUrl] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Set<string>>(new Set());
 
   async function load() {
@@ -56,22 +66,29 @@ export function PlatformsManager() {
     load();
   }
 
-  function startRename(platform: Platform) {
-    setRenamingId(platform._id);
-    setRenameValue(platform.name);
+  function startEdit(platform: Platform) {
+    setEditingId(platform._id);
+    setEditName(platform.name);
+    setEditUrl(platform.url);
   }
 
-  async function confirmRename(id: string) {
-    const trimmed = renameValue.trim();
-    if (!trimmed) return;
-    await api.platforms.update(id, { name: trimmed });
-    setRenamingId(null);
+  async function confirmEdit(id: string) {
+    const trimmedName = editName.trim();
+    const trimmedUrl = editUrl.trim();
+    if (!trimmedName) return;
+    if (!isValidUrl(trimmedUrl)) {
+      toast.error('URL invalide');
+      return;
+    }
+    await api.platforms.update(id, { name: trimmedName, url: trimmedUrl });
+    setEditingId(null);
     load();
   }
 
-  function cancelRename() {
-    setRenamingId(null);
-    setRenameValue('');
+  function cancelEdit() {
+    setEditingId(null);
+    setEditName('');
+    setEditUrl('');
   }
 
   function openInNewTab(url: string) {
@@ -156,7 +173,7 @@ export function PlatformsManager() {
               key={platform._id}
               className="flex items-center gap-3 rounded-lg border px-4 py-3"
             >
-              {renamingId !== platform._id && (
+              {editingId !== platform._id && (
                 <div className="flex flex-col shrink-0">
                   <Button
                     variant="ghost"
@@ -191,34 +208,47 @@ export function PlatformsManager() {
                 <GlobeIcon className="h-5 w-5 text-muted-foreground shrink-0" />
               )}
               <div className="flex-1 min-w-0">
-                {renamingId === platform._id ? (
-                  <div className="flex items-center gap-1">
+                {editingId === platform._id ? (
+                  <div className="flex flex-col gap-1">
+                    <div className="flex items-center gap-1">
+                      <Input
+                        value={editName}
+                        onChange={(e) => setEditName(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') confirmEdit(platform._id);
+                          if (e.key === 'Escape') cancelEdit();
+                        }}
+                        className="h-7 text-sm"
+                        placeholder="Nom"
+                        autoFocus
+                      />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => confirmEdit(platform._id)}
+                      >
+                        <CheckIcon className="h-3.5 w-3.5 text-green-600" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={cancelEdit}
+                      >
+                        <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                      </Button>
+                    </div>
                     <Input
-                      value={renameValue}
-                      onChange={(e) => setRenameValue(e.target.value)}
+                      value={editUrl}
+                      onChange={(e) => setEditUrl(e.target.value)}
                       onKeyDown={(e) => {
-                        if (e.key === 'Enter') confirmRename(platform._id);
-                        if (e.key === 'Escape') cancelRename();
+                        if (e.key === 'Enter') confirmEdit(platform._id);
+                        if (e.key === 'Escape') cancelEdit();
                       }}
-                      className="h-7 text-sm"
-                      autoFocus
+                      className="h-7 text-xs"
+                      placeholder="URL"
                     />
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={() => confirmRename(platform._id)}
-                    >
-                      <CheckIcon className="h-3.5 w-3.5 text-green-600" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="h-7 w-7"
-                      onClick={cancelRename}
-                    >
-                      <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                    </Button>
                   </div>
                 ) : (
                   <>
@@ -231,7 +261,7 @@ export function PlatformsManager() {
                   </>
                 )}
               </div>
-              {renamingId !== platform._id && (
+              {editingId !== platform._id && (
                 <>
                   <Button
                     variant="ghost"
@@ -245,7 +275,7 @@ export function PlatformsManager() {
                     variant="ghost"
                     size="icon"
                     className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
-                    onClick={() => startRename(platform)}
+                    onClick={() => startEdit(platform)}
                   >
                     <PencilIcon className="h-3.5 w-3.5" />
                   </Button>
