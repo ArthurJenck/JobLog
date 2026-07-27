@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
+import { playToggle } from '@/lib/sound';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '';
 
@@ -75,8 +76,10 @@ export function NotificationSettings() {
         description="Reçois une notification navigateur (en plus de l'email)."
         enabled={settings.push}
         onChange={(v) => {
-          if (v) void subscribePush();
-          else void unsubscribePush();
+          setSettings((prev) => (prev ? { ...prev, push: v } : prev));
+          (v ? subscribePush() : unsubscribePush()).catch(() => {
+            setSettings((prev) => (prev ? { ...prev, push: !v } : prev));
+          });
         }}
         disabled={isSaving || !VAPID_PUBLIC_KEY}
       />
@@ -125,7 +128,10 @@ function ToggleRow({
         role="switch"
         aria-checked={enabled}
         disabled={disabled}
-        onClick={() => onChange(!enabled)}
+        onClick={() => {
+          playToggle();
+          onChange(!enabled);
+        }}
         className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none disabled:opacity-50 ${
           enabled ? 'bg-primary' : 'bg-input'
         }`}

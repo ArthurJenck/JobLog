@@ -10,6 +10,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { playAdd, playError, playLoading } from '@/lib/sound';
 
 const STORAGE_KEY = 'joblog:feedback-bar-open';
 type FeedbackType = 'bug' | 'feedback' | 'feature';
@@ -34,6 +35,7 @@ export function FeedbackBar() {
   const handleSubmit = useCallback(async () => {
     if (!message.trim() || submitting) return;
     setSubmitting(true);
+    playLoading();
     try {
       const res = await fetch('/api/feedback', {
         method: 'POST',
@@ -49,11 +51,14 @@ export function FeedbackBar() {
       if (res.ok) {
         setMessage('');
         setOpenPersisted(false);
+        playAdd();
         toast.success('Retour envoyé, merci !');
       } else {
+        playError();
         toast.error("Erreur lors de l'envoi, réessaie dans un instant.");
       }
     } catch {
+      playError();
       toast.error('Erreur réseau, réessaie dans un instant.');
     } finally {
       setSubmitting(false);

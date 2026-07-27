@@ -2,16 +2,19 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { isSoundEnabled, setSoundEnabled, playCheck } from '@/lib/sound';
+import { isSoundEnabled, setSoundEnabled, playToggle } from '@/lib/sound';
+import { useUser } from '@/hooks/use-user';
+import { ProfileForm } from './ProfileForm';
 
 export function AccountSettings() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [soundEnabled, setSoundEnabledState] = useState(isSoundEnabled);
+  const { user, loading: userLoading } = useUser();
 
   function toggleSound(checked: boolean) {
+    playToggle();
     setSoundEnabledState(checked);
     setSoundEnabled(checked);
-    if (checked) playCheck();
   }
 
   async function deleteAccount() {
@@ -30,6 +33,19 @@ export function AccountSettings() {
 
   return (
     <div className="flex flex-col gap-6 max-w-md">
+      <div className="rounded-lg border p-4 flex flex-col gap-4">
+        <div>
+          <p className="text-sm font-medium">Profil</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            Utilisé pour personnaliser tes messages de félicitations.
+          </p>
+        </div>
+        {userLoading ? (
+          <p className="text-xs text-muted-foreground">Chargement…</p>
+        ) : (
+          <ProfileForm user={user ?? { firstName: '', sex: 'unspecified' }} />
+        )}
+      </div>
       <div className="rounded-lg border p-4 flex items-start gap-3">
         <Checkbox
           id="sound-enabled"

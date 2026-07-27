@@ -25,7 +25,16 @@ import { toast } from 'sonner';
 import { isSameLocalDay } from '@/lib/platformReminder';
 import { randomCelebration } from '@/lib/celebrationMessages';
 import { celebrate } from '@/lib/confetti';
-import { playComplete, playDelete } from '@/lib/sound';
+import {
+  playComplete,
+  playDelete,
+  playDrop,
+  playError,
+  playPageOpen,
+  playAdd,
+  playCancel,
+} from '@/lib/sound';
+import { useUser } from '@/hooks/use-user';
 
 function isValidUrl(value: string) {
   try {
@@ -48,7 +57,9 @@ export function PlatformsManager() {
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   async function load() {
@@ -76,10 +87,12 @@ export function PlatformsManager() {
     };
   }, []);
 
-  const allChecked = platforms.length > 0 && platforms.every((p) => isSameLocalDay(p.checkedAt));
+  const { user } = useUser();
+  const allChecked =
+    platforms.length > 0 && platforms.every((p) => isSameLocalDay(p.checkedAt));
   const celebrationMessage = useMemo(
-    () => (allChecked ? randomCelebration() : null),
-    [allChecked],
+    () => (allChecked ? randomCelebration(user) : null),
+    [allChecked, user],
   );
 
   useEffect(() => {
@@ -108,15 +121,18 @@ export function PlatformsManager() {
     const trimmedUrl = editUrl.trim();
     if (!trimmedName) return;
     if (!isValidUrl(trimmedUrl)) {
+      playError();
       toast.error('URL invalide');
       return;
     }
     await api.platforms.update(id, { name: trimmedName, url: trimmedUrl });
+    playAdd();
     setEditingId(null);
     load();
   }
 
   function cancelEdit() {
+    playCancel();
     setEditingId(null);
     setEditName('');
     setEditUrl('');
@@ -132,20 +148,26 @@ export function PlatformsManager() {
 
   function openPlatform(platform: Platform) {
     openInNewTab(platform.url);
+    playPageOpen();
     const now = new Date().toISOString();
     setPlatforms((prev) =>
-      prev.map((p) => (p._id === platform._id ? { ...p, lastClickedAt: now } : p)),
+      prev.map((p) =>
+        p._id === platform._id ? { ...p, lastClickedAt: now } : p,
+      ),
     );
     api.platforms.markClicked(platform._id).catch(() => {
+      playError();
       toast.error("Impossible d'enregistrer l'ouverture");
     });
   }
 
   function openAll() {
     platforms.forEach((platform) => openInNewTab(platform.url));
+    playPageOpen();
     const now = new Date().toISOString();
     setPlatforms((prev) => prev.map((p) => ({ ...p, lastClickedAt: now })));
     api.platforms.markAllClicked().catch(() => {
+      playError();
       toast.error("Impossible d'enregistrer l'ouverture");
     });
   }
@@ -153,11 +175,14 @@ export function PlatformsManager() {
   async function toggleChecked(platform: Platform, checked: boolean) {
     const now = new Date().toISOString();
     setPlatforms((prev) =>
-      prev.map((p) => (p._id === platform._id ? { ...p, checkedAt: checked ? now : null } : p)),
+      prev.map((p) =>
+        p._id === platform._id ? { ...p, checkedAt: checked ? now : null } : p,
+      ),
     );
     try {
       await api.platforms.setChecked(platform._id, checked);
     } catch {
+      playError();
       toast.error('Impossible de mettre à jour la plateforme');
       load();
     }
@@ -173,10 +198,12 @@ export function PlatformsManager() {
 
     const reordered = arrayMove(platforms, oldIndex, newIndex);
     setPlatforms(reordered);
+    playDrop();
 
     try {
       await api.platforms.reorder(reordered.map((p) => p._id));
     } catch {
+      playError();
       toast.error('Impossible de réorganiser les plateformes');
       load();
     }
@@ -225,7 +252,7 @@ export function PlatformsManager() {
       )}
 
       {celebrationMessage && (
-        <Card className="border-green-600/30 bg-green-600/5">
+        <Card className="border-green-600/30 bg-green-600/5 shadow-none">
           <CardContent className="flex items-center gap-3 py-4">
             <PartyPopperIcon className="h-5 w-5 text-green-600 shrink-0" />
             <p className="text-sm font-medium">{celebrationMessage}</p>
@@ -258,7 +285,16 @@ export function PlatformsManager() {
                   onStartEdit={() => startEdit(platform)}
                   onDelete={() => deletePlatform(platform._id)}
                   onOpen={() => openPlatform(platform)}
-                  onToggleChecked={(checked) => toggleChecked(platform, checked)}
+                  onToggleChecked={(checked) =>
+                    toggleChecked(platform, checked)
+                  }
+                  willCompleteAll={
+                    !isSameLocalDay(platform.checkedAt) &&
+                    platforms.every(
+                      (p) =>
+                        p._id === platform._id || isSameLocalDay(p.checkedAt),
+                    )
+                  }
                   faviconBroken={brokenFavicons.has(platform._id)}
                   onFaviconError={() =>
                     setBrokenFavicons((prev) => new Set(prev).add(platform._id))

@@ -4,7 +4,7 @@ import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
 import { GlobeIcon, Loader2Icon } from 'lucide-react';
 import { toast } from 'sonner';
-import { playAdd } from '@/lib/sound';
+import { playAdd, playError, playLoading, playReady } from '@/lib/sound';
 
 function isValidUrl(value: string) {
   try {
@@ -27,10 +27,12 @@ export function AddPlatformForm({ onAdded }: { onAdded: () => void }) {
 
   async function fetchMetadata() {
     if (!isValidUrl(url)) {
+      playError();
       toast.error('URL invalide');
       return;
     }
     setIsFetchingMeta(true);
+    playLoading();
     try {
       const meta = await api.platforms.metadata(url);
       setName(meta.name);
@@ -38,7 +40,9 @@ export function AddPlatformForm({ onAdded }: { onAdded: () => void }) {
       setDomain(meta.domain);
       setFaviconBroken(false);
       setStep('name');
+      playReady();
     } catch {
+      playError();
       toast.error("Impossible de récupérer les informations de cette page");
     } finally {
       setIsFetchingMeta(false);
@@ -60,6 +64,7 @@ export function AddPlatformForm({ onAdded }: { onAdded: () => void }) {
       setFaviconBroken(false);
       setStep('url');
     } catch {
+      playError();
       toast.error("Impossible d'ajouter cette plateforme");
     } finally {
       setIsSubmitting(false);

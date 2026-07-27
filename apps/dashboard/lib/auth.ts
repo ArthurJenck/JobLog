@@ -70,6 +70,19 @@ export async function getAuth() {
       updateAge: 60 * 60 * 24,
       cookieCache: { enabled: true, maxAge: 5 * 60 },
     },
+    user: {
+      additionalFields: {
+        firstName: {
+          type: 'string',
+          required: false,
+        },
+        sex: {
+          type: 'string',
+          required: false,
+          defaultValue: 'unspecified',
+        },
+      },
+    },
   });
 
   return _auth;

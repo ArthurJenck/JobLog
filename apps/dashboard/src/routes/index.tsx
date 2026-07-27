@@ -6,7 +6,7 @@ import { ApplicationsTable } from '@/components/ApplicationsTable';
 import { ApplicationDetail } from '@/components/ApplicationDetail';
 import { AddApplicationDialog } from '@/components/AddApplicationDialog';
 import { toast } from 'sonner';
-import { playAdd } from '@/lib/sound';
+import { playAdd, playError } from '@/lib/sound';
 import { api } from '@/lib/api';
 import { isScrapeActive } from '@/lib/scrape';
 import type { ApplicationWithJob, ApplicationStatus } from '@joblog/shared';
@@ -264,6 +264,7 @@ export function IndexPage() {
       } catch {
         if (!active) return;
 
+        playError();
         toast.error('Candidature introuvable', {
           description:
             'Le lien ne correspond plus à une candidature accessible.',

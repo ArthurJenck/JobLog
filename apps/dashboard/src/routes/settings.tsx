@@ -2,6 +2,7 @@ import { createFileRoute } from '@tanstack/react-router';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { NotificationSettings } from '@/components/NotificationSettings';
 import { AccountSettings } from '@/components/AccountSettings';
+import { playHover } from '@/lib/sound';
 
 export const Route = createFileRoute('/settings')({
   component: SettingsPage,
@@ -13,8 +14,12 @@ export function SettingsPage() {
       <h1 className="text-xl font-semibold">Paramètres</h1>
       <Tabs defaultValue="notifications" className="w-full">
         <TabsList>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-          <TabsTrigger value="account">Compte</TabsTrigger>
+          <TabsTrigger value="notifications" onMouseEnter={playHover}>
+            Notifications
+          </TabsTrigger>
+          <TabsTrigger value="account" onMouseEnter={playHover}>
+            Compte
+          </TabsTrigger>
         </TabsList>
         <TabsContent value="notifications" className="mt-4">
           <NotificationSettings />

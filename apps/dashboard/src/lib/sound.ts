@@ -32,10 +32,20 @@ function playCue(sound: SoundName) {
   play(sound);
 }
 
-export const playCheck = () => playCue('droplet');
-export const playComplete = () => playCue('chime');
+export const playCheck = () => playCue('chime');
+export const playUncheck = () => playCue('tick');
+export const playToggle = () => playCue('toggle');
+export const playComplete = () => playCue('sparkle');
 export const playAccepted = () => playCue('success');
 export const playStatusChange = () => playCue('toggle');
 export const playReject = () => playCue('whisper');
+export const playCancel = () => playCue('whisper');
 export const playAdd = () => playCue('bloom');
 export const playDelete = () => playCue('release');
+export const playPress = () => playCue('press');
+export const playDrop = () => playCue('sparkle');
+export const playError = () => playCue('error');
+export const playPageOpen = () => playCue('page');
+export const playLoading = () => playCue('loading');
+export const playReady = () => playCue('ready');
+export const playHover = () => playCue('tick');

@@ -5,6 +5,7 @@ import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
 import { api, type UrlPasteUsage } from '@/lib/api';
 import { UrlUsageNotice } from './UrlUsageNotice';
+import { playError, playLoading } from '@/lib/sound';
 
 // TODO: REMETTRE A true QUAND EXTENSION ACCEPTEE DANS LE CHROME WEB STORE
 const SHOW_URL_USAGE_WARNING = false;
@@ -46,12 +47,14 @@ export function UrlForm({
     if (usage?.isBlocked) {
       const message = "Limite d'ajout par URL atteinte pour aujourd'hui.";
       setError(message);
+      playError();
       toast.error('Récupération bloquée', { description: message });
       return;
     }
 
     setError('');
     setIsLoading(true);
+    playLoading();
     try {
       const result = await api.jobPostings.createFromUrl(url);
       setUsage(result.usage);
@@ -67,6 +70,7 @@ export function UrlForm({
 
       const message = err instanceof Error ? err.message : 'Erreur inconnue';
       setError(message);
+      playError();
       toast.error('Récupération impossible', { description: message });
     } finally {
       setIsLoading(false);

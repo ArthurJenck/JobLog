@@ -22,7 +22,15 @@ import { api } from '@/lib/api';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import { toast } from 'sonner';
-import { playAccepted, playReject, playStatusChange, playDelete } from '@/lib/sound';
+import {
+  playAccepted,
+  playReject,
+  playStatusChange,
+  playDelete,
+  playError,
+  playLoading,
+  playReady,
+} from '@/lib/sound';
 import {
   APPLICATION_STATUSES, STATUS_LABELS, CONTRACT_LABELS, REMOTE_LABELS,
   STATUS_EVENT,
@@ -106,13 +114,16 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
 
   async function retryScrape() {
     setIsRetryingScrape(true);
+    playLoading();
     try {
       await api.jobPostings.retryFromUrl(application!._id);
+      playReady();
       toast.success('Relance lancée', {
         description: "La récupération de l'offre reprend en arrière-plan.",
       });
       onUpdated();
     } catch (err) {
+      playError();
       toast.error('Relance impossible', {
         description: err instanceof Error ? err.message : 'Erreur inconnue',
       });

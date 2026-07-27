@@ -20,7 +20,7 @@ export function burstAt(el: HTMLElement) {
 }
 
 export function celebrate() {
-  const duration = 1500;
+  const duration = 600;
   const end = Date.now() + duration;
 
   (function frame() {

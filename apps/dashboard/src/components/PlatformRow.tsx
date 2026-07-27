@@ -7,7 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { Platform } from '@/lib/api';
 import { isSameLocalDay, reminderMessage } from '@/lib/platformReminder';
 import { burstAt } from '@/lib/confetti';
-import { playCheck } from '@/lib/sound';
+import { playCheck, playUncheck, playPress } from '@/lib/sound';
 import {
   ExternalLinkIcon,
   GlobeIcon,
@@ -34,6 +34,7 @@ interface PlatformRowProps {
   onToggleChecked: (checked: boolean) => void;
   faviconBroken: boolean;
   onFaviconError: () => void;
+  willCompleteAll: boolean;
 }
 
 export function PlatformRow({
@@ -51,6 +52,7 @@ export function PlatformRow({
   onToggleChecked,
   faviconBroken,
   onFaviconError,
+  willCompleteAll,
 }: PlatformRowProps) {
   const rowRef = useRef<HTMLDivElement | null>(null);
   const {
@@ -78,9 +80,11 @@ export function PlatformRow({
 
   function handleToggle(checked: boolean) {
     onToggleChecked(checked);
-    if (checked && rowRef.current) {
-      burstAt(rowRef.current);
-      playCheck();
+    if (checked) {
+      if (rowRef.current) burstAt(rowRef.current);
+      if (!willCompleteAll) playCheck();
+    } else {
+      playUncheck();
     }
   }
 
@@ -99,6 +103,10 @@ export function PlatformRow({
           className="absolute left-0 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-center justify-center h-7 w-7 rounded-full border bg-background text-muted-foreground shadow-sm opacity-100 sm:opacity-0 sm:group-hover/row:opacity-100 hover:text-foreground cursor-grab active:cursor-grabbing touch-none transition-opacity"
           {...attributes}
           {...listeners}
+          onPointerDown={(e) => {
+            playPress();
+            listeners?.onPointerDown?.(e);
+          }}
         >
           <GripVerticalIcon size={16} />
         </button>
