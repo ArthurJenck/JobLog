@@ -48,11 +48,13 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
         scrapeStatus === 'queued' || scrapeStatus === 'processing';
 
       return (
-        <span className="inline-flex min-w-0 items-center gap-2 font-medium">
+        <span className="inline-flex max-w-200 min-w-0 items-start gap-2 font-medium">
           {isPending && (
-            <LoaderCircleIcon className="h-3.5 w-3.5 shrink-0 animate-spin text-amber-600" />
+            <LoaderCircleIcon className="h-3.5 w-3.5 shrink-0 animate-spin text-amber-600 mt-0.5" />
           )}
-          <span className="truncate">{getValue() as string}</span>
+          <span className="line-clamp-2 wrap-break-words">
+            {getValue() as string}
+          </span>
         </span>
       );
     },

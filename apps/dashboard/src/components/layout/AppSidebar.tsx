@@ -27,12 +27,12 @@ import { resetSessionCache, useStats } from '@/lib/app-context';
 
 const navItems = [
   { to: '/', label: 'Candidatures', icon: BriefcaseIcon },
-  { to: '/cv', label: 'CV', icon: FileTextIcon },
   { to: '/platforms', label: 'Plateformes', icon: CompassIcon },
+  { to: '/cv', label: 'CV', icon: FileTextIcon },
   { to: '/settings', label: 'Paramètres', icon: SettingsIcon },
 ];
 
-const EXTENSION_LINK_AFTER = '/platforms';
+const EXTENSION_LINK_AFTER = '/cv';
 
 export function AppSidebar() {
   const router = useRouter();
