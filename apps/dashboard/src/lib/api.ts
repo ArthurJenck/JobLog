@@ -1,4 +1,4 @@
-import type { ApplicationWithJob, Cv } from '@joblog/shared';
+import type { ApplicationWithJob, Cv, QuestRecurrence, QuestDetectionSignal } from '@joblog/shared';
 
 const BASE = '/api';
 
@@ -53,6 +53,30 @@ export interface Platform {
   checkedAt: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface Quest {
+  _id: string;
+  userId: string;
+  key: string | null;
+  title: string;
+  recurrence: QuestRecurrence;
+  target: number | null;
+  detectionSignal: QuestDetectionSignal | null;
+  enabled: boolean;
+  order: number;
+  completedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  detected: boolean;
+  progress: number | null;
+}
+
+export interface Streak {
+  current: number;
+  longest: number;
+  lastActiveDay: string | null;
+  lastPerfectDay: string | null;
 }
 
 export interface SkillCount {
@@ -234,6 +258,41 @@ export const api = {
   stats: {
     get(): Promise<{ total: number; saved?: number; applied?: number; interview?: number; offer?: number; accepted?: number; rejected?: number; ghosted?: number; cancelled?: number }> {
       return request('/applications/stats');
+    },
+  },
+  tasks: {
+    list(dayStart: string, dayEnd: string): Promise<{ data: Quest[] }> {
+      const qs = new URLSearchParams({ dayStart, dayEnd });
+      return request(`/tasks?${qs.toString()}`);
+    },
+    activateCatalogQuest(key: string): Promise<{ questId: string }> {
+      return request('/tasks', { method: 'POST', body: JSON.stringify({ key }) });
+    },
+    createCustom(body: { title: string; recurrence: QuestRecurrence; target?: number | null }): Promise<{ questId: string }> {
+      return request('/tasks', { method: 'POST', body: JSON.stringify(body) });
+    },
+    update(id: string, body: { title?: string; recurrence?: QuestRecurrence; target?: number | null; enabled?: boolean }): Promise<{ ok: boolean }> {
+      return request(`/tasks?id=${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    },
+    setCompleted(id: string, completed: boolean): Promise<{ ok: boolean }> {
+      return request(`/tasks?id=${id}`, { method: 'PATCH', body: JSON.stringify({ completed }) });
+    },
+    reorder(order: string[]): Promise<{ ok: boolean }> {
+      return request('/tasks', { method: 'PATCH', body: JSON.stringify({ order }) });
+    },
+    delete(id: string): Promise<{ ok: boolean }> {
+      return request(`/tasks?id=${id}`, { method: 'DELETE' });
+    },
+  },
+  streak: {
+    get(): Promise<Streak> {
+      return request('/streak');
+    },
+    ping(today: string): Promise<Streak> {
+      return request('/streak', { method: 'POST', body: JSON.stringify({ today }) });
+    },
+    markPerfect(today: string): Promise<Streak> {
+      return request('/streak', { method: 'PATCH', body: JSON.stringify({ today }) });
     },
   },
 };

@@ -5,6 +5,7 @@ import { AppSidebar } from '@/components/layout/AppSidebar';
 import { SidebarProvider, SidebarInset, SidebarTrigger } from '@/components/ui/sidebar';
 import { Toaster } from '@/components/ui/sonner';
 import { FeedbackBar } from '@/components/feedback/FeedbackBar';
+import { DailyProvider } from '@/components/providers/DailyProvider';
 import { api } from '@/lib/api';
 import { SessionContext, StatsContext, fetchSession } from '@/lib/app-context';
 
@@ -59,25 +60,27 @@ export function RootLayout() {
   return (
     <SessionContext.Provider value={hasSession}>
       <StatsProvider>
-        <TooltipProvider>
-          <SidebarProvider>
-            <AppSidebar />
-            <SidebarInset>
-              <div className="flex items-center gap-2 px-4 py-3 border-b lg:hidden">
-                <SidebarTrigger />
-                <img
-                  src="/icon-cropped.svg"
-                  alt="Logo JobLog"
-                  className="h-6 w-6"
-                />
-                <span className="font-semibold text-sm">JobLog</span>
-              </div>
-              <Outlet />
-            </SidebarInset>
-          </SidebarProvider>
-          <FeedbackBar />
-          <Toaster />
-        </TooltipProvider>
+        <DailyProvider>
+          <TooltipProvider>
+            <SidebarProvider>
+              <AppSidebar />
+              <SidebarInset>
+                <div className="flex items-center gap-2 px-4 py-3 border-b lg:hidden">
+                  <SidebarTrigger />
+                  <img
+                    src="/icon-cropped.svg"
+                    alt="Logo JobLog"
+                    className="h-6 w-6"
+                  />
+                  <span className="font-semibold text-sm">JobLog</span>
+                </div>
+                <Outlet />
+              </SidebarInset>
+            </SidebarProvider>
+            <FeedbackBar />
+            <Toaster />
+          </TooltipProvider>
+        </DailyProvider>
       </StatsProvider>
     </SessionContext.Provider>
   );

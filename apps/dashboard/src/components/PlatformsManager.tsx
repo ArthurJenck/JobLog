@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -24,9 +24,7 @@ import { ExternalLinkIcon, PartyPopperIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { isSameLocalDay } from '@/lib/platformReminder';
 import { randomCelebration } from '@/lib/celebrationMessages';
-import { celebrate } from '@/lib/confetti';
 import {
-  playComplete,
   playDelete,
   playDrop,
   playError,
@@ -35,6 +33,7 @@ import {
   playCancel,
 } from '@/lib/sound';
 import { useUser } from '@/hooks/use-user';
+import { useAllDoneCelebration } from '@/hooks/useAllDoneCelebration';
 
 function isValidUrl(value: string) {
   try {
@@ -53,7 +52,6 @@ export function PlatformsManager() {
   const [editName, setEditName] = useState('');
   const [editUrl, setEditUrl] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Set<string>>(new Set());
-  const wasAllChecked = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -95,13 +93,7 @@ export function PlatformsManager() {
     [allChecked, user],
   );
 
-  useEffect(() => {
-    if (allChecked && !wasAllChecked.current) {
-      celebrate();
-      playComplete();
-    }
-    wasAllChecked.current = allChecked;
-  }, [allChecked]);
+  useAllDoneCelebration(allChecked);
 
   async function deletePlatform(id: string) {
     if (!confirm('Supprimer cette plateforme ?')) return;

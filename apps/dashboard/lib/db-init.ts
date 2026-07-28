@@ -15,6 +15,8 @@ export async function ensureIndexes() {
 
     db.collection('platforms').createIndex({ userId: 1, createdAt: -1 }),
 
+    db.collection('quest_templates').createIndex({ userId: 1, order: 1 }),
+
     db.collection('cv_analyses').createIndex(
       { cvHash: 1, jobPostingId: 1 },
       { unique: true }

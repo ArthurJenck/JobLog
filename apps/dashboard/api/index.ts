@@ -64,6 +64,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     mod = await import('../server/platforms/index.js');
   } else if (route === 'platforms/metadata') {
     mod = await import('../server/platforms/metadata.js');
+  } else if (route === 'tasks') {
+    mod = await import('../server/tasks/index.js');
+  } else if (route === 'streak') {
+    mod = await import('../server/streak/index.js');
   } else if (route === 'applications') {
     mod = await import('../server/applications/index.js');
   } else if (route === 'applications/stats') {

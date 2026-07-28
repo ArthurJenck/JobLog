@@ -1,18 +1,15 @@
 import { useRef } from 'react';
+import { motion } from 'framer-motion';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Checkbox } from '@/components/ui/checkbox';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from '@/components/ui/tooltip';
 import type { Platform } from '@/lib/api';
 import { isSameLocalDay, reminderMessage } from '@/lib/platformReminder';
 import { burstAt } from '@/lib/confetti';
 import { playCheck, playUncheck, playPress } from '@/lib/sound';
+import { useDetectedShake } from '@/hooks/useDetectedShake';
 import {
   ExternalLinkIcon,
   GlobeIcon,
@@ -72,6 +69,7 @@ export function PlatformRow({
   const openedToday = isSameLocalDay(platform.lastClickedAt);
   const checkedToday = isSameLocalDay(platform.checkedAt);
   const reminder = reminderMessage(platform.lastClickedAt);
+  const shakeControls = useDetectedShake(openedToday && !checkedToday);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -117,26 +115,19 @@ export function PlatformRow({
         </button>
       )}
       {!isEditing && (
-        <div className="flex items-center gap-2 shrink-0">
-          {!openedToday && !checkedToday ? (
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span className="inline-flex cursor-not-allowed">
-                  <Checkbox checked={checkedToday} disabled />
-                </span>
-              </TooltipTrigger>
-              <TooltipContent>
-                Utilise le bouton de redirection ci-contre pour pouvoir valider
-              </TooltipContent>
-            </Tooltip>
-          ) : (
-            <Checkbox
-              checked={checkedToday}
-              onCheckedChange={(value) => handleToggle(value === true)}
-              className="border-green-600 data-[state=checked]:bg-green-600"
-            />
+        <motion.div
+          animate={shakeControls}
+          className={cn(
+            'flex items-center gap-2 shrink-0 rounded-md',
+            openedToday && !checkedToday && 'ring-1 ring-amber-400/60',
           )}
-        </div>
+        >
+          <Checkbox
+            checked={checkedToday}
+            onCheckedChange={(value) => handleToggle(value === true)}
+            className="border-green-600 data-[state=checked]:bg-green-600"
+          />
+        </motion.div>
       )}
       <div
         className={cn(

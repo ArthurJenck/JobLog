@@ -1,5 +1,6 @@
 import { createContext, useContext } from 'react';
 import { api } from '@/lib/api';
+import type { Quest, Streak } from '@/lib/api';
 
 export const SessionContext = createContext<boolean>(false);
 
@@ -17,6 +18,30 @@ export const StatsContext = createContext<StatsContextValue>({
 
 export function useStats() {
   return useContext(StatsContext);
+}
+
+interface DailyContextValue {
+  quests: Quest[];
+  streak: Streak;
+  isLoading: boolean;
+  refreshQuests: () => Promise<void>;
+  toggleQuestCompleted: (quest: Quest, completed: boolean) => Promise<void>;
+}
+
+export const DailyContext = createContext<DailyContextValue>({
+  quests: [],
+  streak: { current: 0, longest: 0, lastActiveDay: null, lastPerfectDay: null },
+  isLoading: true,
+  refreshQuests: async () => {},
+  toggleQuestCompleted: async () => {},
+});
+
+export function useQuests() {
+  return useContext(DailyContext);
+}
+
+export function useStreak() {
+  return useContext(DailyContext).streak;
 }
 
 let sessionPromise: Promise<boolean> | null = null;

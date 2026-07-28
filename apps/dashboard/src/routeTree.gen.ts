@@ -9,6 +9,7 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as TasksRouteImport } from './routes/tasks'
 import { Route as SettingsRouteImport } from './routes/settings'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as PlatformsRouteImport } from './routes/platforms'
@@ -17,6 +18,11 @@ import { Route as CvRouteImport } from './routes/cv'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthConnectRouteImport } from './routes/auth.connect'
 
+const TasksRoute = TasksRouteImport.update({
+  id: '/tasks',
+  path: '/tasks',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SettingsRoute = SettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -60,6 +66,7 @@ export interface FileRoutesByFullPath {
   '/platforms': typeof PlatformsRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
+  '/tasks': typeof TasksRoute
   '/auth/connect': typeof AuthConnectRoute
 }
 export interface FileRoutesByTo {
@@ -69,6 +76,7 @@ export interface FileRoutesByTo {
   '/platforms': typeof PlatformsRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
+  '/tasks': typeof TasksRoute
   '/auth/connect': typeof AuthConnectRoute
 }
 export interface FileRoutesById {
@@ -79,6 +87,7 @@ export interface FileRoutesById {
   '/platforms': typeof PlatformsRoute
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
+  '/tasks': typeof TasksRoute
   '/auth/connect': typeof AuthConnectRoute
 }
 export interface FileRouteTypes {
@@ -90,6 +99,7 @@ export interface FileRouteTypes {
     | '/platforms'
     | '/privacy'
     | '/settings'
+    | '/tasks'
     | '/auth/connect'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -99,6 +109,7 @@ export interface FileRouteTypes {
     | '/platforms'
     | '/privacy'
     | '/settings'
+    | '/tasks'
     | '/auth/connect'
   id:
     | '__root__'
@@ -108,6 +119,7 @@ export interface FileRouteTypes {
     | '/platforms'
     | '/privacy'
     | '/settings'
+    | '/tasks'
     | '/auth/connect'
   fileRoutesById: FileRoutesById
 }
@@ -118,11 +130,19 @@ export interface RootRouteChildren {
   PlatformsRoute: typeof PlatformsRoute
   PrivacyRoute: typeof PrivacyRoute
   SettingsRoute: typeof SettingsRoute
+  TasksRoute: typeof TasksRoute
   AuthConnectRoute: typeof AuthConnectRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/tasks': {
+      id: '/tasks'
+      path: '/tasks'
+      fullPath: '/tasks'
+      preLoaderRoute: typeof TasksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/settings': {
       id: '/settings'
       path: '/settings'
@@ -182,6 +202,7 @@ const rootRouteChildren: RootRouteChildren = {
   PlatformsRoute: PlatformsRoute,
   PrivacyRoute: PrivacyRoute,
   SettingsRoute: SettingsRoute,
+  TasksRoute: TasksRoute,
   AuthConnectRoute: AuthConnectRoute,
 }
 export const routeTree = rootRouteImport
