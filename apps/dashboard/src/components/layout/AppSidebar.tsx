@@ -50,15 +50,17 @@ export function AppSidebar() {
   return (
     <Sidebar>
       <SidebarHeader className="px-4 py-4">
-        <div className="flex items-center gap-2">
-          <img
-            src="/icon-cropped.svg"
-            alt="Logo JobLog"
-            className="h-8 w-8 relative bottom-1"
-          />
-          <span className="font-semibold text-base">JobLog</span>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <img
+              src="/icon-cropped.svg"
+              alt="Logo JobLog"
+              className="h-8 w-8 relative bottom-1"
+            />
+            <span className="font-semibold text-base">JobLog</span>
+          </div>
+          <StreakBadge />
         </div>
-        <StreakBadge />
       </SidebarHeader>
 
       <SidebarSeparator />
@@ -100,9 +102,17 @@ export function AppSidebar() {
 
         <SidebarSeparator />
 
+        {hasPendingQuests && (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <QuestsPanel />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
+
         <SidebarGroup>
           <SidebarGroupContent>
-            {hasPendingQuests ? <QuestsPanel /> : <SidebarSummary />}
+            <SidebarSummary />
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>

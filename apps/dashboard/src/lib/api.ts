@@ -64,6 +64,7 @@ export interface Quest {
   target: number | null;
   detectionSignal: QuestDetectionSignal | null;
   enabled: boolean;
+  removed: boolean;
   order: number;
   completedAt: string | null;
   createdAt: string;
@@ -271,7 +272,7 @@ export const api = {
     createCustom(body: { title: string; recurrence: QuestRecurrence; target?: number | null }): Promise<{ questId: string }> {
       return request('/tasks', { method: 'POST', body: JSON.stringify(body) });
     },
-    update(id: string, body: { title?: string; recurrence?: QuestRecurrence; target?: number | null; enabled?: boolean }): Promise<{ ok: boolean }> {
+    update(id: string, body: { title?: string; recurrence?: QuestRecurrence; target?: number | null; enabled?: boolean; removed?: boolean }): Promise<{ ok: boolean }> {
       return request(`/tasks?id=${id}`, { method: 'PATCH', body: JSON.stringify(body) });
     },
     setCompleted(id: string, completed: boolean): Promise<{ ok: boolean }> {

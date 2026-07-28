@@ -26,10 +26,23 @@ interface QuestConfigRowProps {
     enabled?: boolean;
   }) => void;
   onDelete: () => void;
+  onRemove: () => void;
 }
 
-export function QuestConfigRow({ quest, onUpdate, onDelete }: QuestConfigRowProps) {
-  const { setNodeRef, attributes, listeners, transform, transition, isDragging } = useSortable({
+export function QuestConfigRow({
+  quest,
+  onUpdate,
+  onDelete,
+  onRemove,
+}: QuestConfigRowProps) {
+  const {
+    setNodeRef,
+    attributes,
+    listeners,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
     id: quest._id,
   });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
@@ -83,7 +96,12 @@ export function QuestConfigRow({ quest, onUpdate, onDelete }: QuestConfigRowProp
               className="h-7 text-sm"
               autoFocus
             />
-            <Button variant="ghost" size="icon" className="h-7 w-7" onClick={confirmTitle}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7"
+              onClick={confirmTitle}
+            >
               <CheckIcon className="h-3.5 w-3.5 text-green-600" />
             </Button>
             <Button
@@ -136,7 +154,7 @@ export function QuestConfigRow({ quest, onUpdate, onDelete }: QuestConfigRowProp
         min={1}
         defaultValue={quest.target ?? ''}
         placeholder="Illimité"
-        className="h-7 w-20 text-xs shrink-0"
+        className="h-7 w-22 text-xs shrink-0"
         onBlur={(e) => {
           const raw = e.target.value.trim();
           const value = raw === '' ? null : Number(raw);
@@ -171,16 +189,14 @@ export function QuestConfigRow({ quest, onUpdate, onDelete }: QuestConfigRowProp
         )}
       </Button>
 
-      {isCustom && (
-        <Button
-          variant="ghost"
-          size="icon"
-          className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
-          onClick={onDelete}
-        >
-          <Trash2Icon className="h-3.5 w-3.5" />
-        </Button>
-      )}
+      <Button
+        variant="ghost"
+        size="icon"
+        className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
+        onClick={isCustom ? onDelete : onRemove}
+      >
+        <Trash2Icon className="h-3.5 w-3.5" />
+      </Button>
     </div>
   );
 }

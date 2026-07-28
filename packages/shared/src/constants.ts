@@ -128,6 +128,10 @@ export const EVENT_AUTO_STATUS: Partial<Record<EventType, ApplicationStatus>> = 
     cancelled: 'cancelled',
 }
 
+export const STATUS_CHANGE_EVENTS = (Object.keys(EVENT_AUTO_STATUS) as EventType[]).filter(
+    (t) => t !== 'applied',
+)
+
 export const STATUS_EVENT: Partial<Record<ApplicationStatus, EventType>> = {
     applied: 'applied',
     interview: 'interview_scheduled',
@@ -243,7 +247,15 @@ export const GEMINI_MODEL = 'gemini-2.5-flash-lite'
 export const QUEST_RECURRENCES = ['daily', 'once'] as const
 export type QuestRecurrence = (typeof QUEST_RECURRENCES)[number]
 
-export const QUEST_DETECTION_SIGNALS = ['platforms_all', 'applied_today'] as const
+export const QUEST_DETECTION_SIGNALS = [
+    'platforms_all',
+    'applied_today',
+    'saved_today',
+    'followup_today',
+    'status_changed_today',
+    'cold_applied_today',
+    'cv_touched',
+] as const
 export type QuestDetectionSignal = (typeof QUEST_DETECTION_SIGNALS)[number]
 
 export interface QuestCatalogEntry {
@@ -257,14 +269,14 @@ export interface QuestCatalogEntry {
 export const QUEST_CATALOG: QuestCatalogEntry[] = [
     { key: 'visit_platforms', title: 'Faire le tour de mes plateformes', recurrence: 'daily', defaultTarget: null, detectionSignal: 'platforms_all' },
     { key: 'apply_n', title: 'Candidater à des offres', recurrence: 'daily', defaultTarget: 3, detectionSignal: 'applied_today' },
-    { key: 'save_offers', title: 'Enregistrer de nouvelles offres intéressantes', recurrence: 'daily', defaultTarget: null, detectionSignal: null },
-    { key: 'follow_up', title: 'Relancer une candidature en attente', recurrence: 'daily', defaultTarget: null, detectionSignal: null },
-    { key: 'update_status', title: "Mettre à jour le statut d'une candidature", recurrence: 'daily', defaultTarget: null, detectionSignal: null },
+    { key: 'save_offers', title: 'Enregistrer de nouvelles offres intéressantes', recurrence: 'daily', defaultTarget: null, detectionSignal: 'saved_today' },
+    { key: 'follow_up', title: 'Relancer une candidature en attente', recurrence: 'daily', defaultTarget: null, detectionSignal: 'followup_today' },
+    { key: 'update_status', title: "Mettre à jour le statut d'une candidature", recurrence: 'daily', defaultTarget: null, detectionSignal: 'status_changed_today' },
     { key: 'tailor_letter', title: 'Personnaliser une lettre de motivation', recurrence: 'daily', defaultTarget: null, detectionSignal: null },
     { key: 'network_message', title: 'Envoyer un message de réseautage', recurrence: 'daily', defaultTarget: null, detectionSignal: null },
-    { key: 'cold_application', title: 'Faire une candidature spontanée', recurrence: 'daily', defaultTarget: null, detectionSignal: null },
+    { key: 'cold_application', title: 'Faire une candidature spontanée', recurrence: 'daily', defaultTarget: null, detectionSignal: 'cold_applied_today' },
     { key: 'note_win', title: 'Noter une petite victoire du jour', recurrence: 'daily', defaultTarget: null, detectionSignal: null },
-    { key: 'update_cv', title: 'Refaire / mettre à jour mon CV', recurrence: 'once', defaultTarget: null, detectionSignal: null },
+    { key: 'update_cv', title: 'Refaire / mettre à jour mon CV', recurrence: 'once', defaultTarget: null, detectionSignal: 'cv_touched' },
     { key: 'update_linkedin', title: 'Optimiser mon profil LinkedIn', recurrence: 'once', defaultTarget: null, detectionSignal: null },
     { key: 'prepare_pitch', title: 'Préparer mon pitch de présentation', recurrence: 'once', defaultTarget: null, detectionSignal: null },
     { key: 'list_companies', title: 'Lister mes entreprises cibles', recurrence: 'once', defaultTarget: null, detectionSignal: null },

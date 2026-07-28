@@ -10,7 +10,13 @@ import { playCheck, playUncheck } from '@/lib/sound';
 import { useDetectedShake } from '@/hooks/useDetectedShake';
 import { cn } from '@/lib/utils';
 
-export function QuestItem({ quest, willCompleteAll }: { quest: Quest; willCompleteAll: boolean }) {
+export function QuestItem({
+  quest,
+  willCompleteAll,
+}: {
+  quest: Quest;
+  willCompleteAll: boolean;
+}) {
   const { toggleQuestCompleted } = useQuests();
   const rowRef = useRef<HTMLDivElement | null>(null);
   const doneToday = isQuestDoneToday(quest);
@@ -38,11 +44,11 @@ export function QuestItem({ quest, willCompleteAll }: { quest: Quest; willComple
       <Checkbox
         checked={doneToday}
         onCheckedChange={(value) => handleToggle(value === true)}
-        className="border-green-600 data-[state=checked]:bg-green-600 shrink-0"
+        className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-100 shrink-0"
       />
       <span
         className={cn(
-          'text-sm flex-1 min-w-0 truncate transition-opacity duration-500',
+          'text-sm flex-1 min-w-0 line-clamp-2 transition-opacity duration-500',
           doneToday && 'opacity-50',
         )}
       >

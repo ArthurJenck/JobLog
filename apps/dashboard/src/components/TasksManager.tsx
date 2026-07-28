@@ -39,9 +39,9 @@ export function TasksManager() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const sortedQuests = [...quests].sort((a, b) => a.order - b.order);
+  const sortedQuests = [...quests].filter((q) => !q.removed).sort((a, b) => a.order - b.order);
   const availableCatalog = QUEST_CATALOG.filter(
-    (entry) => !quests.some((q) => q.key === entry.key),
+    (entry) => !quests.some((q) => q.key === entry.key && !q.removed),
   );
 
   async function activateCatalogQuest(key: string) {
@@ -51,7 +51,7 @@ export function TasksManager() {
       await refreshQuests();
     } catch {
       playError();
-      toast.error("Impossible d'activer cette quête");
+      toast.error("Impossible d'activer cette tâche");
     }
   }
 
@@ -65,19 +65,30 @@ export function TasksManager() {
       await refreshQuests();
     } catch {
       playError();
-      toast.error('Impossible de mettre à jour cette quête');
+      toast.error('Impossible de mettre à jour cette tâche');
     }
   }
 
   async function deleteQuest(id: string) {
-    if (!confirm('Supprimer cette quête ?')) return;
+    if (!confirm('Supprimer cette tâche ?')) return;
     try {
       await api.tasks.delete(id);
       playDelete();
       await refreshQuests();
     } catch {
       playError();
-      toast.error('Impossible de supprimer cette quête');
+      toast.error('Impossible de supprimer cette tâche');
+    }
+  }
+
+  async function removeQuest(id: string) {
+    try {
+      await api.tasks.update(id, { removed: true });
+      playDelete();
+      await refreshQuests();
+    } catch {
+      playError();
+      toast.error('Impossible de retirer cette tâche');
     }
   }
 
@@ -96,7 +107,7 @@ export function TasksManager() {
       await refreshQuests();
     } catch {
       playError();
-      toast.error('Impossible de réorganiser les quêtes');
+      toast.error('Impossible de réorganiser les tâches');
     }
   }
 
@@ -118,7 +129,7 @@ export function TasksManager() {
       await refreshQuests();
     } catch {
       playError();
-      toast.error("Impossible d'ajouter cette quête");
+      toast.error("Impossible d'ajouter cette tâche");
     } finally {
       setIsSubmitting(false);
     }
@@ -130,16 +141,16 @@ export function TasksManager() {
         <FlameIcon className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
         <p className="text-sm text-muted-foreground">
           Ta flamme s'entretient simplement en te connectant chaque jour. Quand tu valides
-          toutes tes quêtes du jour, elle devient dorée pour la journée. Si elle était dorée
+          toutes tes tâches quotidiennes, elle devient dorée pour la journée. Si elle était dorée
           hier mais pas encore aujourd'hui, elle vacille pour te rappeler de la raviver.
         </p>
       </div>
 
       <div className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-2">
-          <h2 className="text-sm font-semibold">Mes quêtes</h2>
+          <h2 className="text-sm font-semibold">Mes tâches</h2>
           <Button variant="outline" size="sm" onClick={() => setShowAdd((v) => !v)}>
-            {showAdd ? 'Annuler' : '+ Ajouter une quête personnalisée'}
+            {showAdd ? 'Annuler' : '+ Ajouter une tâche personnalisée'}
           </Button>
         </div>
 
@@ -205,7 +216,7 @@ export function TasksManager() {
         )}
 
         {sortedQuests.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Aucune quête configurée.</p>
+          <p className="text-sm text-muted-foreground">Aucune tâche configurée.</p>
         ) : (
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <SortableContext
@@ -219,6 +230,7 @@ export function TasksManager() {
                     quest={quest}
                     onUpdate={(body) => updateQuest(quest._id, body)}
                     onDelete={() => deleteQuest(quest._id)}
+                    onRemove={() => removeQuest(quest._id)}
                   />
                 ))}
               </div>

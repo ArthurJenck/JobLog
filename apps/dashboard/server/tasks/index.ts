@@ -7,6 +7,7 @@ import {
   QUEST_RECURRENCES,
   QUEST_CATALOG,
   DEFAULT_QUEST_KEYS,
+  STATUS_CHANGE_EVENTS,
   type QuestRecurrence,
   type QuestDetectionSignal,
 } from '@joblog/shared';
@@ -19,6 +20,7 @@ interface QuestDoc {
   target: number | null;
   detectionSignal: QuestDetectionSignal | null;
   enabled: boolean;
+  removed: boolean;
   order: number;
   completedAt: Date | null;
   createdAt: Date;
@@ -40,6 +42,7 @@ const UpdateQuestSchema = z.object({
   recurrence: z.enum(QUEST_RECURRENCES).optional(),
   target: z.number().int().positive().nullable().optional(),
   enabled: z.boolean().optional(),
+  removed: z.boolean().optional(),
   completed: z.boolean().optional(),
 });
 
@@ -63,6 +66,7 @@ async function seedDefaultQuests(userId: string) {
       target: entry.defaultTarget,
       detectionSignal: entry.detectionSignal,
       enabled: true,
+      removed: false,
       order: index,
       completedAt: null,
       createdAt: now,
@@ -81,6 +85,12 @@ async function enrichWithDetection(
 ) {
   let platformsAllDone: boolean | null = null;
   let appliedCount: number | null = null;
+  let savedToday: boolean | null = null;
+  let followupToday: boolean | null = null;
+  let statusChangedToday: boolean | null = null;
+  let coldAppliedToday: boolean | null = null;
+
+  const dayRange = { $gte: new Date(dayStart ?? 0), $lt: new Date(dayEnd ?? 0) };
 
   async function isPlatformsAllDone(): Promise<boolean> {
     if (platformsAllDone !== null) return platformsAllDone;
@@ -105,17 +115,94 @@ async function enrichWithDetection(
     }));
   }
 
+  async function isSavedToday(): Promise<boolean> {
+    if (savedToday !== null) return savedToday;
+    if (!dayStart || !dayEnd) return (savedToday = false);
+    const appsCol = await getCollection('applications');
+    const count = await appsCol.countDocuments({
+      userId,
+      status: 'saved',
+      created_at: dayRange,
+    });
+    return (savedToday = count > 0);
+  }
+
+  async function isFollowupToday(): Promise<boolean> {
+    if (followupToday !== null) return followupToday;
+    if (!dayStart || !dayEnd) return (followupToday = false);
+    const appsCol = await getCollection('applications');
+    const count = await appsCol.countDocuments({
+      userId,
+      events: { $elemMatch: { type: { $in: ['followup_sent', 'thank_you_sent'] }, at: dayRange } },
+    });
+    return (followupToday = count > 0);
+  }
+
+  async function isStatusChangedToday(): Promise<boolean> {
+    if (statusChangedToday !== null) return statusChangedToday;
+    if (!dayStart || !dayEnd) return (statusChangedToday = false);
+    const appsCol = await getCollection('applications');
+    const count = await appsCol.countDocuments({
+      userId,
+      events: { $elemMatch: { type: { $in: STATUS_CHANGE_EVENTS }, at: dayRange } },
+    });
+    return (statusChangedToday = count > 0);
+  }
+
+  async function isColdAppliedToday(): Promise<boolean> {
+    if (coldAppliedToday !== null) return coldAppliedToday;
+    if (!dayStart || !dayEnd) return (coldAppliedToday = false);
+    const appsCol = await getCollection('applications');
+    const rows = await appsCol
+      .aggregate([
+        { $match: { userId, appliedAt: dayRange } },
+        { $addFields: { jobPostingObjId: { $toObjectId: '$jobPostingId' } } },
+        {
+          $lookup: {
+            from: 'job_postings',
+            localField: 'jobPostingObjId',
+            foreignField: '_id',
+            as: 'jp',
+          },
+        },
+        { $match: { 'jp.source': 'manual' } },
+        { $limit: 1 },
+      ])
+      .toArray();
+    return (coldAppliedToday = rows.length > 0);
+  }
+
+  async function isCvTouched(createdAt: Date): Promise<boolean> {
+    const cvsCol = await getCollection('cvs');
+    const count = await cvsCol.countDocuments({ userId, uploadedAt: { $gt: createdAt } });
+    return count > 0;
+  }
+
   return Promise.all(
     quests.map(async (q) => {
       let detected = false;
       let progress: number | null = null;
 
-      if (q.detectionSignal === 'platforms_all') {
+      const signal = q.key
+        ? QUEST_CATALOG.find((c) => c.key === q.key)?.detectionSignal ?? null
+        : q.detectionSignal;
+
+      if (signal === 'platforms_all') {
         detected = await isPlatformsAllDone();
-      } else if (q.detectionSignal === 'applied_today') {
+      } else if (signal === 'applied_today') {
         const count = await getAppliedTodayCount();
         progress = q.target ? Math.min(count, q.target) : count;
         detected = q.target ? count >= q.target : count > 0;
+      } else if (signal === 'saved_today') {
+        detected = await isSavedToday();
+      } else if (signal === 'followup_today') {
+        detected = await isFollowupToday();
+      } else if (signal === 'status_changed_today') {
+        detected = await isStatusChangedToday();
+      } else if (signal === 'cold_applied_today') {
+        detected = await isColdAppliedToday();
+      } else if (signal === 'cv_touched') {
+        detected = await isCvTouched(q.createdAt);
       }
 
       return {
@@ -159,7 +246,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       if (existing) {
         await col.updateOne(
           { _id: existing._id },
-          { $set: { enabled: true, updatedAt: now } },
+          { $set: { enabled: true, removed: false, updatedAt: now } },
         );
         return res.status(200).json({ questId: existing._id.toString() });
       }
@@ -173,6 +260,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         target: entry.defaultTarget,
         detectionSignal: entry.detectionSignal,
         enabled: true,
+        removed: false,
         order,
         completedAt: null,
         createdAt: now,
@@ -195,6 +283,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       target: target ?? null,
       detectionSignal: null,
       enabled: true,
+      removed: false,
       order,
       completedAt: null,
       createdAt: now,
@@ -232,12 +321,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const parsed = UpdateQuestSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-    const { title, recurrence, target, enabled, completed } = parsed.data;
+    const { title, recurrence, target, enabled, removed, completed } = parsed.data;
     const update: Record<string, unknown> = {};
     if (title !== undefined) update.title = title;
     if (recurrence !== undefined) update.recurrence = recurrence;
     if (target !== undefined) update.target = target;
     if (enabled !== undefined) update.enabled = enabled;
+    if (removed !== undefined) update.removed = removed;
     if (completed !== undefined) update.completedAt = completed ? new Date() : null;
 
     if (Object.keys(update).length === 0) {
