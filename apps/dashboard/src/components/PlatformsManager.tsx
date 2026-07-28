@@ -216,8 +216,12 @@ export function PlatformsManager() {
   return (
     <div className="flex flex-col gap-4 max-w-3xl">
       <div className="flex flex-col gap-1">
-        <div className="flex items-center justify-between gap-2">
-          <Button onClick={openAll} disabled={platforms.length === 0}>
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+          <Button
+            onClick={openAll}
+            disabled={platforms.length === 0}
+            className="w-full sm:w-auto"
+          >
             <ExternalLinkIcon className="h-4 w-4" />
             Ouvrir toutes les plateformes
           </Button>
@@ -226,6 +230,7 @@ export function PlatformsManager() {
               variant="outline"
               size="sm"
               onClick={() => setShowAdd((v) => !v)}
+              className="w-full sm:w-auto"
             >
               {showAdd ? 'Annuler' : '+ Ajouter une plateforme'}
             </Button>

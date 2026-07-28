@@ -21,7 +21,7 @@ export function ContactFields({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       {(['name', 'role', 'email', 'phone'] as const).map((field) => (
         <div key={field} className="flex flex-col gap-1.5">
           <Label className="text-xs capitalize">{fieldLabel(field)}</Label>

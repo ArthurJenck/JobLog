@@ -62,16 +62,16 @@ export function CvSkillsPanel({ cvs }: Props) {
 
   return (
     <div className="flex flex-col gap-3 max-w-3xl">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
         <p className="text-sm font-medium">Compétences des offres analysées</p>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           {analyzedCount > 0 && (
             <Button variant="ghost" size="sm" onClick={() => { void resetAnalyses(); }} className="h-8 text-xs text-muted-foreground">
               Réinitialiser les analyses
             </Button>
           )}
           <Select value={effectiveCvId ?? ''} onValueChange={setSelectedCvId}>
-            <SelectTrigger className="h-8 w-56 text-sm">
+            <SelectTrigger className="h-8 w-full sm:w-56 text-sm">
               <SelectValue placeholder="Choisir un CV" />
             </SelectTrigger>
             <SelectContent>
@@ -92,7 +92,7 @@ export function CvSkillsPanel({ cvs }: Props) {
           Aucune analyse IA pour ce CV pour le moment. Lance une analyse depuis une candidature pour voir apparaître les compétences ici.
         </p>
       ) : (
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <SkillColumn title="Compétences présentes les plus demandées" skills={present} tone="green" />
           <SkillColumn title="Compétences absentes les plus demandées" skills={missing} tone="red" />
         </div>

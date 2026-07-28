@@ -38,7 +38,7 @@ export function JobPostingFields({
   const labelClassName = compact ? 'text-xs' : undefined;
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
       <div className="flex flex-col gap-1.5">
         <Label className={labelClassName}>Poste *</Label>
         <Input

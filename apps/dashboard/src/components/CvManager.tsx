@@ -123,59 +123,61 @@ export function CvManager() {
             {cvs.map((cv) => (
               <div
                 key={cv._id}
-                className="flex items-center gap-3 rounded-lg border px-4 py-3"
+                className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border px-4 py-3"
               >
-                <FileTextIcon className="h-4 w-4 text-muted-foreground shrink-0" />
-                <div className="flex-1 min-w-0">
-                  {renamingId === cv._id ? (
-                    <div className="flex items-center gap-1">
-                      <Input
-                        value={renameValue}
-                        onChange={(e) => setRenameValue(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') confirmRename(cv._id);
-                          if (e.key === 'Escape') cancelRename();
-                        }}
-                        className="h-7 text-sm"
-                        autoFocus
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={() => confirmRename(cv._id)}
-                      >
-                        <CheckIcon className="h-3.5 w-3.5 text-green-600" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7"
-                        onClick={cancelRename}
-                      >
-                        <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium truncate">
-                          {cv.label}
-                        </p>
-                        {cv.isDefault && (
-                          <Badge variant="secondary" className="shrink-0">
-                            Par défaut
-                          </Badge>
-                        )}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <FileTextIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <div className="flex-1 min-w-0">
+                    {renamingId === cv._id ? (
+                      <div className="flex items-center gap-1">
+                        <Input
+                          value={renameValue}
+                          onChange={(e) => setRenameValue(e.target.value)}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') confirmRename(cv._id);
+                            if (e.key === 'Escape') cancelRename();
+                          }}
+                          className="h-7 text-sm"
+                          autoFocus
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={() => confirmRename(cv._id)}
+                        >
+                          <CheckIcon className="h-3.5 w-3.5 text-green-600" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={cancelRename}
+                        >
+                          <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">
-                        {cv.filename}
-                      </p>
-                    </>
-                  )}
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2">
+                          <p className="text-sm font-medium truncate">
+                            {cv.label}
+                          </p>
+                          {cv.isDefault && (
+                            <Badge variant="secondary" className="shrink-0">
+                              Par défaut
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {cv.filename}
+                        </p>
+                      </>
+                    )}
+                  </div>
                 </div>
                 {renamingId !== cv._id && (
-                  <>
+                  <div className="flex items-center gap-2 sm:gap-3 flex-wrap sm:flex-nowrap sm:justify-end">
                     <p className="text-xs text-muted-foreground shrink-0">
                       {new Date(cv.uploadedAt).toLocaleDateString('fr-FR', {
                         day: 'numeric',
@@ -209,7 +211,7 @@ export function CvManager() {
                     >
                       <Trash2Icon className="h-3.5 w-3.5" />
                     </Button>
-                  </>
+                  </div>
                 )}
               </div>
             ))}

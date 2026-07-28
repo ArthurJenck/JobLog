@@ -39,7 +39,7 @@ export function ApplicationsTableBulkBar({
   const [confirmOpen, setConfirmOpen] = useState(false);
 
   return (
-    <div className="flex items-center gap-3 px-3 py-0.5">
+    <div className="flex items-center gap-3 px-3 py-0.5 flex-wrap">
       <Button
         variant="ghost"
         size="icon"
@@ -56,7 +56,7 @@ export function ApplicationsTableBulkBar({
         value=""
         onValueChange={(v) => onStatusChange(v as ApplicationStatus)}
       >
-        <SelectTrigger className="h-8 w-48 text-sm">
+        <SelectTrigger className="h-8 w-full sm:w-48 text-sm">
           <SelectValue placeholder="Changer le statut" />
         </SelectTrigger>
         <SelectContent>

@@ -237,13 +237,13 @@ export function TasksManager() {
                   key={entry.key}
                   className="flex items-center justify-between gap-3 rounded-lg border px-4 py-3"
                 >
-                  <div>
-                    <p className="text-sm font-medium">{entry.title}</p>
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium truncate">{entry.title}</p>
                     <p className="text-xs text-muted-foreground">
                       {entry.recurrence === 'daily' ? 'Quotidienne' : 'Ponctuelle'}
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" onClick={() => activateCatalogQuest(entry.key)}>
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => activateCatalogQuest(entry.key)}>
                     Activer
                   </Button>
                 </div>

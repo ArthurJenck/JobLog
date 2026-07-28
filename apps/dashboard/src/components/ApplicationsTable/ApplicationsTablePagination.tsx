@@ -26,7 +26,7 @@ export function ApplicationsTablePagination({
   const rangeEnd = Math.min(page * pageSize, total);
 
   return (
-    <div className="flex items-center justify-between gap-4 px-1">
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 px-1">
       <span className="text-sm text-muted-foreground">
         {rangeStart}–{rangeEnd} sur {total}
       </span>

@@ -56,12 +56,12 @@ export function ApplicationsTableToolbar({
 
   return (
     <div className="flex items-center justify-between gap-3 flex-wrap">
-      <div className="flex items-center gap-2 flex-wrap">
+      <div className="flex items-center gap-2 flex-wrap w-full sm:w-auto">
         <Input
           placeholder="Rechercher…"
           value={searchText}
           onChange={(e) => onSearchChange(e.target.value)}
-          className="h-9 w-52"
+          className="h-9 w-full sm:w-52"
         />
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
@@ -107,7 +107,7 @@ export function ApplicationsTableToolbar({
           type="date"
           value={dateFrom}
           onChange={(e) => onDateFromChange(e.target.value)}
-          className="h-9 w-36 text-sm"
+          className="h-9 w-full sm:w-36 text-sm"
           title="Date de début"
         />
         <span className="pl-4">Au</span>
@@ -115,7 +115,7 @@ export function ApplicationsTableToolbar({
           type="date"
           value={dateTo}
           onChange={(e) => onDateToChange(e.target.value)}
-          className="h-9 w-36 text-sm"
+          className="h-9 w-full sm:w-36 text-sm"
           title="Date de fin"
         />
       </div>
