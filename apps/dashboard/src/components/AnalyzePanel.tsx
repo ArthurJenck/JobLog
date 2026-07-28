@@ -10,6 +10,22 @@ interface Props {
   cvId: string | null;
 }
 
+const inFlightAnalyses = new Map<string, Promise<AnalysisResult>>();
+
+function mapAnalysisError(e: unknown): { error: string; needsJobDescription: boolean } {
+  const apiError = e as { code?: string; status?: number; message?: string };
+  if (apiError.code === 'no_comparison_data') {
+    return { needsJobDescription: true, error: apiError.message ?? 'Aucune donnée à comparer avec votre CV.' };
+  }
+  if (apiError.status === 503) {
+    return { needsJobDescription: false, error: apiError.message ?? "Service d'analyse temporairement indisponible, réessayez plus tard." };
+  }
+  if (apiError.code === 'analysis_failed') {
+    return { needsJobDescription: false, error: apiError.message ?? "L'analyse n'a pas pu être produite, réessayez." };
+  }
+  return { needsJobDescription: false, error: e instanceof Error ? e.message : 'Erreur inconnue' };
+}
+
 export function AnalyzePanel({ applicationId, cvId }: Props) {
   return (
     <AnalyzePanelInner
@@ -32,6 +48,31 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
     if (!cvId) return;
 
     let isCancelled = false;
+    const key = `${applicationId}:${cvId}`;
+
+    const pending = inFlightAnalyses.get(key);
+    if (pending) {
+      setIsCheckingCache(false);
+      setIsLoading(true);
+      pending
+        .then((data) => {
+          if (!isCancelled) setResult(data);
+        })
+        .catch((e) => {
+          if (!isCancelled) {
+            const mapped = mapAnalysisError(e);
+            if (mapped.needsJobDescription) setNeedsJobDescription(true);
+            setError(mapped.error);
+          }
+        })
+        .finally(() => {
+          if (!isCancelled) setIsLoading(false);
+        });
+
+      return () => {
+        isCancelled = true;
+      };
+    }
 
     api.analyses
       .getCached({ cvId, applicationId })
@@ -70,27 +111,25 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
     setIsCheckingCache(false);
     setError('');
     if (options?.force) setResult(null);
+
+    const key = `${applicationId}:${cvId}`;
+    const promise = api.analyses.create({
+      cvId,
+      applicationId,
+      force: options?.force,
+      jobDescription: pastedJobDescription || undefined,
+    });
+    inFlightAnalyses.set(key, promise);
+
     try {
-      const data = await api.analyses.create({
-        cvId,
-        applicationId,
-        force: options?.force,
-        jobDescription: pastedJobDescription || undefined,
-      });
+      const data = await promise;
       setResult(data);
     } catch (e) {
-      const apiError = e as { code?: string; status?: number; message?: string };
-      if (apiError.code === 'no_comparison_data') {
-        setNeedsJobDescription(true);
-        setError(apiError.message ?? 'Aucune donnée à comparer avec votre CV.');
-      } else if (apiError.status === 503) {
-        setError(apiError.message ?? "Service d'analyse temporairement indisponible, réessayez plus tard.");
-      } else if (apiError.code === 'analysis_failed') {
-        setError(apiError.message ?? "L'analyse n'a pas pu être produite, réessayez.");
-      } else {
-        setError(e instanceof Error ? e.message : 'Erreur inconnue');
-      }
+      const mapped = mapAnalysisError(e);
+      if (mapped.needsJobDescription) setNeedsJobDescription(true);
+      setError(mapped.error);
     } finally {
+      if (inFlightAnalyses.get(key) === promise) inFlightAnalyses.delete(key);
       setIsLoading(false);
     }
   }
