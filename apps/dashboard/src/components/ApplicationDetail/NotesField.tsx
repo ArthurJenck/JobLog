@@ -14,6 +14,9 @@ export function NotesField({
       value={v}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => onSave(v)}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape' && v !== value) onSave(v);
+      }}
       placeholder="Notes libres…"
       className="resize-none text-sm min-h-24"
     />
