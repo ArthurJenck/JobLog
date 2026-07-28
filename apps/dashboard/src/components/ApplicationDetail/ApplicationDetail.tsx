@@ -70,6 +70,7 @@ interface Props {
   open: boolean;
   onClose: () => void;
   onUpdated: () => void;
+  onPatch: (id: string, body: Record<string, unknown>) => Promise<void>;
 }
 
 function scrapeFailureHint(
@@ -93,6 +94,7 @@ export function ApplicationDetail({
   open,
   onClose,
   onUpdated,
+  onPatch,
 }: Props) {
   const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
   const [isSaving, setIsSaving] = useState(false);
@@ -123,8 +125,7 @@ export function ApplicationDetail({
   async function patch(body: Record<string, unknown>) {
     setIsSaving(true);
     try {
-      await api.applications.patch(application!._id, body);
-      onUpdated();
+      await onPatch(application!._id, body);
       if (body.status === 'accepted') {
         setCancelAllOpen(true);
         playAccepted();

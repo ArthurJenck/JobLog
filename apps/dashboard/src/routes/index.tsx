@@ -328,6 +328,24 @@ export function IndexPage() {
     }
   }
 
+  async function patchApplication(id: string, body: Record<string, unknown>) {
+    setApplications((prev) =>
+      prev.map((a) => (a._id === id ? { ...a, ...body } : a)),
+    );
+    setSelectedApp((prev) =>
+      prev && prev._id === id ? { ...prev, ...body } : prev,
+    );
+    try {
+      await api.applications.patch(id, body);
+      await refreshDetail();
+    } catch (err) {
+      playError();
+      toast.error('Impossible de mettre à jour la candidature');
+      await refreshDetail();
+      throw err;
+    }
+  }
+
   async function handleCreated(applicationId: string) {
     setAddOpen(false);
     playAdd();
@@ -382,6 +400,7 @@ export function IndexPage() {
         open={detailOpen}
         onClose={closeDetail}
         onUpdated={refreshDetail}
+        onPatch={patchApplication}
       />
 
       <AddApplicationDialog
