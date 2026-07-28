@@ -125,7 +125,7 @@ export function PlatformRow({
           <Checkbox
             checked={checkedToday}
             onCheckedChange={(value) => handleToggle(value === true)}
-            className="border-green-600 data-[state=checked]:bg-green-600"
+            className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200"
           />
         </motion.div>
       )}

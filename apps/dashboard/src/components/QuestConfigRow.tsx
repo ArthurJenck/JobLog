@@ -3,8 +3,10 @@ import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Checkbox } from '@/components/ui/checkbox';
 import type { Quest } from '@/lib/api';
 import type { QuestRecurrence } from '@joblog/shared';
+import { isQuestDoneToday } from '@/lib/questHelpers';
 import {
   PencilIcon,
   Trash2Icon,
@@ -14,7 +16,7 @@ import {
   EyeIcon,
   EyeOffIcon,
 } from 'lucide-react';
-import { playPress } from '@/lib/sound';
+import { playPress, playCheck, playUncheck } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 
 interface QuestConfigRowProps {
@@ -25,6 +27,7 @@ interface QuestConfigRowProps {
     target?: number | null;
     enabled?: boolean;
   }) => void;
+  onToggleCompleted: (completed: boolean) => void;
   onDelete: () => void;
   onRemove: () => void;
 }
@@ -32,6 +35,7 @@ interface QuestConfigRowProps {
 export function QuestConfigRow({
   quest,
   onUpdate,
+  onToggleCompleted,
   onDelete,
   onRemove,
 }: QuestConfigRowProps) {
@@ -48,6 +52,13 @@ export function QuestConfigRow({
   const [isEditingTitle, setIsEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState(quest.title);
   const isCustom = quest.key === null;
+  const doneToday = isQuestDoneToday(quest);
+
+  function handleToggleCompleted(checked: boolean) {
+    onToggleCompleted(checked);
+    if (checked) playCheck();
+    else playUncheck();
+  }
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -83,7 +94,20 @@ export function QuestConfigRow({
         <GripVerticalIcon size={16} />
       </button>
 
-      <div className="flex-1 min-w-0">
+      {quest.enabled && !isEditingTitle && (
+        <Checkbox
+          checked={doneToday}
+          onCheckedChange={(value) => handleToggleCompleted(value === true)}
+          className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200 shrink-0"
+        />
+      )}
+
+      <div
+        className={cn(
+          'flex-1 min-w-0 transition-opacity duration-500',
+          doneToday && !isEditingTitle && 'opacity-50',
+        )}
+      >
         {isEditingTitle ? (
           <div className="flex items-center gap-1">
             <Input
@@ -114,7 +138,15 @@ export function QuestConfigRow({
             </Button>
           </div>
         ) : (
-          <p className="text-sm font-medium truncate">{quest.title}</p>
+          <span className="relative inline-block max-w-full truncate text-sm font-medium">
+            {quest.title}
+            <span
+              className={cn(
+                'absolute left-0 top-1/2 h-[1.5px] -translate-y-1/2 bg-foreground/70 transition-all duration-500 ease-out',
+                doneToday ? 'w-full' : 'w-0',
+              )}
+            />
+          </span>
         )}
         <p className="text-xs text-muted-foreground">
           {quest.recurrence === 'daily' ? 'Quotidienne' : 'Ponctuelle'}

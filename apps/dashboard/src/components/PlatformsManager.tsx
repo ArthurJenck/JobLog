@@ -34,6 +34,7 @@ import {
 } from '@/lib/sound';
 import { useUser } from '@/hooks/use-user';
 import { useAllDoneCelebration } from '@/hooks/useAllDoneCelebration';
+import { useQuests } from '@/lib/app-context';
 
 function isValidUrl(value: string) {
   try {
@@ -52,6 +53,7 @@ export function PlatformsManager() {
   const [editName, setEditName] = useState('');
   const [editUrl, setEditUrl] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Set<string>>(new Set());
+  const { refreshQuests } = useQuests();
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -173,6 +175,7 @@ export function PlatformsManager() {
     );
     try {
       await api.platforms.setChecked(platform._id, checked);
+      void refreshQuests();
     } catch {
       playError();
       toast.error('Impossible de mettre à jour la plateforme');

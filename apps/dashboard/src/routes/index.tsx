@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
-import { SessionContext, useStats } from '@/lib/app-context';
+import { SessionContext, useStats, useQuests } from '@/lib/app-context';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { ApplicationsTable } from '@/components/ApplicationsTable';
 import { ApplicationDetail } from '@/components/ApplicationDetail';
@@ -81,6 +81,7 @@ function formatSnoozeToastDelay(days?: number) {
 export function IndexPage() {
   const navigate = useNavigate();
   const { refreshStats } = useStats();
+  const { refreshQuests } = useQuests();
   const search = Route.useSearch();
   const openedSearchAppId = useRef<string | null>(null);
   const shownToast = useRef<string | null>(null);
@@ -320,6 +321,7 @@ export function IndexPage() {
   async function refreshDetail() {
     await fetchApplications(true);
     void refreshStats();
+    void refreshQuests();
     if (selectedApp) {
       const updated = await api.applications.get(selectedApp._id);
       setSelectedApp(updated);
@@ -331,6 +333,7 @@ export function IndexPage() {
     playAdd();
     await fetchApplications();
     void refreshStats();
+    void refreshQuests();
     const created = await api.applications.get(applicationId);
     openDetail(created);
     if (isScrapeActive(created)) {
@@ -343,6 +346,7 @@ export function IndexPage() {
   async function handleBulkActionComplete() {
     await fetchApplications();
     void refreshStats();
+    void refreshQuests();
   }
 
   return (

@@ -6,10 +6,18 @@ import { Separator } from '@/components/ui/separator';
 import { CvUpload } from './CvUpload';
 import { CvSkillsPanel } from './CvSkillsPanel';
 import { api } from '@/lib/api';
+import { useQuests } from '@/lib/app-context';
 import type { Cv } from '@joblog/shared';
-import { FileTextIcon, Trash2Icon, PencilIcon, CheckIcon, XIcon } from 'lucide-react';
+import {
+  FileTextIcon,
+  Trash2Icon,
+  PencilIcon,
+  CheckIcon,
+  XIcon,
+} from 'lucide-react';
 
 export function CvManager() {
+  const { refreshQuests } = useQuests();
   const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -77,21 +85,36 @@ export function CvManager() {
   return (
     <div className="flex flex-col gap-4 max-w-3xl">
       {cvs.length === 0 ? (
-        <CvUpload onUploaded={() => load()} />
+        <CvUpload
+          onUploaded={() => {
+            load();
+            refreshQuests();
+          }}
+        />
       ) : (
         <>
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               {cvs.length} CV{cvs.length > 1 ? 's' : ''}
             </p>
-            <Button variant="outline" size="sm" onClick={() => setShowUpload((v) => !v)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowUpload((v) => !v)}
+            >
               {showUpload ? 'Annuler' : '+ Ajouter un CV'}
             </Button>
           </div>
 
           {showUpload && (
             <>
-              <CvUpload onUploaded={() => { setShowUpload(false); load(); }} />
+              <CvUpload
+                onUploaded={() => {
+                  setShowUpload(false);
+                  load();
+                  refreshQuests();
+                }}
+              />
               <Separator />
             </>
           )}
@@ -102,7 +125,7 @@ export function CvManager() {
                 key={cv._id}
                 className="flex items-center gap-3 rounded-lg border px-4 py-3"
               >
-                <FileTextIcon className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                <FileTextIcon className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1 min-w-0">
                   {renamingId === cv._id ? (
                     <div className="flex items-center gap-1">
@@ -116,35 +139,55 @@ export function CvManager() {
                         className="h-7 text-sm"
                         autoFocus
                       />
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => confirmRename(cv._id)}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={() => confirmRename(cv._id)}
+                      >
                         <CheckIcon className="h-3.5 w-3.5 text-green-600" />
                       </Button>
-                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={cancelRename}>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-7 w-7"
+                        onClick={cancelRename}
+                      >
                         <XIcon className="h-3.5 w-3.5 text-muted-foreground" />
                       </Button>
                     </div>
                   ) : (
                     <>
                       <div className="flex items-center gap-2">
-                        <p className="text-sm font-medium truncate">{cv.label}</p>
+                        <p className="text-sm font-medium truncate">
+                          {cv.label}
+                        </p>
                         {cv.isDefault && (
-                          <Badge variant="secondary" className="flex-shrink-0">Par défaut</Badge>
+                          <Badge variant="secondary" className="shrink-0">
+                            Par défaut
+                          </Badge>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">{cv.filename}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {cv.filename}
+                      </p>
                     </>
                   )}
                 </div>
                 {renamingId !== cv._id && (
                   <>
-                    <p className="text-xs text-muted-foreground flex-shrink-0">
-                      {new Date(cv.uploadedAt).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}
+                    <p className="text-xs text-muted-foreground shrink-0">
+                      {new Date(cv.uploadedAt).toLocaleDateString('fr-FR', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })}
                     </p>
                     {cvs.length > 1 && !cv.isDefault && (
                       <Button
                         variant="ghost"
                         size="sm"
-                        className="h-7 text-xs text-muted-foreground hover:text-foreground flex-shrink-0"
+                        className="h-7 text-xs text-muted-foreground hover:text-foreground shrink-0"
                         onClick={() => setDefault(cv._id)}
                       >
                         Définir par défaut
@@ -153,7 +196,7 @@ export function CvManager() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-foreground flex-shrink-0"
+                      className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
                       onClick={() => startRename(cv)}
                     >
                       <PencilIcon className="h-3.5 w-3.5" />
@@ -161,7 +204,7 @@ export function CvManager() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="h-7 w-7 text-muted-foreground hover:text-destructive flex-shrink-0"
+                      className="h-7 w-7 text-muted-foreground hover:text-destructive shrink-0"
                       onClick={() => deleteCv(cv._id)}
                     >
                       <Trash2Icon className="h-3.5 w-3.5" />

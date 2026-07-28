@@ -38,22 +38,32 @@ export function QuestItem({
       animate={shakeControls}
       className={cn(
         'flex items-center gap-2 rounded-md px-2 py-1.5 border border-transparent transition-colors',
-        quest.detected && !doneToday && 'border-amber-400/60 bg-amber-400/5',
+        quest.detected && !doneToday && 'border-green-600/60 bg-green-600/5',
       )}
     >
       <Checkbox
         checked={doneToday}
         onCheckedChange={(value) => handleToggle(value === true)}
-        className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-100 shrink-0"
+        className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200 shrink-0"
       />
-      <span
-        className={cn(
-          'text-sm flex-1 min-w-0 line-clamp-2 transition-opacity duration-500',
-          doneToday && 'opacity-50',
-        )}
-      >
-        {quest.title}
-      </span>
+      <div className="flex-1 min-w-0">
+        <span
+          className={cn(
+            'relative inline-block max-w-full text-sm transition-opacity duration-500',
+            doneToday && 'opacity-50',
+          )}
+          title={quest.title}
+        >
+          <span className="line-clamp-2">{quest.title}</span>
+          <span
+            aria-hidden
+            className="absolute inset-0 line-clamp-2 line-through decoration-foreground/70 decoration-[1.5px] transition-[clip-path] duration-500 ease-out"
+            style={{ clipPath: doneToday ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)' }}
+          >
+            {quest.title}
+          </span>
+        </span>
+      </div>
       {quest.target !== null && (
         <Badge variant="secondary" className="shrink-0 text-xs">
           {quest.progress ?? 0}/{quest.target}

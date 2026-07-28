@@ -27,7 +27,7 @@ import { playAdd, playDelete, playDrop, playError, playToggle } from '@/lib/soun
 import { cn } from '@/lib/utils';
 
 export function TasksManager() {
-  const { quests, refreshQuests } = useQuests();
+  const { quests, refreshQuests, toggleQuestCompleted } = useQuests();
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
   const [recurrence, setRecurrence] = useState<QuestRecurrence>('daily');
@@ -229,6 +229,7 @@ export function TasksManager() {
                     key={quest._id}
                     quest={quest}
                     onUpdate={(body) => updateQuest(quest._id, body)}
+                    onToggleCompleted={(completed) => toggleQuestCompleted(quest, completed)}
                     onDelete={() => deleteQuest(quest._id)}
                     onRemove={() => removeQuest(quest._id)}
                   />
