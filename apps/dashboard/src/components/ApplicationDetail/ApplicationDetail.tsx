@@ -25,7 +25,6 @@ import { toast } from 'sonner';
 import {
   playAccepted,
   playReject,
-  playStatusChange,
   playDelete,
   playError,
   playLoading,
@@ -95,8 +94,6 @@ export function ApplicationDetail({ application, open, onClose, onUpdated }: Pro
         playAccepted();
       } else if (body.status === 'rejected' || body.status === 'ghosted' || body.status === 'cancelled') {
         playReject();
-      } else if (body.status) {
-        playStatusChange();
       }
     } finally {
       setIsSaving(false);

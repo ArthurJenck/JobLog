@@ -36,17 +36,14 @@ export function useCompanyLogoUrl(
   size: number
 ) {
   const directUrl = getCompanyLogoUrl(jobPosting, size);
-  const [fallbackDomain, setFallbackDomain] = useState<string | null>(null);
+  const [fallback, setFallback] = useState<{ company: string; domain: string | null } | null>(null);
 
   useEffect(() => {
-    if (directUrl || !company) {
-      setFallbackDomain(null);
-      return;
-    }
+    if (directUrl || !company) return;
 
     let cancelled = false;
     searchCompanyDomain(company).then((domain) => {
-      if (!cancelled) setFallbackDomain(domain);
+      if (!cancelled) setFallback({ company, domain });
     });
     return () => {
       cancelled = true;
@@ -54,6 +51,8 @@ export function useCompanyLogoUrl(
   }, [directUrl, company]);
 
   if (directUrl) return directUrl;
+  if (!company) return null;
+  const fallbackDomain = fallback?.company === company ? fallback.domain : null;
   return fallbackDomain ? getLogoUrlForDomain(fallbackDomain, size) : null;
 }
 

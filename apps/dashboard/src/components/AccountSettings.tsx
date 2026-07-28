@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
-import { isSoundEnabled, setSoundEnabled, playToggle } from '@/lib/sound';
+import { isSoundEnabled, setSoundEnabled } from '@/lib/sound';
 import { useUser } from '@/hooks/use-user';
 import { ProfileForm } from './ProfileForm';
 
@@ -12,7 +12,6 @@ export function AccountSettings() {
   const { user, loading: userLoading } = useUser();
 
   function toggleSound(checked: boolean) {
-    playToggle();
     setSoundEnabledState(checked);
     setSoundEnabled(checked);
   }

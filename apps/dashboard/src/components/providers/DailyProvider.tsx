@@ -24,13 +24,19 @@ export function DailyProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    refreshQuests().finally(() => {
-      if (active) setIsLoading(false);
-    });
+    (async () => {
+      try {
+        const { dayStart, dayEnd } = localDayBounds();
+        const { data } = await api.tasks.list(dayStart, dayEnd);
+        if (active) setQuests(data);
+      } finally {
+        if (active) setIsLoading(false);
+      }
+    })();
     return () => {
       active = false;
     };
-  }, [refreshQuests]);
+  }, []);
 
   useEffect(() => {
     if (pinged.current) return;
@@ -67,9 +73,23 @@ export function DailyProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const updateQuest = useCallback(
+    async (id: string, body: Partial<Quest>) => {
+      setQuests((prev) => prev.map((q) => (q._id === id ? { ...q, ...body } : q)));
+      try {
+        await api.tasks.update(id, body);
+      } catch {
+        playError();
+        toast.error('Impossible de mettre à jour cette tâche');
+        await refreshQuests();
+      }
+    },
+    [refreshQuests],
+  );
+
   return (
     <DailyContext.Provider
-      value={{ quests, streak, isLoading, refreshQuests, toggleQuestCompleted }}
+      value={{ quests, streak, isLoading, refreshQuests, toggleQuestCompleted, updateQuest }}
     >
       {children}
     </DailyContext.Provider>

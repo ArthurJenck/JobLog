@@ -6,7 +6,6 @@ import type { Quest } from '@/lib/api';
 import { useQuests } from '@/lib/app-context';
 import { isQuestDoneToday } from '@/lib/questHelpers';
 import { burstAt } from '@/lib/confetti';
-import { playCheck, playUncheck } from '@/lib/sound';
 import { useDetectedShake } from '@/hooks/useDetectedShake';
 import { cn } from '@/lib/utils';
 
@@ -24,12 +23,7 @@ export function QuestItem({
 
   function handleToggle(checked: boolean) {
     toggleQuestCompleted(quest, checked);
-    if (checked) {
-      if (rowRef.current) burstAt(rowRef.current);
-      if (!willCompleteAll) playCheck();
-    } else {
-      playUncheck();
-    }
+    if (checked && rowRef.current) burstAt(rowRef.current);
   }
 
   return (
@@ -43,6 +37,7 @@ export function QuestItem({
     >
       <Checkbox
         checked={doneToday}
+        silent={willCompleteAll}
         onCheckedChange={(value) => handleToggle(value === true)}
         className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200 shrink-0"
       />

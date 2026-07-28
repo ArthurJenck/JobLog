@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
-import { playToggle } from '@/lib/sound';
+import { toast } from 'sonner';
+import { playToggle, playError } from '@/lib/sound';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '';
 
@@ -26,15 +27,21 @@ export function NotificationSettings() {
   }, []);
 
   async function save(patch: Partial<Settings & { subscription: PushSubscriptionJSON | null }>) {
+    const snapshot = settings;
+    setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
     setIsSaving(true);
     try {
-      await fetch('/api/push/subscribe', {
+      const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(patch),
       });
-      setSettings((prev) => prev ? { ...prev, ...patch } : prev);
+      if (!res.ok) throw new Error('save failed');
+    } catch {
+      playError();
+      toast.error('Impossible de mettre à jour les notifications');
+      setSettings(snapshot);
     } finally {
       setIsSaving(false);
     }
@@ -78,6 +85,8 @@ export function NotificationSettings() {
         onChange={(v) => {
           setSettings((prev) => (prev ? { ...prev, push: v } : prev));
           (v ? subscribePush() : unsubscribePush()).catch(() => {
+            playError();
+            toast.error('Impossible de mettre à jour les notifications push');
             setSettings((prev) => (prev ? { ...prev, push: !v } : prev));
           });
         }}

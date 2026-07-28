@@ -16,7 +16,7 @@ import {
   EyeIcon,
   EyeOffIcon,
 } from 'lucide-react';
-import { playPress, playCheck, playUncheck } from '@/lib/sound';
+import { playPress, playToggle } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 
 interface QuestConfigRowProps {
@@ -56,8 +56,6 @@ export function QuestConfigRow({
 
   function handleToggleCompleted(checked: boolean) {
     onToggleCompleted(checked);
-    if (checked) playCheck();
-    else playUncheck();
   }
 
   const style = {
@@ -157,7 +155,10 @@ export function QuestConfigRow({
       <div className="inline-flex rounded-md border overflow-hidden shrink-0">
         <button
           type="button"
-          onClick={() => onUpdate({ recurrence: 'once' })}
+          onClick={() => {
+            playToggle();
+            onUpdate({ recurrence: 'once' });
+          }}
           className={cn(
             'px-2 py-1 text-xs whitespace-nowrap',
             quest.recurrence === 'once'
@@ -169,7 +170,10 @@ export function QuestConfigRow({
         </button>
         <button
           type="button"
-          onClick={() => onUpdate({ recurrence: 'daily' })}
+          onClick={() => {
+            playToggle();
+            onUpdate({ recurrence: 'daily' });
+          }}
           className={cn(
             'px-2 py-1 text-xs whitespace-nowrap',
             quest.recurrence === 'daily'

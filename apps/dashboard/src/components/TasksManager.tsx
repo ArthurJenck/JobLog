@@ -27,7 +27,7 @@ import { playAdd, playDelete, playDrop, playError, playToggle } from '@/lib/soun
 import { cn } from '@/lib/utils';
 
 export function TasksManager() {
-  const { quests, refreshQuests, toggleQuestCompleted } = useQuests();
+  const { quests, refreshQuests, toggleQuestCompleted, updateQuest } = useQuests();
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
   const [recurrence, setRecurrence] = useState<QuestRecurrence>('daily');
@@ -55,20 +55,6 @@ export function TasksManager() {
     }
   }
 
-  async function updateQuest(
-    id: string,
-    body: { title?: string; recurrence?: QuestRecurrence; target?: number | null; enabled?: boolean },
-  ) {
-    try {
-      await api.tasks.update(id, body);
-      playToggle();
-      await refreshQuests();
-    } catch {
-      playError();
-      toast.error('Impossible de mettre à jour cette tâche');
-    }
-  }
-
   async function deleteQuest(id: string) {
     if (!confirm('Supprimer cette tâche ?')) return;
     try {
@@ -82,14 +68,8 @@ export function TasksManager() {
   }
 
   async function removeQuest(id: string) {
-    try {
-      await api.tasks.update(id, { removed: true });
-      playDelete();
-      await refreshQuests();
-    } catch {
-      playError();
-      toast.error('Impossible de retirer cette tâche');
-    }
+    playDelete();
+    await updateQuest(id, { removed: true });
   }
 
   async function handleDragEnd(event: DragEndEvent) {
@@ -172,7 +152,10 @@ export function TasksManager() {
               <div className="inline-flex rounded-md border overflow-hidden">
                 <button
                   type="button"
-                  onClick={() => setRecurrence('once')}
+                  onClick={() => {
+                    playToggle();
+                    setRecurrence('once');
+                  }}
                   className={cn(
                     'px-2 py-1 text-xs',
                     recurrence === 'once'
@@ -184,7 +167,10 @@ export function TasksManager() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => setRecurrence('daily')}
+                  onClick={() => {
+                    playToggle();
+                    setRecurrence('daily');
+                  }}
                   className={cn(
                     'px-2 py-1 text-xs',
                     recurrence === 'daily'

@@ -5,8 +5,21 @@ import * as SelectPrimitive from "@radix-ui/react-select"
 import { Check, ChevronDown, ChevronUp } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { playToggle } from "@/lib/sound"
 
-const Select = SelectPrimitive.Root
+const Select = ({
+  onValueChange,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Root>) => (
+  <SelectPrimitive.Root
+    onValueChange={(value) => {
+      playToggle()
+      onValueChange?.(value)
+    }}
+    {...props}
+  />
+)
+Select.displayName = SelectPrimitive.Root.displayName
 
 const SelectGroup = SelectPrimitive.Group
 

@@ -3,7 +3,6 @@ import { LoaderCircleIcon } from 'lucide-react';
 import { StatusBadge } from '@/components/StatusBadge';
 import { SourceBadge } from '@/components/SourceBadge';
 import { Checkbox } from '@/components/ui/checkbox';
-import { playToggle } from '@/lib/sound';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import {
   INTERVIEW_CONCLUDING_EVENTS,
@@ -26,7 +25,6 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
         }
         onCheckedChange={(value) => {
           table.toggleAllPageRowsSelected(!!value);
-          playToggle();
         }}
         onClick={(e) => e.stopPropagation()}
         aria-label="Tout sélectionner"
@@ -37,7 +35,6 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
         checked={row.getIsSelected()}
         onCheckedChange={(value) => {
           row.toggleSelected(!!value);
-          playToggle();
         }}
         onClick={(e) => e.stopPropagation()}
         aria-label="Sélectionner la ligne"

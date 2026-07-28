@@ -20,12 +20,21 @@ export function useStats() {
   return useContext(StatsContext);
 }
 
+interface QuestUpdate {
+  title?: string;
+  recurrence?: Quest['recurrence'];
+  target?: number | null;
+  enabled?: boolean;
+  removed?: boolean;
+}
+
 interface DailyContextValue {
   quests: Quest[];
   streak: Streak;
   isLoading: boolean;
   refreshQuests: () => Promise<void>;
   toggleQuestCompleted: (quest: Quest, completed: boolean) => Promise<void>;
+  updateQuest: (id: string, body: QuestUpdate) => Promise<void>;
 }
 
 export const DailyContext = createContext<DailyContextValue>({
@@ -34,6 +43,7 @@ export const DailyContext = createContext<DailyContextValue>({
   isLoading: true,
   refreshQuests: async () => {},
   toggleQuestCompleted: async () => {},
+  updateQuest: async () => {},
 });
 
 export function useQuests() {

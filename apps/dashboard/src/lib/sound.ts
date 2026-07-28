@@ -43,6 +43,7 @@ export const playCancel = () => playCue('whisper');
 export const playAdd = () => playCue('bloom');
 export const playDelete = () => playCue('release');
 export const playPress = () => playCue('press');
+export const playRelease = () => playCue('release');
 export const playDrop = () => playCue('sparkle');
 export const playError = () => playCue('error');
 export const playPageOpen = () => playCue('page');

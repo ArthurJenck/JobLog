@@ -8,7 +8,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import type { Platform } from '@/lib/api';
 import { isSameLocalDay, reminderMessage } from '@/lib/platformReminder';
 import { burstAt } from '@/lib/confetti';
-import { playCheck, playUncheck, playPress } from '@/lib/sound';
+import { playPress } from '@/lib/sound';
 import { useDetectedShake } from '@/hooks/useDetectedShake';
 import {
   ExternalLinkIcon,
@@ -83,12 +83,7 @@ export function PlatformRow({
 
   function handleToggle(checked: boolean) {
     onToggleChecked(checked);
-    if (checked) {
-      if (rowRef.current) burstAt(rowRef.current);
-      if (!willCompleteAll) playCheck();
-    } else {
-      playUncheck();
-    }
+    if (checked && rowRef.current) burstAt(rowRef.current);
   }
 
   return (
@@ -124,6 +119,7 @@ export function PlatformRow({
         >
           <Checkbox
             checked={checkedToday}
+            silent={willCompleteAll}
             onCheckedChange={(value) => handleToggle(value === true)}
             className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200"
           />
