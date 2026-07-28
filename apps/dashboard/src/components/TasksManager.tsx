@@ -27,7 +27,7 @@ import { playAdd, playDelete, playDrop, playError, playToggle } from '@/lib/soun
 import { cn } from '@/lib/utils';
 
 export function TasksManager() {
-  const { quests, refreshQuests, toggleQuestCompleted, updateQuest } = useQuests();
+  const { quests, refreshQuests, toggleQuestCompleted, updateQuest, deleteQuest } = useQuests();
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
   const [recurrence, setRecurrence] = useState<QuestRecurrence>('daily');
@@ -55,16 +55,10 @@ export function TasksManager() {
     }
   }
 
-  async function deleteQuest(id: string) {
+  async function handleDeleteQuest(id: string) {
     if (!confirm('Supprimer cette tâche ?')) return;
-    try {
-      await api.tasks.delete(id);
-      playDelete();
-      await refreshQuests();
-    } catch {
-      playError();
-      toast.error('Impossible de supprimer cette tâche');
-    }
+    playDelete();
+    await deleteQuest(id);
   }
 
   async function removeQuest(id: string) {
@@ -216,7 +210,7 @@ export function TasksManager() {
                     quest={quest}
                     onUpdate={(body) => updateQuest(quest._id, body)}
                     onToggleCompleted={(completed) => toggleQuestCompleted(quest, completed)}
-                    onDelete={() => deleteQuest(quest._id)}
+                    onDelete={() => handleDeleteQuest(quest._id)}
                     onRemove={() => removeQuest(quest._id)}
                   />
                 ))}

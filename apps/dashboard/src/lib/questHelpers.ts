@@ -7,5 +7,5 @@ export function isQuestDoneToday(quest: Quest): boolean {
 }
 
 export function getPendingQuests(quests: Quest[]): Quest[] {
-  return quests.filter((q) => q.enabled && !isQuestDoneToday(q));
+  return quests.filter((q) => q.enabled && !q.removed && !isQuestDoneToday(q));
 }

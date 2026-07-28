@@ -35,6 +35,7 @@ interface DailyContextValue {
   refreshQuests: () => Promise<void>;
   toggleQuestCompleted: (quest: Quest, completed: boolean) => Promise<void>;
   updateQuest: (id: string, body: QuestUpdate) => Promise<void>;
+  deleteQuest: (id: string) => Promise<void>;
 }
 
 export const DailyContext = createContext<DailyContextValue>({
@@ -44,6 +45,7 @@ export const DailyContext = createContext<DailyContextValue>({
   refreshQuests: async () => {},
   toggleQuestCompleted: async () => {},
   updateQuest: async () => {},
+  deleteQuest: async () => {},
 });
 
 export function useQuests() {

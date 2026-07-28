@@ -57,7 +57,7 @@ export function QuestsPanel() {
 
   const keep = new Set([...pendingIds, ...lingeringIds]);
   const rows = quests
-    .filter((q) => q.enabled && keep.has(q._id))
+    .filter((q) => q.enabled && !q.removed && keep.has(q._id))
     .sort((a, b) => a.order - b.order);
 
   if (rows.length === 0) return null;

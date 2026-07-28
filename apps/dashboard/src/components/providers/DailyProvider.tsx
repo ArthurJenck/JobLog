@@ -87,9 +87,23 @@ export function DailyProvider({ children }: { children: React.ReactNode }) {
     [refreshQuests],
   );
 
+  const deleteQuest = useCallback(
+    async (id: string) => {
+      setQuests((prev) => prev.filter((q) => q._id !== id));
+      try {
+        await api.tasks.delete(id);
+      } catch {
+        playError();
+        toast.error('Impossible de supprimer cette tâche');
+        await refreshQuests();
+      }
+    },
+    [refreshQuests],
+  );
+
   return (
     <DailyContext.Provider
-      value={{ quests, streak, isLoading, refreshQuests, toggleQuestCompleted, updateQuest }}
+      value={{ quests, streak, isLoading, refreshQuests, toggleQuestCompleted, updateQuest, deleteQuest }}
     >
       {children}
     </DailyContext.Provider>
