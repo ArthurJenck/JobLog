@@ -40,7 +40,7 @@ interface DailyContextValue {
 
 export const DailyContext = createContext<DailyContextValue>({
   tasks: [],
-  streak: { current: 0, longest: 0, lastActiveDay: null, lastPerfectDay: null },
+  streak: { current: 0, longest: 0, lastActiveDay: null, lastPerfectDay: null, prevPerfectDay: null },
   isLoading: true,
   refreshTasks: async () => {},
   toggleTaskCompleted: async () => {},

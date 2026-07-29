@@ -33,6 +33,7 @@ function toResponse(fields: UserStreakFields) {
     longest: fields.streakLongest ?? 0,
     lastActiveDay: fields.streakLastActiveDay ?? null,
     lastPerfectDay: fields.streakLastPerfectDay ?? null,
+    prevPerfectDay: fields.streakPrevPerfectDay ?? null,
   };
 }
 
@@ -74,6 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         streakLongest: longest,
         streakLastActiveDay: today,
         streakLastPerfectDay: user?.streakLastPerfectDay ?? null,
+        streakPrevPerfectDay: user?.streakPrevPerfectDay ?? null,
       }),
     );
   }

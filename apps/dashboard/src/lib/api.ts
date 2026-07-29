@@ -79,6 +79,7 @@ export interface Streak {
   longest: number;
   lastActiveDay: string | null;
   lastPerfectDay: string | null;
+  prevPerfectDay: string | null;
 }
 
 export interface SkillCount {

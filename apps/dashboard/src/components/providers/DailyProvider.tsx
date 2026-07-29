@@ -8,7 +8,7 @@ import { getPendingTasks } from '@/lib/taskHelpers';
 import { useAllDoneCelebration } from '@/hooks/useAllDoneCelebration';
 import { playError } from '@/lib/sound';
 
-const EMPTY_STREAK: Streak = { current: 0, longest: 0, lastActiveDay: null, lastPerfectDay: null };
+const EMPTY_STREAK: Streak = { current: 0, longest: 0, lastActiveDay: null, lastPerfectDay: null, prevPerfectDay: null };
 
 export function DailyProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<Task[]>([]);
@@ -44,22 +44,19 @@ export function DailyProvider({ children }: { children: React.ReactNode }) {
     api.streak.ping(localDayKey()).then(setStreak).catch(() => {});
   }, []);
 
-  const prevPerfectRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (streak.lastPerfectDay !== localDayKey()) {
-      prevPerfectRef.current = streak.lastPerfectDay;
-    }
-  }, [streak.lastPerfectDay]);
-
   const setPerfectDay = useCallback((perfect: boolean) => {
     const today = localDayKey();
     setStreak((prev) => {
       if (perfect) {
         if (prev.lastPerfectDay === today) return prev;
-        return { ...prev, lastPerfectDay: today };
+        return {
+          ...prev,
+          prevPerfectDay: prev.lastPerfectDay ?? prev.prevPerfectDay,
+          lastPerfectDay: today,
+        };
       }
       if (prev.lastPerfectDay !== today) return prev;
-      return { ...prev, lastPerfectDay: prevPerfectRef.current };
+      return { ...prev, lastPerfectDay: prev.prevPerfectDay };
     });
     api.streak.markPerfect(today, perfect).then(setStreak).catch(() => {});
   }, []);
