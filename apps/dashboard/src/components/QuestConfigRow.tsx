@@ -1,23 +1,23 @@
-import { useState } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
 import type { Quest } from '@/lib/api';
-import type { QuestRecurrence } from '@joblog/shared';
 import { isQuestDoneToday } from '@/lib/questHelpers';
-import {
-  PencilIcon,
-  Trash2Icon,
-  CheckIcon,
-  XIcon,
-  GripVerticalIcon,
-  EyeIcon,
-  EyeOffIcon,
-} from 'lucide-react';
 import { playPress, playToggle } from '@/lib/sound';
 import { cn } from '@/lib/utils';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import type { QuestRecurrence } from '@joblog/shared';
+import {
+  CheckIcon,
+  EyeIcon,
+  EyeOffIcon,
+  GripVerticalIcon,
+  PencilIcon,
+  Trash2Icon,
+  XIcon,
+} from 'lucide-react';
+import { useState } from 'react';
+import CompletionCheckbox from './CompletionCheckbox';
 
 interface QuestConfigRowProps {
   quest: Quest;
@@ -94,10 +94,9 @@ export function QuestConfigRow({
 
       <div className="flex items-center gap-3 min-w-0 flex-1">
         {quest.enabled && !isEditingTitle && (
-          <Checkbox
+          <CompletionCheckbox
             checked={doneToday}
             onCheckedChange={(value) => handleToggleCompleted(value === true)}
-            className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200 shrink-0"
           />
         )}
 

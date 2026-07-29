@@ -1,13 +1,13 @@
-import { useRef } from 'react';
-import { motion } from 'framer-motion';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Badge } from '@/components/ui/badge';
+import { useDetectedShake } from '@/hooks/useDetectedShake';
 import type { Quest } from '@/lib/api';
 import { useQuests } from '@/lib/app-context';
-import { isQuestDoneToday } from '@/lib/questHelpers';
 import { burstAt } from '@/lib/confetti';
-import { useDetectedShake } from '@/hooks/useDetectedShake';
+import { isQuestDoneToday } from '@/lib/questHelpers';
 import { cn } from '@/lib/utils';
+import { motion } from 'framer-motion';
+import { useRef } from 'react';
+import CompletionCheckbox from './CompletionCheckbox';
 
 export function QuestItem({
   quest,
@@ -36,11 +36,10 @@ export function QuestItem({
         quest.detected && !doneToday && 'border-green-600/60 bg-green-600/5',
       )}
     >
-      <Checkbox
+      <CompletionCheckbox
         checked={doneToday}
         silent={willCompleteAll}
         onCheckedChange={(value) => handleToggle(value === true)}
-        className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200 shrink-0"
       />
       <div className="flex-1 min-w-0">
         <span
@@ -54,7 +53,9 @@ export function QuestItem({
           <span
             aria-hidden
             className="absolute inset-0 line-clamp-2 line-through decoration-foreground/70 decoration-[1.5px] transition-[clip-path] duration-500 ease-out"
-            style={{ clipPath: doneToday ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)' }}
+            style={{
+              clipPath: doneToday ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
+            }}
           >
             {quest.title}
           </span>

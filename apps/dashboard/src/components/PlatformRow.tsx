@@ -1,25 +1,25 @@
-import { useRef } from 'react';
-import { motion } from 'framer-motion';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Checkbox } from '@/components/ui/checkbox';
-import type { Platform } from '@/lib/api';
-import { isSameLocalDay, reminderMessage } from '@/lib/platformReminder';
-import { burstAt } from '@/lib/confetti';
-import { playPress } from '@/lib/sound';
 import { useDetectedShake } from '@/hooks/useDetectedShake';
+import type { Platform } from '@/lib/api';
+import { burstAt } from '@/lib/confetti';
+import { isSameLocalDay, reminderMessage } from '@/lib/platformReminder';
+import { playPress } from '@/lib/sound';
+import { cn } from '@/lib/utils';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { motion } from 'framer-motion';
 import {
+  CheckIcon,
   ExternalLinkIcon,
   GlobeIcon,
+  GripVerticalIcon,
   PencilIcon,
   Trash2Icon,
-  CheckIcon,
   XIcon,
-  GripVerticalIcon,
 } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useRef } from 'react';
+import CompletionCheckbox from './CompletionCheckbox';
 
 interface PlatformRowProps {
   platform: Platform;
@@ -92,6 +92,7 @@ export function PlatformRow({
       style={style}
       className={cn(
         'group/row relative flex items-center gap-3 rounded-lg border px-4 py-3 bg-background',
+        openedToday && !checkedToday && 'border-amber-400/60',
         isDragging && 'opacity-60',
       )}
     >
@@ -112,16 +113,12 @@ export function PlatformRow({
       {!isEditing && (
         <motion.div
           animate={shakeControls}
-          className={cn(
-            'flex items-center gap-2 shrink-0 rounded-md',
-            openedToday && !checkedToday && 'ring-1 ring-amber-400/60',
-          )}
+          className="flex items-center gap-2 shrink-0 rounded-md"
         >
-          <Checkbox
+          <CompletionCheckbox
             checked={checkedToday}
             silent={willCompleteAll}
             onCheckedChange={(value) => handleToggle(value === true)}
-            className="border-green-600 data-[state=checked]:bg-green-600 hover:bg-green-200"
           />
         </motion.div>
       )}
