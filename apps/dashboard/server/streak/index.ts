@@ -9,10 +9,16 @@ interface UserStreakFields {
   streakLongest?: number;
   streakLastActiveDay?: string | null;
   streakLastPerfectDay?: string | null;
+  streakPrevPerfectDay?: string | null;
 }
 
 const DaySchema = z.object({
   today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+const PerfectSchema = z.object({
+  today: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  perfect: z.boolean().optional().default(true),
 });
 
 function shiftDayKey(day: string, delta: number): string {
@@ -73,13 +79,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'PATCH') {
-    const parsed = DaySchema.safeParse(req.body);
+    const parsed = PerfectSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const { today } = parsed.data;
+    const { today, perfect } = parsed.data;
 
-    await col.updateOne(userFilter, { $set: { streakLastPerfectDay: today } });
     const user = await col.findOne(userFilter);
-    return res.status(200).json(toResponse(user ?? {}));
+    const currentPerfect = user?.streakLastPerfectDay ?? null;
+    const prevPerfect = user?.streakPrevPerfectDay ?? null;
+
+    if (perfect) {
+      if (currentPerfect !== today) {
+        const update: UserStreakFields = { streakLastPerfectDay: today };
+        if (currentPerfect) update.streakPrevPerfectDay = currentPerfect;
+        await col.updateOne(userFilter, { $set: update });
+      }
+    } else if (currentPerfect === today) {
+      await col.updateOne(userFilter, { $set: { streakLastPerfectDay: prevPerfect } });
+    }
+
+    const updated = await col.findOne(userFilter);
+    return res.status(200).json(toResponse(updated ?? {}));
   }
 
   return res.status(405).json({ error: 'Method not allowed' });

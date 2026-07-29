@@ -293,8 +293,8 @@ export const api = {
     ping(today: string): Promise<Streak> {
       return request('/streak', { method: 'POST', body: JSON.stringify({ today }) });
     },
-    markPerfect(today: string): Promise<Streak> {
-      return request('/streak', { method: 'PATCH', body: JSON.stringify({ today }) });
+    markPerfect(today: string, perfect = true): Promise<Streak> {
+      return request('/streak', { method: 'PATCH', body: JSON.stringify({ today, perfect }) });
     },
   },
 };

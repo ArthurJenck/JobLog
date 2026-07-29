@@ -44,15 +44,36 @@ export function DailyProvider({ children }: { children: React.ReactNode }) {
     api.streak.ping(localDayKey()).then(setStreak).catch(() => {});
   }, []);
 
-  const markPerfectDay = useCallback(() => {
+  const prevPerfectRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (streak.lastPerfectDay !== localDayKey()) {
+      prevPerfectRef.current = streak.lastPerfectDay;
+    }
+  }, [streak.lastPerfectDay]);
+
+  const setPerfectDay = useCallback((perfect: boolean) => {
     const today = localDayKey();
-    setStreak((prev) => ({ ...prev, lastPerfectDay: today }));
-    api.streak.markPerfect(today).catch(() => {});
+    setStreak((prev) => {
+      if (perfect) {
+        if (prev.lastPerfectDay === today) return prev;
+        return { ...prev, lastPerfectDay: today };
+      }
+      if (prev.lastPerfectDay !== today) return prev;
+      return { ...prev, lastPerfectDay: prevPerfectRef.current };
+    });
+    api.streak.markPerfect(today, perfect).then(setStreak).catch(() => {});
   }, []);
 
   const hasEnabledTasks = tasks.some((q) => q.enabled);
   const allDone = hasEnabledTasks && getPendingTasks(tasks).length === 0;
-  useAllDoneCelebration(allDone, markPerfectDay);
+  useAllDoneCelebration(allDone);
+
+  useEffect(() => {
+    if (isLoading) return;
+    const isPerfectPersisted = streak.lastPerfectDay === localDayKey();
+    if (allDone && !isPerfectPersisted) setPerfectDay(true);
+    else if (!allDone && isPerfectPersisted) setPerfectDay(false);
+  }, [allDone, isLoading, streak.lastPerfectDay, setPerfectDay]);
 
   const toggleTaskCompleted = useCallback(async (task: Task, completed: boolean) => {
     setTasks((prev) =>
