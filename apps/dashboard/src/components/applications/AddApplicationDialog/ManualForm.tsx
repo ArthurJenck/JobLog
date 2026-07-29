@@ -3,7 +3,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api, type LogoSearchResult } from '@/lib/api';
 import { getLogoUrlForDomain } from '@/lib/company-logo';
-import { JobPostingFields } from '@/components/JobPostingFields';
+import { JobPostingFields } from '@/components/applications/JobPostingFields';
 
 const LAST_CONTRACT_TYPE_KEY = 'joblog:lastContractType';
 

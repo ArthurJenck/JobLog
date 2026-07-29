@@ -1,6 +1,6 @@
 import { createContext, useContext } from 'react';
 import { api } from '@/lib/api';
-import type { Quest, Streak } from '@/lib/api';
+import type { Task, Streak } from '@/lib/api';
 
 export const SessionContext = createContext<boolean>(false);
 
@@ -20,35 +20,35 @@ export function useStats() {
   return useContext(StatsContext);
 }
 
-interface QuestUpdate {
+interface TaskUpdate {
   title?: string;
-  recurrence?: Quest['recurrence'];
+  recurrence?: Task['recurrence'];
   target?: number | null;
   enabled?: boolean;
   removed?: boolean;
 }
 
 interface DailyContextValue {
-  quests: Quest[];
+  tasks: Task[];
   streak: Streak;
   isLoading: boolean;
-  refreshQuests: () => Promise<void>;
-  toggleQuestCompleted: (quest: Quest, completed: boolean) => Promise<void>;
-  updateQuest: (id: string, body: QuestUpdate) => Promise<void>;
-  deleteQuest: (id: string) => Promise<void>;
+  refreshTasks: () => Promise<void>;
+  toggleTaskCompleted: (task: Task, completed: boolean) => Promise<void>;
+  updateTask: (id: string, body: TaskUpdate) => Promise<void>;
+  deleteTask: (id: string) => Promise<void>;
 }
 
 export const DailyContext = createContext<DailyContextValue>({
-  quests: [],
+  tasks: [],
   streak: { current: 0, longest: 0, lastActiveDay: null, lastPerfectDay: null },
   isLoading: true,
-  refreshQuests: async () => {},
-  toggleQuestCompleted: async () => {},
-  updateQuest: async () => {},
-  deleteQuest: async () => {},
+  refreshTasks: async () => {},
+  toggleTaskCompleted: async () => {},
+  updateTask: async () => {},
+  deleteTask: async () => {},
 });
 
-export function useQuests() {
+export function useTasks() {
   return useContext(DailyContext);
 }
 

@@ -5,7 +5,7 @@ import {
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api } from '@/lib/api';
-import { JobPostingFields } from '@/components/JobPostingFields';
+import { JobPostingFields } from '@/components/applications/JobPostingFields';
 import type { ApplicationWithJob } from '@joblog/shared';
 
 interface Props {

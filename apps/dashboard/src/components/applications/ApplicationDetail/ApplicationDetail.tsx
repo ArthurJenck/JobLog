@@ -23,12 +23,12 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Separator } from '@/components/ui/separator';
-import { StatusBadge } from '@/components/StatusBadge';
-import { SourceBadge } from '@/components/SourceBadge';
-import { EventTimeline } from '@/components/EventTimeline';
-import { ScrapeProgressTimeline } from '@/components/ScrapeProgressTimeline';
-import { AnalyzePanel } from '@/components/AnalyzePanel';
-import { EditJobPostingDialog } from '@/components/EditJobPostingDialog';
+import { StatusBadge } from '@/components/applications/StatusBadge';
+import { SourceBadge } from '@/components/applications/SourceBadge';
+import { EventTimeline } from '@/components/applications/EventTimeline';
+import { ScrapeProgressTimeline } from '@/components/applications/ScrapeProgressTimeline';
+import { AnalyzePanel } from '@/components/applications/AnalyzePanel';
+import { EditJobPostingDialog } from '@/components/applications/EditJobPostingDialog';
 import { StatusActions } from './StatusActions';
 import { ContactFields } from './ContactFields';
 import { NotesField } from './NotesField';

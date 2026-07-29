@@ -8,7 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { AddressInput } from '@/components/AddressInput';
+import { AddressInput } from '@/components/common/AddressInput';
 import { CONTRACT_TYPES, CONTRACT_LABELS, REMOTE_TYPES, REMOTE_LABELS } from '@joblog/shared';
 
 export interface JobPostingFieldsValues {

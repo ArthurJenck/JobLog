@@ -4,21 +4,21 @@ import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { requireSession } from '../../lib/session.js';
 import {
-  QUEST_RECURRENCES,
-  QUEST_CATALOG,
-  DEFAULT_QUEST_KEYS,
+  TASK_RECURRENCES,
+  TASK_CATALOG,
+  DEFAULT_TASK_KEYS,
   STATUS_CHANGE_EVENTS,
-  type QuestRecurrence,
-  type QuestDetectionSignal,
+  type TaskRecurrence,
+  type TaskDetectionSignal,
 } from '@joblog/shared';
 
-interface QuestDoc {
+interface TaskDoc {
   userId: string;
   key: string | null;
   title: string;
-  recurrence: QuestRecurrence;
+  recurrence: TaskRecurrence;
   target: number | null;
-  detectionSignal: QuestDetectionSignal | null;
+  detectionSignal: TaskDetectionSignal | null;
   enabled: boolean;
   removed: boolean;
   order: number;
@@ -27,37 +27,37 @@ interface QuestDoc {
   updatedAt: Date;
 }
 
-const ActivateCatalogQuestSchema = z.object({
+const ActivateCatalogTaskSchema = z.object({
   key: z.string().min(1),
 });
 
-const CreateCustomQuestSchema = z.object({
+const CreateCustomTaskSchema = z.object({
   title: z.string().min(1),
-  recurrence: z.enum(QUEST_RECURRENCES),
+  recurrence: z.enum(TASK_RECURRENCES),
   target: z.number().int().positive().nullable().optional(),
 });
 
-const UpdateQuestSchema = z.object({
+const UpdateTaskSchema = z.object({
   title: z.string().min(1).optional(),
-  recurrence: z.enum(QUEST_RECURRENCES).optional(),
+  recurrence: z.enum(TASK_RECURRENCES).optional(),
   target: z.number().int().positive().nullable().optional(),
   enabled: z.boolean().optional(),
   removed: z.boolean().optional(),
   completed: z.boolean().optional(),
 });
 
-const ReorderQuestsSchema = z.object({
+const ReorderTasksSchema = z.object({
   order: z.array(z.string()).min(1),
 });
 
-async function seedDefaultQuests(userId: string) {
-  const col = await getCollection<QuestDoc>('quest_templates');
+async function seedDefaultTasks(userId: string) {
+  const col = await getCollection<TaskDoc>('quest_templates');
   const existing = await col.countDocuments({ userId });
   if (existing > 0) return;
 
   const now = new Date();
-  const docs = DEFAULT_QUEST_KEYS.map((key, index) => {
-    const entry = QUEST_CATALOG.find((c) => c.key === key)!;
+  const docs = DEFAULT_TASK_KEYS.map((key, index) => {
+    const entry = TASK_CATALOG.find((c) => c.key === key)!;
     return {
       userId,
       key: entry.key,
@@ -78,7 +78,7 @@ async function seedDefaultQuests(userId: string) {
 }
 
 async function enrichWithDetection(
-  quests: WithId<QuestDoc>[],
+  tasks: WithId<TaskDoc>[],
   userId: string,
   dayStart: string | undefined,
   dayEnd: string | undefined,
@@ -179,13 +179,13 @@ async function enrichWithDetection(
   }
 
   return Promise.all(
-    quests.map(async (q) => {
+    tasks.map(async (q) => {
       let detected = false;
       let progress: number | null = null;
       let progressTarget: number | null = null;
 
       const signal = q.key
-        ? QUEST_CATALOG.find((c) => c.key === q.key)?.detectionSignal ?? null
+        ? TASK_CATALOG.find((c) => c.key === q.key)?.detectionSignal ?? null
         : q.detectionSignal;
 
       if (signal === 'platforms_all') {
@@ -225,14 +225,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (!session) return;
 
   const userId = session.user.id;
-  const col = await getCollection<QuestDoc>('quest_templates');
+  const col = await getCollection<TaskDoc>('quest_templates');
 
   if (req.method === 'GET') {
-    await seedDefaultQuests(userId);
+    await seedDefaultTasks(userId);
 
     const { dayStart, dayEnd } = req.query as { dayStart?: string; dayEnd?: string };
-    const quests = await col.find({ userId }).sort({ order: 1, createdAt: 1 }).toArray();
-    const enriched = await enrichWithDetection(quests, userId, dayStart, dayEnd);
+    const tasks = await col.find({ userId }).sort({ order: 1, createdAt: 1 }).toArray();
+    const enriched = await enrichWithDetection(tasks, userId, dayStart, dayEnd);
 
     return res.status(200).json({ data: enriched });
   }
@@ -241,11 +241,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const now = new Date();
 
     if (req.body && typeof req.body === 'object' && 'key' in req.body) {
-      const parsed = ActivateCatalogQuestSchema.safeParse(req.body);
+      const parsed = ActivateCatalogTaskSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
-      const entry = QUEST_CATALOG.find((c) => c.key === parsed.data.key);
-      if (!entry) return res.status(400).json({ error: 'Unknown catalog quest' });
+      const entry = TASK_CATALOG.find((c) => c.key === parsed.data.key);
+      if (!entry) return res.status(400).json({ error: 'Unknown catalog task' });
 
       const existing = await col.findOne({ userId, key: entry.key });
       if (existing) {
@@ -253,7 +253,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           { _id: existing._id },
           { $set: { enabled: true, removed: false, updatedAt: now } },
         );
-        return res.status(200).json({ questId: existing._id.toString() });
+        return res.status(200).json({ taskId: existing._id.toString() });
       }
 
       const order = await col.countDocuments({ userId });
@@ -272,10 +272,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: now,
       };
       const result = await col.insertOne(doc);
-      return res.status(201).json({ questId: result.insertedId.toString() });
+      return res.status(201).json({ taskId: result.insertedId.toString() });
     }
 
-    const parsed = CreateCustomQuestSchema.safeParse(req.body);
+    const parsed = CreateCustomTaskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const { title, recurrence, target } = parsed.data;
@@ -295,25 +295,25 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       updatedAt: now,
     };
     const result = await col.insertOne(doc);
-    return res.status(201).json({ questId: result.insertedId.toString() });
+    return res.status(201).json({ taskId: result.insertedId.toString() });
   }
 
   if (req.method === 'PATCH') {
     const { id } = req.query as { id?: string };
 
     if (!id) {
-      const parsed = ReorderQuestsSchema.safeParse(req.body);
+      const parsed = ReorderTasksSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
       const ids = parsed.data.order;
-      if (!ids.every((questId) => ObjectId.isValid(questId))) {
+      if (!ids.every((taskId) => ObjectId.isValid(taskId))) {
         return res.status(400).json({ error: 'Invalid id in order' });
       }
 
       await Promise.all(
-        ids.map((questId, index) =>
+        ids.map((taskId, index) =>
           col.updateOne(
-            { _id: new ObjectId(questId), userId },
+            { _id: new ObjectId(taskId), userId },
             { $set: { order: index, updatedAt: new Date() } },
           ),
         ),
@@ -323,7 +323,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
 
-    const parsed = UpdateQuestSchema.safeParse(req.body);
+    const parsed = UpdateTaskSchema.safeParse(req.body);
     if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
 
     const { title, recurrence, target, enabled, removed, completed } = parsed.data;
@@ -349,9 +349,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const { id } = req.query as { id: string };
     if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
 
-    const quest = await col.findOne({ _id: new ObjectId(id), userId });
-    if (!quest) return res.status(404).json({ error: 'Not found' });
-    if (quest.key !== null) {
+    const task = await col.findOne({ _id: new ObjectId(id), userId });
+    if (!task) return res.status(404).json({ error: 'Not found' });
+    if (task.key !== null) {
       return res.status(400).json({ error: 'Une quête du catalogue ne peut être que désactivée' });
     }
 

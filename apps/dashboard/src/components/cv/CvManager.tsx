@@ -6,7 +6,7 @@ import { Separator } from '@/components/ui/separator';
 import { CvUpload } from './CvUpload';
 import { CvSkillsPanel } from './CvSkillsPanel';
 import { api } from '@/lib/api';
-import { useQuests } from '@/lib/app-context';
+import { useTasks } from '@/lib/app-context';
 import type { Cv } from '@joblog/shared';
 import {
   FileTextIcon,
@@ -17,7 +17,7 @@ import {
 } from 'lucide-react';
 
 export function CvManager() {
-  const { refreshQuests } = useQuests();
+  const { refreshTasks } = useTasks();
   const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
   const [showUpload, setShowUpload] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -88,7 +88,7 @@ export function CvManager() {
         <CvUpload
           onUploaded={() => {
             load();
-            refreshQuests();
+            refreshTasks();
           }}
         />
       ) : (
@@ -112,7 +112,7 @@ export function CvManager() {
                 onUploaded={() => {
                   setShowUpload(false);
                   load();
-                  refreshQuests();
+                  refreshTasks();
                 }}
               />
               <Separator />

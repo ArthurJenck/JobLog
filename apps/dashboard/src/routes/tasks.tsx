@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { TasksManager } from '@/components/TasksManager';
+import { TasksManager } from '@/components/tasks/TasksManager';
 
 export const Route = createFileRoute('/tasks')({
   component: TasksPage,

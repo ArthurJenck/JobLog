@@ -1,7 +1,7 @@
 import { type ColumnDef } from '@tanstack/react-table';
 import { LoaderCircleIcon } from 'lucide-react';
-import { StatusBadge } from '@/components/StatusBadge';
-import { SourceBadge } from '@/components/SourceBadge';
+import { StatusBadge } from '@/components/applications/StatusBadge';
+import { SourceBadge } from '@/components/applications/SourceBadge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import {

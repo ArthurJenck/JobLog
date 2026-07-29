@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { PlatformsManager } from '@/components/PlatformsManager';
+import { PlatformsManager } from '@/components/platforms/PlatformsManager';
 
 export const Route = createFileRoute('/platforms')({
   component: PlatformsPage,

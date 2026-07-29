@@ -13,13 +13,13 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { QUEST_CATALOG } from '@joblog/shared';
-import type { QuestRecurrence } from '@joblog/shared';
+import { TASK_CATALOG } from '@joblog/shared';
+import type { TaskRecurrence } from '@joblog/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
-import { QuestConfigRow } from '@/components/QuestConfigRow';
-import { useQuests } from '@/lib/app-context';
+import { TaskConfigRow } from '@/components/tasks/TaskConfigRow';
+import { useTasks } from '@/lib/app-context';
 import { api } from '@/lib/api';
 import { toast } from 'sonner';
 import { FlameIcon } from 'lucide-react';
@@ -27,10 +27,10 @@ import { playAdd, playDelete, playDrop, playError, playToggle } from '@/lib/soun
 import { cn } from '@/lib/utils';
 
 export function TasksManager() {
-  const { quests, refreshQuests, toggleQuestCompleted, updateQuest, deleteQuest } = useQuests();
+  const { tasks, refreshTasks, toggleTaskCompleted, updateTask, deleteTask } = useTasks();
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
-  const [recurrence, setRecurrence] = useState<QuestRecurrence>('daily');
+  const [recurrence, setRecurrence] = useState<TaskRecurrence>('daily');
   const [target, setTarget] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -39,53 +39,53 @@ export function TasksManager() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const sortedQuests = [...quests].filter((q) => !q.removed).sort((a, b) => a.order - b.order);
-  const availableCatalog = QUEST_CATALOG.filter(
-    (entry) => !quests.some((q) => q.key === entry.key && !q.removed),
+  const sortedTasks = [...tasks].filter((q) => !q.removed).sort((a, b) => a.order - b.order);
+  const availableCatalog = TASK_CATALOG.filter(
+    (entry) => !tasks.some((q) => q.key === entry.key && !q.removed),
   );
 
-  async function activateCatalogQuest(key: string) {
+  async function activateCatalogTask(key: string) {
     try {
-      await api.tasks.activateCatalogQuest(key);
+      await api.tasks.activateCatalogTask(key);
       playAdd();
-      await refreshQuests();
+      await refreshTasks();
     } catch {
       playError();
       toast.error("Impossible d'activer cette tâche");
     }
   }
 
-  async function handleDeleteQuest(id: string) {
+  async function handleDeleteTask(id: string) {
     if (!confirm('Supprimer cette tâche ?')) return;
     playDelete();
-    await deleteQuest(id);
+    await deleteTask(id);
   }
 
-  async function removeQuest(id: string) {
+  async function removeTask(id: string) {
     playDelete();
-    await updateQuest(id, { removed: true });
+    await updateTask(id, { removed: true });
   }
 
   async function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = sortedQuests.findIndex((q) => q._id === active.id);
-    const newIndex = sortedQuests.findIndex((q) => q._id === over.id);
+    const oldIndex = sortedTasks.findIndex((q) => q._id === active.id);
+    const newIndex = sortedTasks.findIndex((q) => q._id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = arrayMove(sortedQuests, oldIndex, newIndex);
+    const reordered = arrayMove(sortedTasks, oldIndex, newIndex);
     playDrop();
     try {
       await api.tasks.reorder(reordered.map((q) => q._id));
-      await refreshQuests();
+      await refreshTasks();
     } catch {
       playError();
       toast.error('Impossible de réorganiser les tâches');
     }
   }
 
-  async function submitCustomQuest() {
+  async function submitCustomTask() {
     const trimmed = title.trim();
     if (!trimmed) return;
     setIsSubmitting(true);
@@ -100,7 +100,7 @@ export function TasksManager() {
       setTarget('');
       setRecurrence('daily');
       setShowAdd(false);
-      await refreshQuests();
+      await refreshTasks();
     } catch {
       playError();
       toast.error("Impossible d'ajouter cette tâche");
@@ -131,11 +131,11 @@ export function TasksManager() {
         {showAdd && (
           <div className="flex flex-col gap-3 rounded-lg border p-4">
             <div className="flex flex-col gap-1">
-              <label className="text-sm font-medium" htmlFor="quest-title">
+              <label className="text-sm font-medium" htmlFor="task-title">
                 Titre
               </label>
               <Input
-                id="quest-title"
+                id="task-title"
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="Ex : Refaire mon CV"
@@ -186,7 +186,7 @@ export function TasksManager() {
             </div>
             <Button
               size="sm"
-              onClick={submitCustomQuest}
+              onClick={submitCustomTask}
               disabled={!title.trim() || isSubmitting}
               className="self-start"
             >
@@ -195,23 +195,23 @@ export function TasksManager() {
           </div>
         )}
 
-        {sortedQuests.length === 0 ? (
+        {sortedTasks.length === 0 ? (
           <p className="text-sm text-muted-foreground">Aucune tâche configurée.</p>
         ) : (
           <DndContext sensors={sensors} onDragEnd={handleDragEnd}>
             <SortableContext
-              items={sortedQuests.map((q) => q._id)}
+              items={sortedTasks.map((q) => q._id)}
               strategy={verticalListSortingStrategy}
             >
               <div className="flex flex-col gap-2">
-                {sortedQuests.map((quest) => (
-                  <QuestConfigRow
-                    key={quest._id}
-                    quest={quest}
-                    onUpdate={(body) => updateQuest(quest._id, body)}
-                    onToggleCompleted={(completed) => toggleQuestCompleted(quest, completed)}
-                    onDelete={() => handleDeleteQuest(quest._id)}
-                    onRemove={() => removeQuest(quest._id)}
+                {sortedTasks.map((task) => (
+                  <TaskConfigRow
+                    key={task._id}
+                    task={task}
+                    onUpdate={(body) => updateTask(task._id, body)}
+                    onToggleCompleted={(completed) => toggleTaskCompleted(task, completed)}
+                    onDelete={() => handleDeleteTask(task._id)}
+                    onRemove={() => removeTask(task._id)}
                   />
                 ))}
               </div>
@@ -237,7 +237,7 @@ export function TasksManager() {
                       {entry.recurrence === 'daily' ? 'Quotidienne' : 'Ponctuelle'}
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => activateCatalogQuest(entry.key)}>
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => activateCatalogTask(entry.key)}>
                     Activer
                   </Button>
                 </div>

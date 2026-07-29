@@ -1,13 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
-import { useQuests } from '@/lib/app-context';
-import { getPendingQuests } from '@/lib/questHelpers';
-import { QuestItem } from '@/components/QuestItem';
+import { useTasks } from '@/lib/app-context';
+import { getPendingTasks } from '@/lib/taskHelpers';
+import { TaskItem } from '@/components/tasks/TaskItem';
 
 const LINGER_MS = 650;
 
-export function QuestsPanel() {
-  const { quests } = useQuests();
-  const pending = getPendingQuests(quests).sort((a, b) => a.order - b.order);
+export function TasksPanel() {
+  const { tasks } = useTasks();
+  const pending = getPendingTasks(tasks).sort((a, b) => a.order - b.order);
   const pendingIds = new Set(pending.map((q) => q._id));
   const pendingKey = pending.map((q) => q._id).join(',');
 
@@ -56,7 +56,7 @@ export function QuestsPanel() {
   }, []);
 
   const keep = new Set([...pendingIds, ...lingeringIds]);
-  const rows = quests
+  const rows = tasks
     .filter((q) => q.enabled && !q.removed && keep.has(q._id))
     .sort((a, b) => a.order - b.order);
 
@@ -68,10 +68,10 @@ export function QuestsPanel() {
         Tâches du jour
       </p>
       <div className="flex flex-col gap-1">
-        {rows.map((quest) => (
-          <QuestItem
-            key={quest._id}
-            quest={quest}
+        {rows.map((task) => (
+          <TaskItem
+            key={task._id}
+            task={task}
             willCompleteAll={pending.length === 1}
           />
         ))}

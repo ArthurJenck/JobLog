@@ -1,4 +1,4 @@
-import type { ApplicationWithJob, Cv, QuestRecurrence, QuestDetectionSignal } from '@joblog/shared';
+import type { ApplicationWithJob, Cv, TaskRecurrence, TaskDetectionSignal } from '@joblog/shared';
 
 const BASE = '/api';
 
@@ -55,14 +55,14 @@ export interface Platform {
   updatedAt: string;
 }
 
-export interface Quest {
+export interface Task {
   _id: string;
   userId: string;
   key: string | null;
   title: string;
-  recurrence: QuestRecurrence;
+  recurrence: TaskRecurrence;
   target: number | null;
-  detectionSignal: QuestDetectionSignal | null;
+  detectionSignal: TaskDetectionSignal | null;
   enabled: boolean;
   removed: boolean;
   order: number;
@@ -263,17 +263,17 @@ export const api = {
     },
   },
   tasks: {
-    list(dayStart: string, dayEnd: string): Promise<{ data: Quest[] }> {
+    list(dayStart: string, dayEnd: string): Promise<{ data: Task[] }> {
       const qs = new URLSearchParams({ dayStart, dayEnd });
       return request(`/tasks?${qs.toString()}`);
     },
-    activateCatalogQuest(key: string): Promise<{ questId: string }> {
+    activateCatalogTask(key: string): Promise<{ taskId: string }> {
       return request('/tasks', { method: 'POST', body: JSON.stringify({ key }) });
     },
-    createCustom(body: { title: string; recurrence: QuestRecurrence; target?: number | null }): Promise<{ questId: string }> {
+    createCustom(body: { title: string; recurrence: TaskRecurrence; target?: number | null }): Promise<{ taskId: string }> {
       return request('/tasks', { method: 'POST', body: JSON.stringify(body) });
     },
-    update(id: string, body: { title?: string; recurrence?: QuestRecurrence; target?: number | null; enabled?: boolean; removed?: boolean }): Promise<{ ok: boolean }> {
+    update(id: string, body: { title?: string; recurrence?: TaskRecurrence; target?: number | null; enabled?: boolean; removed?: boolean }): Promise<{ ok: boolean }> {
       return request(`/tasks?id=${id}`, { method: 'PATCH', body: JSON.stringify(body) });
     },
     setCompleted(id: string, completed: boolean): Promise<{ ok: boolean }> {

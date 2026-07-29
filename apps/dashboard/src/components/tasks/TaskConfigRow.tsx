@@ -1,12 +1,12 @@
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import type { Quest } from '@/lib/api';
-import { isQuestDoneToday } from '@/lib/questHelpers';
+import type { Task } from '@/lib/api';
+import { isTaskDoneToday } from '@/lib/taskHelpers';
 import { playPress, playToggle } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import type { QuestRecurrence } from '@joblog/shared';
+import type { TaskRecurrence } from '@joblog/shared';
 import {
   CheckIcon,
   EyeIcon,
@@ -17,13 +17,13 @@ import {
   XIcon,
 } from 'lucide-react';
 import { useState } from 'react';
-import CompletionCheckbox from './CompletionCheckbox';
+import CompletionCheckbox from '../common/CompletionCheckbox';
 
-interface QuestConfigRowProps {
-  quest: Quest;
+interface TaskConfigRowProps {
+  task: Task;
   onUpdate: (body: {
     title?: string;
-    recurrence?: QuestRecurrence;
+    recurrence?: TaskRecurrence;
     target?: number | null;
     enabled?: boolean;
   }) => void;
@@ -32,13 +32,13 @@ interface QuestConfigRowProps {
   onRemove: () => void;
 }
 
-export function QuestConfigRow({
-  quest,
+export function TaskConfigRow({
+  task,
   onUpdate,
   onToggleCompleted,
   onDelete,
   onRemove,
-}: QuestConfigRowProps) {
+}: TaskConfigRowProps) {
   const {
     setNodeRef,
     attributes,
@@ -47,12 +47,12 @@ export function QuestConfigRow({
     transition,
     isDragging,
   } = useSortable({
-    id: quest._id,
+    id: task._id,
   });
   const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState(quest.title);
-  const isCustom = quest.key === null;
-  const doneToday = isQuestDoneToday(quest);
+  const [titleDraft, setTitleDraft] = useState(task.title);
+  const isCustom = task.key === null;
+  const doneToday = isTaskDoneToday(task);
 
   function handleToggleCompleted(checked: boolean) {
     onToggleCompleted(checked);
@@ -76,7 +76,7 @@ export function QuestConfigRow({
       className={cn(
         'group/row relative flex flex-col sm:flex-row sm:items-center gap-3 rounded-lg border px-4 py-3 bg-background',
         isDragging && 'opacity-60',
-        !quest.enabled && 'opacity-50',
+        !task.enabled && 'opacity-50',
       )}
     >
       <button
@@ -93,7 +93,7 @@ export function QuestConfigRow({
       </button>
 
       <div className="flex items-center gap-3 min-w-0 flex-1">
-        {quest.enabled && !isEditingTitle && (
+        {task.enabled && !isEditingTitle && (
           <CompletionCheckbox
             checked={doneToday}
             onCheckedChange={(value) => handleToggleCompleted(value === true)}
@@ -137,7 +137,7 @@ export function QuestConfigRow({
             </div>
           ) : (
             <span className="relative inline-block max-w-full truncate text-sm font-medium">
-              {quest.title}
+              {task.title}
               <span
                 className={cn(
                   'absolute left-0 top-1/2 h-[1.5px] -translate-y-1/2 bg-foreground/70 transition-all duration-500 ease-out',
@@ -147,8 +147,8 @@ export function QuestConfigRow({
             </span>
           )}
           <p className="text-xs text-muted-foreground">
-            {quest.recurrence === 'daily' ? 'Quotidienne' : 'Ponctuelle'}
-            {!quest.enabled && ' · Désactivée'}
+            {task.recurrence === 'daily' ? 'Quotidienne' : 'Ponctuelle'}
+            {!task.enabled && ' · Désactivée'}
           </p>
         </div>
       </div>
@@ -163,7 +163,7 @@ export function QuestConfigRow({
             }}
             className={cn(
               'px-2 py-1 text-xs whitespace-nowrap',
-              quest.recurrence === 'once'
+              task.recurrence === 'once'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-background text-muted-foreground hover:text-foreground',
             )}
@@ -178,7 +178,7 @@ export function QuestConfigRow({
             }}
             className={cn(
               'px-2 py-1 text-xs whitespace-nowrap',
-              quest.recurrence === 'daily'
+              task.recurrence === 'daily'
                 ? 'bg-primary text-primary-foreground'
                 : 'bg-background text-muted-foreground hover:text-foreground',
             )}
@@ -190,13 +190,13 @@ export function QuestConfigRow({
         <Input
           type="number"
           min={1}
-          defaultValue={quest.target ?? ''}
+          defaultValue={task.target ?? ''}
           placeholder="Illimité"
           className="h-7 w-22 text-xs shrink-0"
           onBlur={(e) => {
             const raw = e.target.value.trim();
             const value = raw === '' ? null : Number(raw);
-            if (value !== quest.target) onUpdate({ target: value });
+            if (value !== task.target) onUpdate({ target: value });
           }}
         />
 
@@ -206,7 +206,7 @@ export function QuestConfigRow({
             size="icon"
             className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
             onClick={() => {
-              setTitleDraft(quest.title);
+              setTitleDraft(task.title);
               setIsEditingTitle(true);
             }}
           >
@@ -218,9 +218,9 @@ export function QuestConfigRow({
           variant="ghost"
           size="icon"
           className="h-7 w-7 text-muted-foreground hover:text-foreground shrink-0"
-          onClick={() => onUpdate({ enabled: !quest.enabled })}
+          onClick={() => onUpdate({ enabled: !task.enabled })}
         >
-          {quest.enabled ? (
+          {task.enabled ? (
             <EyeIcon className="h-3.5 w-3.5" />
           ) : (
             <EyeOffIcon className="h-3.5 w-3.5" />

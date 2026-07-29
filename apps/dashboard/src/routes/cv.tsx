@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { CvManager } from '@/components/CvManager';
+import { CvManager } from '@/components/cv/CvManager';
 
 export const Route = createFileRoute('/cv')({
   component: CvPage,

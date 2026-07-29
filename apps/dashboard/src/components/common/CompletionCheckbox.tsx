@@ -1,5 +1,5 @@
 import type { CheckedState } from '@radix-ui/react-checkbox';
-import { Checkbox } from './ui/checkbox';
+import { Checkbox } from '../ui/checkbox';
 import { cn } from '@/lib/utils';
 
 interface CompletionCheckboxProps {

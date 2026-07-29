@@ -1,10 +1,10 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
-import { SessionContext, useStats, useQuests } from '@/lib/app-context';
+import { SessionContext, useStats, useTasks } from '@/lib/app-context';
 import { LandingPage } from '@/components/landing/LandingPage';
-import { ApplicationsTable } from '@/components/ApplicationsTable';
-import { ApplicationDetail } from '@/components/ApplicationDetail';
-import { AddApplicationDialog } from '@/components/AddApplicationDialog';
+import { ApplicationsTable } from '@/components/applications/ApplicationsTable';
+import { ApplicationDetail } from '@/components/applications/ApplicationDetail';
+import { AddApplicationDialog } from '@/components/applications/AddApplicationDialog';
 import { toast } from 'sonner';
 import { playAdd, playError } from '@/lib/sound';
 import { api } from '@/lib/api';
@@ -81,7 +81,7 @@ function formatSnoozeToastDelay(days?: number) {
 export function IndexPage() {
   const navigate = useNavigate();
   const { refreshStats } = useStats();
-  const { refreshQuests } = useQuests();
+  const { refreshTasks } = useTasks();
   const search = Route.useSearch();
   const openedSearchAppId = useRef<string | null>(null);
   const shownToast = useRef<string | null>(null);
@@ -321,7 +321,7 @@ export function IndexPage() {
   async function refreshDetail() {
     await fetchApplications(true);
     void refreshStats();
-    void refreshQuests();
+    void refreshTasks();
     if (selectedApp) {
       const updated = await api.applications.get(selectedApp._id);
       setSelectedApp(updated);
@@ -351,7 +351,7 @@ export function IndexPage() {
     playAdd();
     await fetchApplications();
     void refreshStats();
-    void refreshQuests();
+    void refreshTasks();
     const created = await api.applications.get(applicationId);
     openDetail(created);
     if (isScrapeActive(created)) {
@@ -364,7 +364,7 @@ export function IndexPage() {
   async function handleBulkActionComplete() {
     await fetchApplications();
     void refreshStats();
-    void refreshQuests();
+    void refreshTasks();
   }
 
   return (

@@ -22,13 +22,13 @@ import {
   LogOutIcon,
   ExternalLinkIcon,
 } from 'lucide-react';
-import { StreakBadge } from '@/components/StreakBadge';
-import { SidebarSummary } from '@/components/SidebarSummary';
-import { QuestsPanel } from '@/components/QuestsPanel';
-import { DailyCelebration } from '@/components/DailyCelebration';
+import { StreakBadge } from '@/components/streak/StreakBadge';
+import { SidebarSummary } from '@/components/layout/SidebarSummary';
+import { TasksPanel } from '@/components/tasks/TasksPanel';
+import { DailyCelebration } from '@/components/streak/DailyCelebration';
 import { getExtensionStoreUrl } from '@/lib/extension-url';
-import { resetSessionCache, useQuests, useStreak } from '@/lib/app-context';
-import { getPendingQuests } from '@/lib/questHelpers';
+import { resetSessionCache, useTasks, useStreak } from '@/lib/app-context';
+import { getPendingTasks } from '@/lib/taskHelpers';
 import { localDayKey } from '@/lib/platformReminder';
 
 const navItems = [
@@ -45,9 +45,9 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
-  const { quests } = useQuests();
+  const { tasks } = useTasks();
   const streak = useStreak();
-  const hasPendingQuests = getPendingQuests(quests).length > 0;
+  const hasPendingTasks = getPendingTasks(tasks).length > 0;
   const isPerfectToday = streak.lastPerfectDay === localDayKey();
   const extensionUrl = isMobile ? null : getExtensionStoreUrl();
 
@@ -106,10 +106,10 @@ export function AppSidebar() {
 
         <SidebarSeparator />
 
-        {hasPendingQuests ? (
+        {hasPendingTasks ? (
           <SidebarGroup>
             <SidebarGroupContent>
-              <QuestsPanel />
+              <TasksPanel />
             </SidebarGroupContent>
           </SidebarGroup>
         ) : isPerfectToday ? (

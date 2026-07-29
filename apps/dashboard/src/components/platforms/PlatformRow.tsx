@@ -19,7 +19,7 @@ import {
   XIcon,
 } from 'lucide-react';
 import { useRef } from 'react';
-import CompletionCheckbox from './CompletionCheckbox';
+import CompletionCheckbox from '../common/CompletionCheckbox';
 
 interface PlatformRowProps {
   platform: Platform;

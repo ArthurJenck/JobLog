@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { NotificationSettings } from '@/components/NotificationSettings';
-import { AccountSettings } from '@/components/AccountSettings';
+import { NotificationSettings } from '@/components/settings/NotificationSettings';
+import { AccountSettings } from '@/components/settings/AccountSettings';
 import { playHover } from '@/lib/sound';
 
 export const Route = createFileRoute('/settings')({
