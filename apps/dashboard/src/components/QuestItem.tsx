@@ -19,6 +19,7 @@ export function QuestItem({
   const { toggleQuestCompleted } = useQuests();
   const rowRef = useRef<HTMLDivElement | null>(null);
   const doneToday = isQuestDoneToday(quest);
+  const displayTarget = quest.progressTarget ?? quest.target;
   const shakeControls = useDetectedShake(quest.detected && !doneToday);
 
   function handleToggle(checked: boolean) {
@@ -59,9 +60,9 @@ export function QuestItem({
           </span>
         </span>
       </div>
-      {quest.target !== null && (
+      {displayTarget !== null && (
         <Badge variant="secondary" className="shrink-0 text-xs">
-          {quest.progress ?? 0}/{quest.target}
+          {quest.progress ?? 0}/{displayTarget}
         </Badge>
       )}
     </motion.div>

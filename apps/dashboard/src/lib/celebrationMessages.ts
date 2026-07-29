@@ -8,7 +8,7 @@ function n(firstName: string): string {
 
 const CELEBRATION_MESSAGES: CelebrationMessage[] = [
   ({ firstName }) =>
-    `Bravo ${n(firstName)}, tu as fait le tour de toutes tes plateformes aujourd'hui ! Ta constance finira par payer.`,
+    `Bravo ${n(firstName)}, tu as bouclé toutes tes tâches du jour ! Ta constance finira par payer.`,
   () => "Tout est vérifié ! Offre-toi une vraie pause, tu l'as méritée.",
   () =>
     'Beau travail. Chaque jour comme celui-ci te rapproche de ton prochain poste.',
@@ -22,7 +22,7 @@ const CELEBRATION_MESSAGES: CelebrationMessage[] = [
   ({ firstName }) =>
     `Impeccable ${n(firstName)} ! Tu gardes le cap, c'est déjà une victoire en soi.`,
   () =>
-    'Toutes les offres ont été passées en revue ! Va marcher, cuisiner, faire du sport ; prends du temps pour toi.',
+    'Toutes tes tâches du jour sont faites ! Va marcher, cuisiner, faire du sport ; prends du temps pour toi.',
   ({ firstName }) =>
     `Bravo ${n(firstName)}. Chercher un emploi demande du courage, et tu en as.`,
   () => "Journée validée ! Rien ne t'a échappé aujourd'hui.",
@@ -37,7 +37,7 @@ const CELEBRATION_MESSAGES: CelebrationMessage[] = [
   ({ firstName }) =>
     `Excellent ${n(firstName)} ! Tu transformes une tâche pénible en habitude solide.`,
   () =>
-    'Toutes tes plateformes sont vérifiées, tu ne laisses passer aucune opportunité.',
+    'Toutes tes tâches sont validées, tu ne laisses passer aucune opportunité.',
   ({ firstName }) =>
     `Félicitations ${n(firstName)} ! Ce que tu fais aujourd'hui a de l'importance, même si ça ne se voit pas encore.`,
   ({ sex }) =>
@@ -53,7 +53,7 @@ const CELEBRATION_MESSAGES: CelebrationMessage[] = [
     `Tu as tout couvert aujourd'hui. Ta motivation force le respect, ${n(firstName)}.`,
   () =>
     `Nickel ! Chaque candidature potentielle commence par une journée comme celle-ci.`,
-  () => 'Tu as vu toutes les offres. Autorise-toi de décrocher un moment.',
+  () => 'Tout est fait pour aujourd\'hui. Autorise-toi de décrocher un moment.',
   ({ firstName }) =>
     `Félicitations ${n(firstName)}, tu tiens bon. Et tenir bon, c'est déjà énorme.`,
   () => "C'est complet ! Va prendre l'air, tu as fait le nécessaire.",
@@ -67,7 +67,7 @@ const CELEBRATION_MESSAGES: CelebrationMessage[] = [
   ({ firstName }) =>
     `Bravo ${n(firstName)}. Ces petits efforts finissent toujours par se voir.`,
   () =>
-    "Toutes tes plateformes sont à jour. Ta rigueur va finir par t'ouvrir une porte.",
+    "Toutes tes tâches sont à jour. Ta rigueur va finir par t'ouvrir une porte.",
   ({ sex }) =>
     `C'est bouclé ! Déconnecte, bouge, respire, puis reviens plus ${accord(sex, { female: 'forte', other: 'fort' })} demain.`,
   ({ firstName }) =>

@@ -83,7 +83,7 @@ async function enrichWithDetection(
   dayStart: string | undefined,
   dayEnd: string | undefined,
 ) {
-  let platformsAllDone: boolean | null = null;
+  let platformsCounts: { done: number; total: number } | null = null;
   let appliedCount: number | null = null;
   let savedToday: boolean | null = null;
   let followupToday: boolean | null = null;
@@ -92,17 +92,17 @@ async function enrichWithDetection(
 
   const dayRange = { $gte: new Date(dayStart ?? 0), $lt: new Date(dayEnd ?? 0) };
 
-  async function isPlatformsAllDone(): Promise<boolean> {
-    if (platformsAllDone !== null) return platformsAllDone;
-    if (!dayStart) return (platformsAllDone = false);
+  async function getPlatformsCounts(): Promise<{ done: number; total: number }> {
+    if (platformsCounts !== null) return platformsCounts;
+    if (!dayStart) return (platformsCounts = { done: 0, total: 0 });
     const platformsCol = await getCollection('platforms');
     const total = await platformsCol.countDocuments({ userId });
-    if (total === 0) return (platformsAllDone = false);
+    if (total === 0) return (platformsCounts = { done: 0, total: 0 });
     const done = await platformsCol.countDocuments({
       userId,
       checkedAt: { $gte: new Date(dayStart) },
     });
-    return (platformsAllDone = done === total);
+    return (platformsCounts = { done, total });
   }
 
   async function getAppliedTodayCount(): Promise<number> {
@@ -182,13 +182,17 @@ async function enrichWithDetection(
     quests.map(async (q) => {
       let detected = false;
       let progress: number | null = null;
+      let progressTarget: number | null = null;
 
       const signal = q.key
         ? QUEST_CATALOG.find((c) => c.key === q.key)?.detectionSignal ?? null
         : q.detectionSignal;
 
       if (signal === 'platforms_all') {
-        detected = await isPlatformsAllDone();
+        const { done, total } = await getPlatformsCounts();
+        detected = total > 0 && done === total;
+        progress = done;
+        progressTarget = total > 0 ? total : null;
       } else if (signal === 'applied_today') {
         const count = await getAppliedTodayCount();
         progress = q.target ? Math.min(count, q.target) : count;
@@ -210,6 +214,7 @@ async function enrichWithDetection(
         _id: q._id.toString(),
         detected,
         progress,
+        progressTarget,
       };
     }),
   );

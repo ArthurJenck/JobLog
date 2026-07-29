@@ -25,9 +25,11 @@ import {
 import { StreakBadge } from '@/components/StreakBadge';
 import { SidebarSummary } from '@/components/SidebarSummary';
 import { QuestsPanel } from '@/components/QuestsPanel';
+import { DailyCelebration } from '@/components/DailyCelebration';
 import { getExtensionStoreUrl } from '@/lib/extension-url';
-import { resetSessionCache, useQuests } from '@/lib/app-context';
+import { resetSessionCache, useQuests, useStreak } from '@/lib/app-context';
 import { getPendingQuests } from '@/lib/questHelpers';
+import { localDayKey } from '@/lib/platformReminder';
 
 const navItems = [
   { to: '/', label: 'Candidatures', icon: BriefcaseIcon },
@@ -44,7 +46,9 @@ export function AppSidebar() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
   const { quests } = useQuests();
+  const streak = useStreak();
   const hasPendingQuests = getPendingQuests(quests).length > 0;
+  const isPerfectToday = streak.lastPerfectDay === localDayKey();
   const extensionUrl = isMobile ? null : getExtensionStoreUrl();
 
   return (
@@ -102,13 +106,19 @@ export function AppSidebar() {
 
         <SidebarSeparator />
 
-        {hasPendingQuests && (
+        {hasPendingQuests ? (
           <SidebarGroup>
             <SidebarGroupContent>
               <QuestsPanel />
             </SidebarGroupContent>
           </SidebarGroup>
-        )}
+        ) : isPerfectToday ? (
+          <SidebarGroup>
+            <SidebarGroupContent>
+              <DailyCelebration />
+            </SidebarGroupContent>
+          </SidebarGroup>
+        ) : null}
 
         <SidebarGroup>
           <SidebarGroupContent>

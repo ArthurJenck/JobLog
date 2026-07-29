@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   DndContext,
   PointerSensor,
@@ -15,15 +15,13 @@ import {
 } from '@dnd-kit/sortable';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { Card, CardContent } from '@/components/ui/card';
 import { PlatformRow } from './PlatformRow';
 import { AddPlatformForm } from './AddPlatformForm';
 import { api } from '@/lib/api';
 import type { Platform } from '@/lib/api';
-import { ExternalLinkIcon, PartyPopperIcon } from 'lucide-react';
+import { ExternalLinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { isSameLocalDay } from '@/lib/platformReminder';
-import { randomCelebration } from '@/lib/celebrationMessages';
 import {
   playDelete,
   playDrop,
@@ -32,7 +30,6 @@ import {
   playAdd,
   playCancel,
 } from '@/lib/sound';
-import { useUser } from '@/hooks/use-user';
 import { useAllDoneCelebration } from '@/hooks/useAllDoneCelebration';
 import { useQuests } from '@/lib/app-context';
 
@@ -87,13 +84,8 @@ export function PlatformsManager() {
     };
   }, []);
 
-  const { user } = useUser();
   const allChecked =
     platforms.length > 0 && platforms.every((p) => isSameLocalDay(p.checkedAt));
-  const celebrationMessage = useMemo(
-    () => (allChecked ? randomCelebration(user) : null),
-    [allChecked, user],
-  );
 
   useAllDoneCelebration(allChecked);
 
@@ -249,15 +241,6 @@ export function PlatformsManager() {
           <AddPlatformForm onAdded={handlePlatformAdded} />
           <Separator />
         </>
-      )}
-
-      {celebrationMessage && (
-        <Card className="border-green-600/40 bg-green-600/5 shadow-none">
-          <CardContent className="flex items-center gap-3 py-4 text-green-600">
-            <PartyPopperIcon className="h-5 w-5  shrink-0" />
-            <p className="text-sm font-medium">{celebrationMessage}</p>
-          </CardContent>
-        </Card>
       )}
 
       {platforms.length === 0 ? (

@@ -71,6 +71,7 @@ export interface Quest {
   updatedAt: string;
   detected: boolean;
   progress: number | null;
+  progressTarget: number | null;
 }
 
 export interface Streak {
