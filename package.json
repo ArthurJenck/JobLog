@@ -6,7 +6,12 @@
     "dev:dashboard": "pnpm --filter dashboard dev",
     "dev:extension": "pnpm --filter extension dev",
     "build:dashboard": "pnpm --filter dashboard build",
-    "build:extension": "pnpm --filter extension build"
+    "build:extension": "pnpm --filter extension build",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
-  "packageManager": "pnpm@10.31.0"
+  "packageManager": "pnpm@10.31.0",
+  "devDependencies": {
+    "vitest": "^4.1.10"
+  }
 }

@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react';
-import { useTasks } from '@/lib/app-context';
+import { useTasksQuery } from '@/hooks/queries/use-daily';
 import { getPendingTasks } from '@/lib/taskHelpers';
 import { TaskItem } from '@/components/tasks/TaskItem';
 
 const LINGER_MS = 650;
 
 export function TasksPanel() {
-  const { tasks } = useTasks();
+  const { tasks } = useTasksQuery();
   const pending = getPendingTasks(tasks).sort((a, b) => a.order - b.order);
   const pendingIds = new Set(pending.map((q) => q._id));
   const pendingKey = pending.map((q) => q._id).join(',');

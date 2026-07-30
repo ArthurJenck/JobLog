@@ -1,11 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { GEMINI_MODEL } from '@joblog/shared';
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../lib/db.js';
 import { getEnv } from '../lib/env.js';
 import { sha256 } from '../lib/hash.js';
-import { requireSession } from '../lib/session.js';
-import { GEMINI_DAILY_QUOTA, GEMINI_MODEL, GEMINI_USER_DAILY_QUOTA } from '@joblog/shared';
+import { defineHandler, method } from '../lib/http/define-handler.js';
+import { ApiError } from '../lib/http/errors.js';
+import { checkAndIncrementQuota, getUserDailyQuota } from './usage/gemini-quota.js';
 
 const Schema = z.object({
   cvId: z.string(),
@@ -18,16 +19,6 @@ const LookupSchema = Schema.pick({ cvId: true, applicationId: true });
 
 const ANALYSIS_PROMPT_VERSION = 'requirements-evidence-v1.1';
 const MIN_COMPARISON_TEXT_LENGTH = 40;
-const ANALYSIS_USAGE_KIND = 'cv_analysis';
-
-interface UsageLimitDoc {
-  userId: string;
-  date: string;
-  kind: string;
-  count: number;
-  created_at: Date;
-  updated_at: Date;
-}
 
 interface RequirementAnalysis {
   keyword: string;
@@ -42,181 +33,8 @@ interface AnalysisResult {
   insights: string;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
-
-  const session = await requireSession(req, res);
-  if (!session) return;
-
-  const parsed = (req.method === 'GET' ? LookupSchema : Schema).safeParse(req.method === 'GET' ? req.query : req.body);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-  const { cvId, applicationId } = parsed.data;
-  const force = req.method === 'POST' && 'force' in parsed.data ? parsed.data.force : false;
-
-  if (!ObjectId.isValid(cvId) || !ObjectId.isValid(applicationId)) {
-    return res.status(400).json({ error: 'Invalid id' });
-  }
-
-  const [cvCol, appCol, analysesCol] = await Promise.all([
-    getCollection('cvs'),
-    getCollection('applications'),
-    getCollection('cv_analyses'),
-  ]);
-
-  const [cv, app] = await Promise.all([
-    cvCol.findOne({ _id: new ObjectId(cvId), userId: session.user.id }),
-    appCol.findOne({ _id: new ObjectId(applicationId), userId: session.user.id }),
-  ]);
-
-  if (!cv) return res.status(404).json({ error: 'CV introuvable' });
-  if (!app) return res.status(404).json({ error: 'Candidature introuvable' });
-
-  const cvHash = cv.content_hash as string;
-  const jobPostingId = String(app.jobPostingId);
-  const model = getGeminiModel();
-
-  if (!ObjectId.isValid(jobPostingId)) {
-    return res.status(400).json({ error: 'Invalid job posting id' });
-  }
-
-  const jpCol = await getCollection('job_postings');
-  const jp = await jpCol.findOne({ _id: new ObjectId(jobPostingId) });
-  if (!jp) return res.status(404).json({ error: 'Offre introuvable' });
-
-  const jobDescriptionOverride = req.method === 'POST' && 'jobDescription' in parsed.data
-    ? normalizeComparisonText(parsed.data.jobDescription)
-    : '';
-  const storedJobDescription = normalizeComparisonText(jp.description);
-  const comparisonText = jobDescriptionOverride || storedJobDescription;
-
-  if (!hasComparableJobText(comparisonText)) {
-    return res.status(422).json({
-      code: 'no_comparison_data',
-      error: 'Aucune donnée à comparer avec votre CV. Collez le texte de l’offre pour lancer l’analyse.',
-    });
-  }
-
-  if (
-    req.method === 'POST' &&
-    jobDescriptionOverride &&
-    !hasComparableJobText(storedJobDescription)
-  ) {
-    const now = new Date();
-    await jpCol.updateOne(
-      { _id: jp._id },
-      {
-        $set: {
-          description: jobDescriptionOverride,
-          description_source: 'manual',
-          scrape_status: 'succeeded',
-          scrape_error: null,
-          scrape_error_code: null,
-          scrape_error_category: null,
-          scrape_finished_at: now,
-          updated_at: now,
-        },
-      },
-    );
-  }
-
-  const jobDescriptionHash = sha256(comparisonText);
-
-  const cached = !force ? await analysesCol.findOne({
-    cvHash,
-    jobPostingId,
-    jobDescriptionHash,
-    model,
-    analysisVersion: ANALYSIS_PROMPT_VERSION,
-  }) : null;
-  if (cached) {
-    const analysis = {
-      keywords_matched: cached.keywords_matched,
-      keywords_missing: cached.keywords_missing,
-      requirements: cached.requirements ?? [],
-      insights: cached.insights,
-      cached: true,
-    };
-
-    return res.status(200).json(req.method === 'GET' ? { analysis } : analysis);
-  }
-
-  if (req.method === 'GET') {
-    return res.status(200).json({ analysis: null });
-  }
-
-  if (!isAdmin(session.user.email)) {
-    const quotaCheck = await checkAndIncrementQuota(session.user.id);
-    if (quotaCheck === 'user_limit') {
-      return res.status(429).json({
-        code: 'quota_exceeded',
-        error: `Tu as atteint ta limite quotidienne de ${getUserDailyQuota()} analyses, réessaie demain.`,
-      });
-    }
-    if (quotaCheck === 'global_limit') {
-      return res.status(429).json({
-        code: 'quota_exceeded',
-        error: "Quota d'analyse atteint pour aujourd'hui, réessayez demain.",
-      });
-    }
-  }
-
-  const geminiResult = await callGemini(cv.content as string, comparisonText, model);
-  if (!geminiResult.ok) {
-    if (geminiResult.reason === 'provider_http' && geminiResult.status === 429) {
-      return res.status(429).json({
-        code: 'quota_exceeded',
-        error: "Quota d'analyse atteint, réessayez demain.",
-      });
-    }
-    if (geminiResult.reason === 'provider_http' || geminiResult.reason === 'network') {
-      return res.status(503).json({
-        code: 'analysis_unavailable',
-        error: "Service d'analyse temporairement indisponible, réessayez plus tard.",
-      });
-    }
-    return res.status(502).json({
-      code: 'analysis_failed',
-      error: "L'analyse n'a pas pu être produite, réessayez.",
-    });
-  }
-  const result = geminiResult.result;
-
-  await analysesCol.updateOne(
-    { cvHash, jobPostingId },
-    {
-      $set: {
-        cvHash,
-        jobPostingId,
-        jobDescriptionHash,
-        jobDescriptionSource: jobDescriptionOverride ? 'manual_input' : 'job_posting',
-        model,
-        analysisVersion: ANALYSIS_PROMPT_VERSION,
-        keywords_matched: result.keywords_matched,
-        keywords_missing: result.keywords_missing,
-        requirements: result.requirements,
-        insights: result.insights,
-        generated_at: new Date(),
-      },
-    },
-    { upsert: true }
-  );
-
-  return res.status(200).json({ ...result, cached: false });
-}
-
 function getGeminiModel() {
   return getEnv('GEMINI_MODEL') ?? GEMINI_MODEL;
-}
-
-function getDailyQuota() {
-  const raw = Number(getEnv('GEMINI_DAILY_QUOTA'));
-  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : GEMINI_DAILY_QUOTA;
-}
-
-function getUserDailyQuota() {
-  const raw = Number(getEnv('GEMINI_USER_DAILY_QUOTA'));
-  return Number.isFinite(raw) && raw > 0 ? Math.trunc(raw) : GEMINI_USER_DAILY_QUOTA;
 }
 
 function isAdmin(email: string | undefined) {
@@ -232,41 +50,6 @@ function normalizeComparisonText(value: unknown) {
 
 function hasComparableJobText(value: string) {
   return value.length >= MIN_COMPARISON_TEXT_LENGTH;
-}
-
-type QuotaCheckResult = 'ok' | 'user_limit' | 'global_limit';
-
-async function checkAndIncrementQuota(userId: string): Promise<QuotaCheckResult> {
-  const today = new Date().toISOString().slice(0, 10);
-  const usageCol = await getCollection<UsageLimitDoc>('usage_limits');
-  const now = new Date();
-
-  const userResult = await usageCol.findOneAndUpdate(
-    { userId, date: today, kind: ANALYSIS_USAGE_KIND, count: { $lt: getUserDailyQuota() } },
-    {
-      $inc: { count: 1 },
-      $set: { updated_at: now },
-      $setOnInsert: { userId, date: today, kind: ANALYSIS_USAGE_KIND, created_at: now },
-    },
-    { upsert: true, returnDocument: 'after' }
-  );
-  if (!userResult) return 'user_limit';
-
-  const quotaCol = await getCollection('quota_usage');
-  const globalResult = await quotaCol.findOneAndUpdate(
-    { date: today, calls: { $lt: getDailyQuota() } },
-    { $inc: { calls: 1 }, $setOnInsert: { date: today } },
-    { upsert: true, returnDocument: 'after' }
-  );
-  if (!globalResult) {
-    await usageCol.updateOne(
-      { userId, date: today, kind: ANALYSIS_USAGE_KIND },
-      { $inc: { count: -1 } }
-    );
-    return 'global_limit';
-  }
-
-  return 'ok';
 }
 
 type GeminiCallResult =
@@ -432,3 +215,181 @@ function normalizeText(value: string) {
 function normalizeCompactText(value: string) {
   return normalizeText(value).replace(/\s+/g, '');
 }
+
+async function loadCvAndApplication(userId: string, cvId: string, applicationId: string) {
+  if (!ObjectId.isValid(cvId) || !ObjectId.isValid(applicationId)) {
+    throw ApiError.badRequest('Invalid id');
+  }
+
+  const [cvCol, appCol] = await Promise.all([
+    getCollection('cvs'),
+    getCollection('applications'),
+  ]);
+
+  const [cv, app] = await Promise.all([
+    cvCol.findOne({ _id: new ObjectId(cvId), userId }),
+    appCol.findOne({ _id: new ObjectId(applicationId), userId }),
+  ]);
+
+  if (!cv) throw ApiError.notFound('CV introuvable');
+  if (!app) throw ApiError.notFound('Candidature introuvable');
+
+  const jobPostingId = String(app.jobPostingId);
+  if (!ObjectId.isValid(jobPostingId)) throw ApiError.badRequest('Invalid job posting id');
+
+  const jpCol = await getCollection('job_postings');
+  const jp = await jpCol.findOne({ _id: new ObjectId(jobPostingId), userId });
+  if (!jp) throw ApiError.notFound('Offre introuvable');
+
+  return { cv, app, jp, jpCol, jobPostingId };
+}
+
+export default defineHandler({
+  GET: method({
+    query: LookupSchema,
+    async handle({ user, query }) {
+      const { cv, jp } = await loadCvAndApplication(user.id, query.cvId, query.applicationId);
+
+      const cvHash = cv.content_hash as string;
+      const jobPostingId = String(jp._id);
+      const model = getGeminiModel();
+      const comparisonText = normalizeComparisonText(jp.description);
+
+      if (!hasComparableJobText(comparisonText)) {
+        throw new ApiError(422, 'no_comparison_data', 'Aucune donnée à comparer avec votre CV. Collez le texte de l’offre pour lancer l’analyse.');
+      }
+
+      const jobDescriptionHash = sha256(comparisonText);
+
+      const analysesCol = await getCollection('cv_analyses');
+      const cached = await analysesCol.findOne({
+        userId: user.id,
+        cvHash,
+        jobPostingId,
+        jobDescriptionHash,
+        model,
+        analysisVersion: ANALYSIS_PROMPT_VERSION,
+      });
+
+      if (!cached) return { json: { analysis: null } };
+
+      return {
+        json: {
+          analysis: {
+            keywords_matched: cached.keywords_matched,
+            keywords_missing: cached.keywords_missing,
+            requirements: cached.requirements ?? [],
+            insights: cached.insights,
+            cached: true,
+          },
+        },
+      };
+    },
+  }),
+  POST: method({
+    body: Schema,
+    async handle({ user, body }) {
+      const { cvId, applicationId, force, jobDescription } = body;
+      const { cv, jp, jpCol } = await loadCvAndApplication(user.id, cvId, applicationId);
+
+      const cvHash = cv.content_hash as string;
+      const jobPostingId = String(jp._id);
+      const model = getGeminiModel();
+
+      const jobDescriptionOverride = jobDescription !== undefined ? normalizeComparisonText(jobDescription) : '';
+      const storedJobDescription = normalizeComparisonText(jp.description);
+      const comparisonText = jobDescriptionOverride || storedJobDescription;
+
+      if (!hasComparableJobText(comparisonText)) {
+        throw new ApiError(422, 'no_comparison_data', 'Aucune donnée à comparer avec votre CV. Collez le texte de l’offre pour lancer l’analyse.');
+      }
+
+      if (jobDescriptionOverride && !hasComparableJobText(storedJobDescription)) {
+        const now = new Date();
+        await jpCol.updateOne(
+          { _id: jp._id, userId: user.id },
+          {
+            $set: {
+              description: jobDescriptionOverride,
+              description_source: 'manual',
+              scrape_status: 'succeeded',
+              scrape_error: null,
+              scrape_error_code: null,
+              scrape_error_category: null,
+              scrape_finished_at: now,
+              updated_at: now,
+            },
+          },
+        );
+      }
+
+      const jobDescriptionHash = sha256(comparisonText);
+      const analysesCol = await getCollection('cv_analyses');
+
+      const cached = !force ? await analysesCol.findOne({
+        userId: user.id,
+        cvHash,
+        jobPostingId,
+        jobDescriptionHash,
+        model,
+        analysisVersion: ANALYSIS_PROMPT_VERSION,
+      }) : null;
+      if (cached) {
+        return {
+          json: {
+            keywords_matched: cached.keywords_matched,
+            keywords_missing: cached.keywords_missing,
+            requirements: cached.requirements ?? [],
+            insights: cached.insights,
+            cached: true,
+          },
+        };
+      }
+
+      if (!isAdmin(user.email)) {
+        const quotaCheck = await checkAndIncrementQuota(user.id);
+        if (quotaCheck === 'user_limit') {
+          throw new ApiError(429, 'quota_exceeded', `Tu as atteint ta limite quotidienne de ${getUserDailyQuota()} analyses, réessaie demain.`);
+        }
+        if (quotaCheck === 'global_limit') {
+          throw new ApiError(429, 'quota_exceeded', "Quota d'analyse atteint pour aujourd'hui, réessayez demain.");
+        }
+      }
+
+      const geminiResult = await callGemini(cv.content as string, comparisonText, model);
+      if (!geminiResult.ok) {
+        if (geminiResult.reason === 'provider_http' && geminiResult.status === 429) {
+          throw new ApiError(429, 'quota_exceeded', "Quota d'analyse atteint, réessayez demain.");
+        }
+        if (geminiResult.reason === 'provider_http' || geminiResult.reason === 'network') {
+          throw new ApiError(503, 'analysis_unavailable', "Service d'analyse temporairement indisponible, réessayez plus tard.");
+        }
+        throw new ApiError(502, 'analysis_failed', "L'analyse n'a pas pu être produite, réessayez.");
+      }
+      const result = geminiResult.result;
+
+      await analysesCol.updateOne(
+        { userId: user.id, cvHash, jobPostingId },
+        {
+          $set: {
+            userId: user.id,
+            cvHash,
+            jobPostingId,
+            jobDescriptionHash,
+            jobDescriptionSource: jobDescriptionOverride ? 'manual_input' : 'job_posting',
+            model,
+            analysisVersion: ANALYSIS_PROMPT_VERSION,
+            keywords_matched: result.keywords_matched,
+            keywords_missing: result.keywords_missing,
+            requirements: result.requirements,
+            insights: result.insights,
+            generated_at: new Date(),
+          },
+        },
+        { upsert: true }
+      );
+
+      return { json: { ...result, cached: false } };
+    },
+  }),
+});

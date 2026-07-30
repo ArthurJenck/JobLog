@@ -1,18 +1,20 @@
 import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { localDayKey } from '@joblog/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { api, type LogoSearchResult } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
 import { getLogoUrlForDomain } from '@/lib/company-logo';
 import { JobPostingFields } from '@/components/applications/JobPostingFields';
 
 const LAST_CONTRACT_TYPE_KEY = 'joblog:lastContractType';
 
 export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
-  const [isLoading, setIsLoading] = useState(false);
-  const [companyMatches, setCompanyMatches] = useState<LogoSearchResult[]>([]);
+  const qc = useQueryClient();
   const [selectedCompany, setSelectedCompany] = useState<LogoSearchResult | null>(null);
   const [isCompanyFocused, setIsCompanyFocused] = useState(false);
-  const [isSearchingCompany, setIsSearchingCompany] = useState(false);
+  const [debouncedCompany, setDebouncedCompany] = useState('');
   const [form, setForm] = useState({
     title: '',
     company: '',
@@ -23,57 +25,38 @@ export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
     remote: '',
   });
 
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedCompany(form.company.trim()), 300);
+    return () => window.clearTimeout(t);
+  }, [form.company]);
+
+  const shouldSearchCompany =
+    debouncedCompany.length >= 2 && selectedCompany?.name !== debouncedCompany;
+  const logosQuery = useQuery({
+    queryKey: qk.logos(debouncedCompany),
+    queryFn: () => api.logos.search(debouncedCompany).then((r) => r.data),
+    enabled: shouldSearchCompany,
+  });
+  const companyMatches = shouldSearchCompany ? logosQuery.data ?? [] : [];
+  const isSearchingCompany = shouldSearchCompany && logosQuery.isFetching;
+
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
   }
 
   function setCompany(value: string) {
     setSelectedCompany(null);
-    setCompanyMatches([]);
     setForm((prev) => ({ ...prev, company: value, company_website: '' }));
   }
 
   function selectCompany(match: LogoSearchResult) {
     setSelectedCompany(match);
-    setCompanyMatches([]);
     setIsCompanyFocused(false);
     setForm((prev) => ({ ...prev, company: match.name, company_website: match.domain }));
   }
 
-  useEffect(() => {
-    const query = form.company.trim();
-
-    if (query.length < 2 || selectedCompany?.name === query) {
-      const resetTimer = window.setTimeout(() => {
-        setCompanyMatches([]);
-        setIsSearchingCompany(false);
-      }, 0);
-      return () => window.clearTimeout(resetTimer);
-    }
-
-    let cancelled = false;
-    const timer = window.setTimeout(async () => {
-      setIsSearchingCompany(true);
-      try {
-        const { data } = await api.logos.search(query);
-        if (!cancelled) setCompanyMatches(data);
-      } catch {
-        if (!cancelled) setCompanyMatches([]);
-      } finally {
-        if (!cancelled) setIsSearchingCompany(false);
-      }
-    }, 300);
-
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [form.company, selectedCompany?.name]);
-
-  async function submit(e: React.FormEvent) {
-    e.preventDefault();
-    setIsLoading(true);
-    try {
+  const createMutation = useMutation({
+    mutationFn: async () => {
       if (form.contract_type) {
         localStorage.setItem(LAST_CONTRACT_TYPE_KEY, form.contract_type);
       } else {
@@ -93,10 +76,20 @@ export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
       const appRes = await api.applications.create({
         jobPostingId: jpRes.jobPostingId,
       });
-      onCreated(appRes.applicationId);
-    } finally {
-      setIsLoading(false);
-    }
+      return appRes.applicationId;
+    },
+    onSuccess: (applicationId) => {
+      void qc.invalidateQueries({ queryKey: qk.applications.all });
+      void qc.invalidateQueries({ queryKey: qk.stats });
+      void qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) });
+      onCreated(applicationId);
+    },
+  });
+  const isLoading = createMutation.isPending;
+
+  function submit(e: React.FormEvent) {
+    e.preventDefault();
+    createMutation.mutate();
   }
 
   return (

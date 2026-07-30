@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { toast } from 'sonner';
+import { qk } from '@/lib/query-keys';
 import { playToggle, playError } from '@/lib/sound';
 
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY ?? '';
@@ -14,23 +16,28 @@ interface Settings {
   hasSubscription: boolean;
 }
 
+type SavePatch = Partial<Settings & { subscription: PushSubscriptionJSON | null }>;
+
 export function NotificationSettings() {
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const qc = useQueryClient();
   const [days, setDays] = useState(7);
-  const [isSaving, setIsSaving] = useState(false);
+
+  const settingsQuery = useQuery({
+    queryKey: qk.pushSettings,
+    queryFn: async () => {
+      const res = await fetch('/api/push/subscribe', { credentials: 'include' });
+      if (!res.ok) throw new Error('load failed');
+      return res.json() as Promise<Settings>;
+    },
+  });
+  const settings = settingsQuery.data ?? null;
 
   useEffect(() => {
-    fetch('/api/push/subscribe', { credentials: 'include' })
-      .then((r) => r.json())
-      .then((data: Settings) => { setSettings(data); setDays(data.reminderDefaultDays ?? 7); })
-      .catch(() => {});
-  }, []);
+    if (settings) setDays(settings.reminderDefaultDays ?? 7);
+  }, [settings?.reminderDefaultDays]);
 
-  async function save(patch: Partial<Settings & { subscription: PushSubscriptionJSON | null }>) {
-    const snapshot = settings;
-    setSettings((prev) => (prev ? { ...prev, ...patch } : prev));
-    setIsSaving(true);
-    try {
+  const saveMutation = useMutation({
+    mutationFn: async (patch: SavePatch) => {
       const res = await fetch('/api/push/subscribe', {
         method: 'POST',
         credentials: 'include',
@@ -38,13 +45,27 @@ export function NotificationSettings() {
         body: JSON.stringify(patch),
       });
       if (!res.ok) throw new Error('save failed');
-    } catch {
+    },
+    onMutate: async (patch) => {
+      await qc.cancelQueries({ queryKey: qk.pushSettings });
+      const prev = qc.getQueryData<Settings>(qk.pushSettings);
+      const { subscription: _subscription, ...settingsPatch } = patch;
+      qc.setQueryData<Settings>(qk.pushSettings, (curr) =>
+        curr ? { ...curr, ...settingsPatch } : curr,
+      );
+      return { prev };
+    },
+    onError: (_err, _patch, context) => {
       playError();
       toast.error('Impossible de mettre à jour les notifications');
-      setSettings(snapshot);
-    } finally {
-      setIsSaving(false);
-    }
+      if (context?.prev) qc.setQueryData(qk.pushSettings, context.prev);
+    },
+  });
+
+  const isSaving = saveMutation.isPending;
+
+  function save(patch: SavePatch) {
+    return saveMutation.mutateAsync(patch);
   }
 
   async function subscribePush() {
@@ -83,11 +104,15 @@ export function NotificationSettings() {
         description="Reçois une notification navigateur (en plus de l'email)."
         enabled={settings.push}
         onChange={(v) => {
-          setSettings((prev) => (prev ? { ...prev, push: v } : prev));
+          qc.setQueryData<Settings>(qk.pushSettings, (prev) =>
+            prev ? { ...prev, push: v } : prev,
+          );
           (v ? subscribePush() : unsubscribePush()).catch(() => {
             playError();
             toast.error('Impossible de mettre à jour les notifications push');
-            setSettings((prev) => (prev ? { ...prev, push: !v } : prev));
+            qc.setQueryData<Settings>(qk.pushSettings, (prev) =>
+              prev ? { ...prev, push: !v } : prev,
+            );
           });
         }}
         disabled={isSaving || !VAPID_PUBLIC_KEY}

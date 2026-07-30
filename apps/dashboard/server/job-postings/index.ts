@@ -1,10 +1,10 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { JOB_SOURCES, CONTRACT_TYPES, REMOTE_TYPES, SCRAPE_METHODS } from '@joblog/shared';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
 import { sha256 } from '../../lib/hash.js';
 import { normalizeLocationForStorage } from '../../lib/addresses.js';
-import { JOB_SOURCES, CONTRACT_TYPES, REMOTE_TYPES, SCRAPE_METHODS } from '@joblog/shared';
+import { isBlockedOrErrorJobPosting } from './scrape/content-filters.js';
 
 const CreateJobPostingSchema = z.object({
   url: z.string().url(),
@@ -27,107 +27,92 @@ const CreateJobPostingSchema = z.object({
   scrape_method: z.enum(SCRAPE_METHODS).optional(),
 });
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return;
+export default defineHandler({
+  POST: method({
+    body: CreateJobPostingSchema,
+    async handle({ user, body: data }) {
+      const url_hash = sha256(data.url);
+      const userId = user.id;
+      const col = await getCollection('job_postings');
 
-  if (req.method === 'POST') {
-    const parsed = CreateJobPostingSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const existing = await col.findOne({ url_hash, userId });
+      if (existing) {
+        if (isBlockedOrErrorJobPosting(existing)) {
+          const now = new Date();
+          const locationNormalization = await normalizeLocationForStorage(data.location ?? null);
+          await col.updateOne(
+            { _id: existing._id, userId },
+            {
+              $set: {
+                source: data.source,
+                title: data.title,
+                company: data.company,
+                ...locationNormalization,
+                description: data.description ?? null,
+                contract_type: data.contract_type ?? null,
+                remote: data.remote ?? null,
+                salary: data.salary ?? null,
+                requirements: data.requirements ?? null,
+                keywords: data.keywords ?? null,
+                company_website: data.company_website ?? null,
+                scrape_method: data.scrape_method ?? 'manual',
+                scraped_at: now,
+                scrape_status: 'succeeded',
+                scrape_steps: [],
+                scrape_attempts: 0,
+                scrape_error: null,
+                scrape_message_id: null,
+                scrape_started_at: null,
+                scrape_finished_at: now,
+                updated_at: now,
+              },
+            }
+          );
 
-    const data = parsed.data;
-    const url_hash = sha256(data.url);
-    const col = await getCollection('job_postings');
-
-    const existing = await col.findOne({ url_hash });
-    if (existing) {
-      if (isBlockedOrErrorJobPosting(existing)) {
-        const now = new Date();
-        const locationNormalization = await normalizeLocationForStorage(data.location ?? null);
-        await col.updateOne(
-          { _id: existing._id },
-          {
-            $set: {
-              source: data.source,
-              title: data.title,
-              company: data.company,
-              ...locationNormalization,
-              description: data.description ?? null,
-              contract_type: data.contract_type ?? null,
-              remote: data.remote ?? null,
-              salary: data.salary ?? null,
-              requirements: data.requirements ?? null,
-              keywords: data.keywords ?? null,
-              company_website: data.company_website ?? null,
-              scrape_method: data.scrape_method ?? 'manual',
-              scraped_at: now,
-              scrape_status: 'succeeded',
-              scrape_steps: [],
-              scrape_attempts: 0,
-              scrape_error: null,
-              scrape_message_id: null,
-              scrape_started_at: null,
-              scrape_finished_at: now,
-              updated_at: now,
+          return {
+            json: {
+              jobPostingId: existing._id.toString(),
+              cached: false,
+              repaired: true,
             },
-          }
-        );
+          };
+        }
 
-        return res.status(200).json({
-          jobPostingId: existing._id.toString(),
-          cached: false,
-          repaired: true,
-        });
+        return { json: { jobPostingId: existing._id.toString(), cached: true } };
       }
 
-      return res.status(200).json({ jobPostingId: existing._id.toString(), cached: true });
-    }
+      const now = new Date();
+      const locationNormalization = await normalizeLocationForStorage(data.location ?? null);
+      const doc = {
+        userId,
+        url: data.url,
+        url_hash,
+        source: data.source,
+        title: data.title,
+        company: data.company,
+        ...locationNormalization,
+        description: data.description ?? null,
+        contract_type: data.contract_type ?? null,
+        remote: data.remote ?? null,
+        salary: data.salary ?? null,
+        requirements: data.requirements ?? null,
+        keywords: data.keywords ?? null,
+        company_website: data.company_website ?? null,
+        scrape_method: data.scrape_method ?? 'manual',
+        scraped_at: now,
+        scrape_status: 'succeeded',
+        scrape_steps: [],
+        scrape_attempts: 0,
+        scrape_error: null,
+        scrape_message_id: null,
+        scrape_started_at: null,
+        scrape_finished_at: now,
+        created_at: now,
+        updated_at: now,
+      };
 
-    const now = new Date();
-    const locationNormalization = await normalizeLocationForStorage(data.location ?? null);
-    const doc = {
-      url: data.url,
-      url_hash,
-      source: data.source,
-      title: data.title,
-      company: data.company,
-      ...locationNormalization,
-      description: data.description ?? null,
-      contract_type: data.contract_type ?? null,
-      remote: data.remote ?? null,
-      salary: data.salary ?? null,
-      requirements: data.requirements ?? null,
-      keywords: data.keywords ?? null,
-      company_website: data.company_website ?? null,
-      scrape_method: data.scrape_method ?? 'manual',
-      scraped_at: now,
-      scrape_status: 'succeeded',
-      scrape_steps: [],
-      scrape_attempts: 0,
-      scrape_error: null,
-      scrape_message_id: null,
-      scrape_started_at: null,
-      scrape_finished_at: now,
-      created_at: now,
-      updated_at: now,
-    };
-
-    const result = await col.insertOne(doc);
-    return res.status(201).json({ jobPostingId: result.insertedId.toString(), cached: false });
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' });
-}
-
-function isBlockedOrErrorJobPosting(jobPosting: Record<string, unknown>) {
-  const title = String(jobPosting.title ?? '').trim().toLowerCase();
-  const company = String(jobPosting.company ?? '').trim();
-  const description = String(jobPosting.description ?? '').toLowerCase();
-
-  if (title === '403 error') return true;
-  if (title.includes('403 error') && !company) return true;
-  if (description.includes('not a robot')) return true;
-  if (description.includes('javascript is disabled')) return true;
-
-  return false;
-}
+      const result = await col.insertOne(doc);
+      return { status: 201, json: { jobPostingId: result.insertedId.toString(), cached: false } };
+    },
+  }),
+});

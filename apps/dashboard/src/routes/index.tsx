@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState, useEffect, useCallback, useMemo, useRef, useContext } from 'react';
-import { SessionContext, useStats, useTasks } from '@/lib/app-context';
+import { useContext, useEffect, useRef, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { SessionContext } from '@/lib/app-context';
 import { LandingPage } from '@/components/landing/LandingPage';
 import { ApplicationsTable } from '@/components/applications/ApplicationsTable';
 import { ApplicationDetail } from '@/components/applications/ApplicationDetail';
@@ -8,18 +9,9 @@ import { AddApplicationDialog } from '@/components/applications/AddApplicationDi
 import { toast } from 'sonner';
 import { playAdd, playError } from '@/lib/sound';
 import { api } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
 import { isScrapeActive } from '@/lib/scrape';
-import type { ApplicationWithJob, ApplicationStatus } from '@joblog/shared';
-import { APPLICATION_STATUSES } from '@joblog/shared';
-
-const DEFAULT_STATUSES = new Set<ApplicationStatus>([
-  'saved',
-  'applied',
-  'interview',
-  'offer',
-  'accepted',
-]);
-const PAGE_SIZE = 25;
+import type { ApplicationWithJob } from '@joblog/shared';
 
 type IndexSearch = {
   applicationId?: string;
@@ -80,144 +72,33 @@ function formatSnoozeToastDelay(days?: number) {
 
 export function IndexPage() {
   const navigate = useNavigate();
-  const { refreshStats } = useStats();
-  const { refreshTasks } = useTasks();
+  const qc = useQueryClient();
   const search = Route.useSearch();
-  const openedSearchAppId = useRef<string | null>(null);
   const shownToast = useRef<string | null>(null);
-
-  const [applications, setApplications] = useState<ApplicationWithJob[]>([]);
-  const [total, setTotal] = useState(0);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isError, setIsError] = useState(false);
-  const [selectedApp, setSelectedApp] = useState<ApplicationWithJob | null>(
-    null,
-  );
-  const [detailOpen, setDetailOpen] = useState(false);
   const [addOpen, setAddOpen] = useState(false);
 
-  const [statuses, setStatuses] = useState<Set<ApplicationStatus>>(
-    new Set(DEFAULT_STATUSES),
-  );
-  const [searchText, setSearchText] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
-  const [sortId, setSortId] = useState('appliedAt');
-  const [sortDesc, setSortDesc] = useState(true);
-  const [page, setPage] = useState(1);
+  const detailId = search.applicationId ?? null;
+
+  const detailQuery = useQuery({
+    queryKey: detailId
+      ? qk.applications.detail(detailId)
+      : qk.applications.detail('none'),
+    queryFn: () => api.applications.get(detailId!),
+    enabled: !!detailId,
+    refetchInterval: (query) =>
+      isScrapeActive(query.state.data) ? 2500 : false,
+  });
+
+  const selectedApp = detailId ? detailQuery.data ?? null : null;
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchText), 300);
-    return () => window.clearTimeout(t);
-  }, [searchText]);
-
-  const listParams = useMemo(
-    () => ({
-      status:
-        statuses.size === 0 || statuses.size === APPLICATION_STATUSES.length
-          ? undefined
-          : [...statuses].join(','),
-      search: debouncedSearch || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-      sort: sortId,
-      dir: (sortDesc ? 'desc' : 'asc') as 'asc' | 'desc',
-      page,
-      pageSize: PAGE_SIZE,
-    }),
-    [statuses, debouncedSearch, dateFrom, dateTo, sortId, sortDesc, page],
-  );
-  const listParamsKey = JSON.stringify(listParams);
-
-  const [trackedListParamsKey, setTrackedListParamsKey] =
-    useState(listParamsKey);
-  if (listParamsKey !== trackedListParamsKey) {
-    setTrackedListParamsKey(listParamsKey);
-    setIsLoading(true);
-    setIsError(false);
-  }
-
-  const fetchApplications = useCallback(async (silent = false) => {
-    if (!silent) setIsLoading(true);
-    try {
-      const { data, total: t } = await api.applications.list(listParams);
-      setApplications(data);
-      setTotal(t);
-      setIsError(false);
-    } catch (err) {
-      if (
-        err &&
-        typeof err === 'object' &&
-        'status' in err &&
-        (err as { status: number }).status === 401
-      ) {
-        navigate({ to: '/login' });
-      } else {
-        setIsError(true);
-      }
-    } finally {
-      if (!silent) setIsLoading(false);
-    }
-  }, [listParams, navigate]);
-
-  const refreshActiveScrapes = useCallback(async () => {
-    await fetchApplications(true);
-    if (detailOpen && selectedApp && isScrapeActive(selectedApp)) {
-      try {
-        const updated = await api.applications.get(selectedApp._id);
-        setSelectedApp(updated);
-      } catch {
-        // The regular list refresh will surface broader loading errors.
-      }
-    }
-  }, [detailOpen, fetchApplications, selectedApp]);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    void (async () => {
-      try {
-        const { data, total: t } = await api.applications.list(listParams);
-        if (cancelled) return;
-        setApplications(data);
-        setTotal(t);
-        setIsError(false);
-      } catch (err) {
-        if (cancelled) return;
-        if (
-          err &&
-          typeof err === 'object' &&
-          'status' in err &&
-          (err as { status: number }).status === 401
-        ) {
-          navigate({ to: '/login' });
-        } else {
-          setIsError(true);
-        }
-      } finally {
-        if (!cancelled) setIsLoading(false);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [listParamsKey, listParams, navigate]);
-
-  const hasActiveScrapes =
-    applications.some(isScrapeActive) ||
-    (detailOpen && isScrapeActive(selectedApp));
-
-  useEffect(() => {
-    if (!hasActiveScrapes) return;
-
-    const interval = window.setInterval(() => {
-      void refreshActiveScrapes();
-    }, 2500);
-
-    return () => window.clearInterval(interval);
-  }, [hasActiveScrapes, refreshActiveScrapes]);
+    if (!detailId || !detailQuery.isError || detailQuery.data) return;
+    playError();
+    toast.error('Candidature introuvable', {
+      description: 'Le lien ne correspond plus à une candidature accessible.',
+    });
+    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId: undefined }) });
+  }, [detailId, detailQuery.isError, detailQuery.data, navigate]);
 
   useEffect(() => {
     const snoozeToast = readSnoozeToastFromUrl();
@@ -238,122 +119,21 @@ export function IndexPage() {
     return () => window.clearTimeout(timeout);
   }, []);
 
-  useEffect(() => {
-    const applicationId = search.applicationId;
-    if (
-      typeof applicationId !== 'string' ||
-      isLoading ||
-      openedSearchAppId.current === applicationId
-    )
-      return;
-    const targetApplicationId = applicationId;
-
-    let active = true;
-
-    async function openFromSearch() {
-      try {
-        const fromList = applications.find(
-          (app) => app._id === targetApplicationId,
-        );
-        const app =
-          fromList ?? (await api.applications.get(targetApplicationId));
-        if (!active) return;
-
-        openedSearchAppId.current = targetApplicationId;
-        setSelectedApp(app);
-        setDetailOpen(true);
-      } catch {
-        if (!active) return;
-
-        playError();
-        toast.error('Candidature introuvable', {
-          description:
-            'Le lien ne correspond plus à une candidature accessible.',
-        });
-        clearSearchKeys(['applicationId']);
-      }
-    }
-
-    openFromSearch();
-    return () => {
-      active = false;
-    };
-  }, [applications, isLoading, search.applicationId]);
-
-  function handleStatusesChange(next: Set<ApplicationStatus>) {
-    setStatuses(next);
-    setPage(1);
-  }
-
-  function handleSearchChange(v: string) {
-    setSearchText(v);
-    setPage(1);
-  }
-
-  function handleDateFromChange(v: string) {
-    setDateFrom(v);
-    setPage(1);
-  }
-
-  function handleDateToChange(v: string) {
-    setDateTo(v);
-    setPage(1);
-  }
-
-  function handleSortChange(id: string, desc: boolean) {
-    setSortId(id);
-    setSortDesc(desc);
-    setPage(1);
-  }
-
   function openDetail(app: ApplicationWithJob) {
-    setSelectedApp(app);
-    setDetailOpen(true);
+    qc.setQueryData(qk.applications.detail(app._id), app);
+    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId: app._id }) });
   }
 
   function closeDetail() {
-    setDetailOpen(false);
-    setSelectedApp(null);
-    openedSearchAppId.current = null;
-    clearSearchKeys(['applicationId']);
-  }
-
-  async function refreshDetail() {
-    await fetchApplications(true);
-    void refreshStats();
-    void refreshTasks();
-    if (selectedApp) {
-      const updated = await api.applications.get(selectedApp._id);
-      setSelectedApp(updated);
-    }
-  }
-
-  async function patchApplication(id: string, body: Record<string, unknown>) {
-    setApplications((prev) =>
-      prev.map((a) => (a._id === id ? { ...a, ...body } : a)),
-    );
-    setSelectedApp((prev) =>
-      prev && prev._id === id ? { ...prev, ...body } : prev,
-    );
-    try {
-      await api.applications.patch(id, body);
-      await refreshDetail();
-    } catch (err) {
-      playError();
-      toast.error('Impossible de mettre à jour la candidature');
-      await refreshDetail();
-      throw err;
-    }
+    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId: undefined }) });
   }
 
   async function handleCreated(applicationId: string) {
     setAddOpen(false);
     playAdd();
-    await fetchApplications();
-    void refreshStats();
-    void refreshTasks();
     const created = await api.applications.get(applicationId);
-    openDetail(created);
+    qc.setQueryData(qk.applications.detail(applicationId), created);
+    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId }) });
     if (isScrapeActive(created)) {
       toast.success('Candidature ajoutée', {
         description: "La récupération de l'offre continue en arrière-plan.",
@@ -361,46 +141,16 @@ export function IndexPage() {
     }
   }
 
-  async function handleBulkActionComplete() {
-    await fetchApplications();
-    void refreshStats();
-    void refreshTasks();
-  }
-
   return (
     <div className="flex flex-col gap-4 p-6">
       <h1 className="text-xl font-semibold">Candidatures</h1>
 
-      <ApplicationsTable
-        data={applications}
-        total={total}
-        page={page}
-        pageSize={PAGE_SIZE}
-        statuses={statuses}
-        searchText={searchText}
-        dateFrom={dateFrom}
-        dateTo={dateTo}
-        sortId={sortId}
-        sortDesc={sortDesc}
-        onStatusesChange={handleStatusesChange}
-        onSearchChange={handleSearchChange}
-        onDateFromChange={handleDateFromChange}
-        onDateToChange={handleDateToChange}
-        onSortChange={handleSortChange}
-        onPageChange={setPage}
-        onRowClick={openDetail}
-        onAdd={() => setAddOpen(true)}
-        onBulkActionComplete={handleBulkActionComplete}
-        isLoading={isLoading}
-        isError={isError}
-      />
+      <ApplicationsTable onRowClick={openDetail} onAdd={() => setAddOpen(true)} />
 
       <ApplicationDetail
         application={selectedApp}
-        open={detailOpen}
+        open={!!detailId}
         onClose={closeDetail}
-        onUpdated={refreshDetail}
-        onPatch={patchApplication}
       />
 
       <AddApplicationDialog

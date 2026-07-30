@@ -1,5 +1,5 @@
 import { Badge } from '@/components/ui/badge';
-import { useStats } from '@/lib/app-context';
+import { useStats } from '@/hooks/queries/use-stats';
 
 type StatVariant = 'amber' | 'blue' | 'green' | 'default';
 

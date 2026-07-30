@@ -1,9 +1,12 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { localDayKey } from '@joblog/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from 'sonner';
-import { api, type UrlPasteUsage } from '@/lib/api';
+import { api, type FromUrlMeta, type UrlPasteUsage } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
 import { UrlUsageNotice } from './UrlUsageNotice';
 import { playError, playLoading } from '@/lib/sound';
 
@@ -17,32 +20,52 @@ export function UrlForm({
   open: boolean;
   onCreated: (id: string) => void;
 }) {
+  const qc = useQueryClient();
   const [url, setUrl] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [usage, setUsage] = useState<UrlPasteUsage | null>(null);
-  const [extensionUrl, setExtensionUrl] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!open) return;
+  const usageQuery = useQuery({
+    queryKey: qk.jobPostings.fromUrlUsage,
+    queryFn: () => api.jobPostings.getFromUrlUsage(),
+    enabled: open,
+  });
+  const usage = usageQuery.data?.usage ?? null;
+  const extensionUrl = usageQuery.data?.extensionUrl ?? null;
 
-    let cancelled = false;
-    api.jobPostings.getFromUrlUsage()
-      .then((data) => {
-        if (cancelled) return;
-        setUsage(data.usage);
-        setExtensionUrl(data.extensionUrl);
-      })
-      .catch(() => {
-        if (!cancelled) setUsage(null);
+  const createMutation = useMutation({
+    mutationFn: (target: string) => api.jobPostings.createFromUrl(target),
+    onSuccess: (result) => {
+      qc.setQueryData<FromUrlMeta>(qk.jobPostings.fromUrlUsage, {
+        usage: result.usage,
+        extensionUrl: result.extensionUrl ?? null,
       });
+      void qc.invalidateQueries({ queryKey: qk.applications.all });
+      void qc.invalidateQueries({ queryKey: qk.stats });
+      void qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) });
+      onCreated(result.applicationId);
+    },
+    onError: (err) => {
+      const apiErr = err as {
+        usage?: UrlPasteUsage;
+        extensionUrl?: string | null;
+      };
+      if (apiErr.usage) {
+        qc.setQueryData<FromUrlMeta>(qk.jobPostings.fromUrlUsage, (prev) => ({
+          usage: apiErr.usage!,
+          extensionUrl:
+            'extensionUrl' in apiErr
+              ? apiErr.extensionUrl ?? null
+              : prev?.extensionUrl ?? null,
+        }));
+      }
+      const message = err instanceof Error ? err.message : 'Erreur inconnue';
+      setError(message);
+      playError();
+      toast.error('Récupération impossible', { description: message });
+    },
+  });
 
-    return () => {
-      cancelled = true;
-    };
-  }, [open]);
-
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (usage?.isBlocked) {
       const message = "Limite d'ajout par URL atteinte pour aujourd'hui.";
@@ -53,28 +76,8 @@ export function UrlForm({
     }
 
     setError('');
-    setIsLoading(true);
     playLoading();
-    try {
-      const result = await api.jobPostings.createFromUrl(url);
-      setUsage(result.usage);
-      setExtensionUrl(result.extensionUrl ?? null);
-      onCreated(result.applicationId);
-    } catch (err) {
-      const apiErr = err as {
-        usage?: UrlPasteUsage;
-        extensionUrl?: string | null;
-      };
-      if (apiErr.usage) setUsage(apiErr.usage);
-      if ('extensionUrl' in apiErr) setExtensionUrl(apiErr.extensionUrl ?? null);
-
-      const message = err instanceof Error ? err.message : 'Erreur inconnue';
-      setError(message);
-      playError();
-      toast.error('Récupération impossible', { description: message });
-    } finally {
-      setIsLoading(false);
-    }
+    createMutation.mutate(url);
   }
 
   if (usage?.isBlocked) {
@@ -108,12 +111,8 @@ export function UrlForm({
         />
       </div>
       {error && <p className="text-sm text-destructive">{error}</p>}
-      <Button
-        type="submit"
-        disabled={isLoading}
-        className="w-full"
-      >
-        {isLoading ? 'Ajout…' : "Récupérer l'offre"}
+      <Button type="submit" disabled={createMutation.isPending} className="w-full">
+        {createMutation.isPending ? 'Ajout…' : "Récupérer l'offre"}
       </Button>
     </form>
   );

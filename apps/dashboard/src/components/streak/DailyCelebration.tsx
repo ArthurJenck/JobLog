@@ -1,12 +1,12 @@
 import { useMemo } from 'react';
 import { PartyPopperIcon } from 'lucide-react';
-import { useStreak } from '@/lib/app-context';
-import { localDayKey } from '@/lib/platformReminder';
+import { localDayKey } from '@joblog/shared';
+import { useStreakQuery } from '@/hooks/queries/use-daily';
 import { randomCelebration } from '@/lib/celebrationMessages';
 import { useUser } from '@/hooks/use-user';
 
 export function DailyCelebration() {
-  const streak = useStreak();
+  const streak = useStreakQuery();
   const { user } = useUser();
   const isPerfect = streak.lastPerfectDay === localDayKey();
   const message = useMemo(() => randomCelebration(user), [user]);

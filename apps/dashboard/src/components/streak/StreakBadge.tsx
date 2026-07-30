@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { useStreak } from '@/lib/app-context';
-import { localDayKey, shiftDayKey } from '@/lib/platformReminder';
+import { localDayKey } from '@joblog/shared';
+import { useStreakQuery } from '@/hooks/queries/use-daily';
+import { shiftDayKey } from '@/lib/platformReminder';
 import { ToonFlame } from './ToonFlame';
 import { FlameSparkles } from './FlameSparkles';
 import {
@@ -14,7 +15,7 @@ const FLICKER_ORANGE_MS = 1500;
 const FLICKER_GOLD_MS = 600;
 
 export function StreakBadge() {
-  const streak = useStreak();
+  const streak = useStreakQuery();
   const today = localDayKey();
   const isGoldToday = streak.lastPerfectDay === today;
   const wasGoldYesterday = streak.lastPerfectDay === shiftDayKey(today, -1);

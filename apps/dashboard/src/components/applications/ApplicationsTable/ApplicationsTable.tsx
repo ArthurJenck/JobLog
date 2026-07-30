@@ -1,4 +1,11 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
 import {
   useReactTable,
   getCoreRowModel,
@@ -6,6 +13,7 @@ import {
   type RowSelectionState,
   type SortingState,
 } from '@tanstack/react-table';
+import { localDayKey } from '@joblog/shared';
 import {
   Table,
   TableBody,
@@ -15,7 +23,13 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { api } from '@/lib/api';
-import type { ApplicationWithJob, ApplicationStatus } from '@joblog/shared';
+import { qk } from '@/lib/query-keys';
+import { isScrapeActive } from '@/lib/scrape';
+import {
+  APPLICATION_STATUSES,
+  type ApplicationWithJob,
+  type ApplicationStatus,
+} from '@joblog/shared';
 import { applicationColumns } from './columns';
 import { SortIcon } from './SortIcon';
 import { ApplicationsTableToolbar } from './ApplicationsTableToolbar';
@@ -23,55 +37,127 @@ import { ApplicationsTableBulkBar } from './ApplicationsTableBulkBar';
 import { ApplicationsTablePagination } from './ApplicationsTablePagination';
 import { getSuggestion } from './suggestions';
 
+const DEFAULT_STATUSES = new Set<ApplicationStatus>([
+  'saved',
+  'applied',
+  'interview',
+  'offer',
+  'accepted',
+]);
+const PAGE_SIZE = 25;
+
 interface Props {
-  data: ApplicationWithJob[];
-  total: number;
-  page: number;
-  pageSize: number;
-  statuses: Set<ApplicationStatus>;
-  searchText: string;
-  dateFrom: string;
-  dateTo: string;
-  sortId: string;
-  sortDesc: boolean;
-  onStatusesChange: (s: Set<ApplicationStatus>) => void;
-  onSearchChange: (v: string) => void;
-  onDateFromChange: (v: string) => void;
-  onDateToChange: (v: string) => void;
-  onSortChange: (id: string, desc: boolean) => void;
-  onPageChange: (p: number) => void;
   onRowClick: (app: ApplicationWithJob) => void;
   onAdd: () => void;
-  onBulkActionComplete: () => void;
-  isLoading?: boolean;
-  isError?: boolean;
 }
 
-export function ApplicationsTable({
-  data,
-  total,
-  page,
-  pageSize,
-  statuses,
-  searchText,
-  dateFrom,
-  dateTo,
-  sortId,
-  sortDesc,
-  onStatusesChange,
-  onSearchChange,
-  onDateFromChange,
-  onDateToChange,
-  onSortChange,
-  onPageChange,
-  onRowClick,
-  onAdd,
-  onBulkActionComplete,
-  isLoading,
-  isError,
-}: Props) {
-  const sorting: SortingState = [{ id: sortId, desc: sortDesc }];
+export function ApplicationsTable({ onRowClick, onAdd }: Props) {
+  const qc = useQueryClient();
+  const navigate = useNavigate();
+
+  const [statuses, setStatuses] = useState<Set<ApplicationStatus>>(
+    new Set(DEFAULT_STATUSES),
+  );
+  const [searchText, setSearchText] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
+  const [sortId, setSortId] = useState('appliedAt');
+  const [sortDesc, setSortDesc] = useState(true);
+  const [page, setPage] = useState(1);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedSearch(searchText), 300);
+    return () => window.clearTimeout(t);
+  }, [searchText]);
+
+  const listParams = useMemo(
+    () => ({
+      status:
+        statuses.size === 0 || statuses.size === APPLICATION_STATUSES.length
+          ? undefined
+          : [...statuses].join(','),
+      search: debouncedSearch || undefined,
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined,
+      sort: sortId,
+      dir: (sortDesc ? 'desc' : 'asc') as 'asc' | 'desc',
+      page,
+      pageSize: PAGE_SIZE,
+    }),
+    [statuses, debouncedSearch, dateFrom, dateTo, sortId, sortDesc, page],
+  );
+
+  const listQuery = useQuery({
+    queryKey: qk.applications.list(listParams),
+    queryFn: () => api.applications.list(listParams),
+    placeholderData: keepPreviousData,
+    refetchInterval: (query) =>
+      query.state.data?.data.some(isScrapeActive) ? 2500 : false,
+  });
+
+  useEffect(() => {
+    const err = listQuery.error as { status?: number } | null;
+    if (err && err.status === 401) navigate({ to: '/login' });
+  }, [listQuery.error, navigate]);
+
+  const data = listQuery.data?.data ?? [];
+  const total = listQuery.data?.total ?? 0;
+  const isLoading = listQuery.isPending;
+  const isError = listQuery.isError;
+
+  const invalidateAfterBulk = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: qk.applications.all }),
+      qc.invalidateQueries({ queryKey: qk.stats }),
+      qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) }),
+    ]);
+
+  const bulkStatusMutation = useMutation({
+    mutationFn: ({ ids, status }: { ids: string[]; status: ApplicationStatus }) =>
+      api.applications.bulkStatus(ids, status),
+    onSuccess: () => {
+      setRowSelection({});
+      return invalidateAfterBulk();
+    },
+  });
+
+  const bulkDeleteMutation = useMutation({
+    mutationFn: (ids: string[]) => api.applications.bulkDelete(ids),
+    onSuccess: () => {
+      setRowSelection({});
+      return invalidateAfterBulk();
+    },
+  });
+
+  function handleStatusesChange(next: Set<ApplicationStatus>) {
+    setStatuses(next);
+    setPage(1);
+  }
+
+  function handleSearchChange(v: string) {
+    setSearchText(v);
+    setPage(1);
+  }
+
+  function handleDateFromChange(v: string) {
+    setDateFrom(v);
+    setPage(1);
+  }
+
+  function handleDateToChange(v: string) {
+    setDateTo(v);
+    setPage(1);
+  }
+
+  function handleSortChange(id: string, desc: boolean) {
+    setSortId(id);
+    setSortDesc(desc);
+    setPage(1);
+  }
+
+  const sorting: SortingState = [{ id: sortId, desc: sortDesc }];
 
   const columns = useMemo(() => applicationColumns, []);
 
@@ -88,35 +174,23 @@ export function ApplicationsTable({
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater;
       if (next.length > 0) {
-        onSortChange(next[0].id, next[0].desc);
+        handleSortChange(next[0].id, next[0].desc);
       }
     },
     getCoreRowModel: getCoreRowModel(),
   });
 
-  const selectedIds = Object.keys(rowSelection).filter(
-    (id) => rowSelection[id],
-  );
-
-  async function handleBulkStatusChange(status: ApplicationStatus) {
-    await api.applications.bulkStatus(selectedIds, status);
-    setRowSelection({});
-    onBulkActionComplete();
-  }
-
-  async function handleBulkDelete() {
-    await api.applications.bulkDelete(selectedIds);
-    setRowSelection({});
-    onBulkActionComplete();
-  }
+  const selectedIds = Object.keys(rowSelection).filter((id) => rowSelection[id]);
 
   return (
     <div className="flex flex-col gap-4">
       {selectedIds.length > 0 ? (
         <ApplicationsTableBulkBar
           count={selectedIds.length}
-          onStatusChange={handleBulkStatusChange}
-          onDelete={handleBulkDelete}
+          onStatusChange={(status) =>
+            bulkStatusMutation.mutate({ ids: selectedIds, status })
+          }
+          onDelete={() => bulkDeleteMutation.mutate(selectedIds)}
           onClear={() => setRowSelection({})}
         />
       ) : (
@@ -125,10 +199,10 @@ export function ApplicationsTable({
           searchText={searchText}
           dateFrom={dateFrom}
           dateTo={dateTo}
-          onStatusesChange={onStatusesChange}
-          onSearchChange={onSearchChange}
-          onDateFromChange={onDateFromChange}
-          onDateToChange={onDateToChange}
+          onStatusesChange={handleStatusesChange}
+          onSearchChange={handleSearchChange}
+          onDateFromChange={handleDateFromChange}
+          onDateToChange={handleDateToChange}
           onAdd={onAdd}
         />
       )}
@@ -244,12 +318,12 @@ export function ApplicationsTable({
         </Table>
       </div>
 
-      {total > pageSize && (
+      {total > PAGE_SIZE && (
         <ApplicationsTablePagination
           page={page}
-          pageSize={pageSize}
+          pageSize={PAGE_SIZE}
           total={total}
-          onPageChange={onPageChange}
+          onPageChange={setPage}
         />
       )}
     </div>

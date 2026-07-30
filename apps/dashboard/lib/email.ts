@@ -1,3 +1,5 @@
+import { normalizeFrequencyDays } from '@joblog/shared';
+import { escapeHtml } from './html.js';
 import { sendEmail } from './resend.js';
 import { getEnv } from './env.js';
 import { signSnoozeToken } from './snooze.js';
@@ -12,24 +14,6 @@ function buildAppUrl(params: Record<string, string>) {
     url.searchParams.set(key, value);
   }
   return url.toString();
-}
-
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (char) => {
-    const entities: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    };
-    return entities[char];
-  });
-}
-
-function normalizeFrequencyDays(value: number | undefined) {
-  const days = typeof value === 'number' ? value : NaN;
-  return Number.isFinite(days) && days > 0 ? Math.trunc(days) : 7;
 }
 
 function formatSnoozeDelay(days: number) {

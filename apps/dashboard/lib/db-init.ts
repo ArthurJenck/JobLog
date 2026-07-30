@@ -4,7 +4,8 @@ export async function ensureIndexes() {
   const db = await getDb();
 
   await Promise.all([
-    db.collection('job_postings').createIndex({ url_hash: 1 }, { unique: true }),
+    db.collection('job_postings').createIndex({ userId: 1, url_hash: 1 }, { unique: true }),
+    db.collection('job_postings').createIndex({ url_hash: 1 }),
     db.collection('job_postings').createIndex({ location_normalization_status: 1 }),
     db.collection('job_postings').createIndex({ scrape_status: 1 }),
 
@@ -18,7 +19,7 @@ export async function ensureIndexes() {
     db.collection('quest_templates').createIndex({ userId: 1, order: 1 }),
 
     db.collection('cv_analyses').createIndex(
-      { cvHash: 1, jobPostingId: 1 },
+      { userId: 1, cvHash: 1, jobPostingId: 1 },
       { unique: true }
     ),
 
@@ -42,5 +43,10 @@ export async function ensureIndexes() {
     db.collection('extension_tokens').createIndex({ tokenHash: 1 }, { unique: true }),
     db.collection('extension_tokens').createIndex({ userId: 1 }),
     db.collection('extension_tokens').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+
+    db.collection('rate_limits').createIndex({ key: 1, windowStart: 1 }, { unique: true }),
+    db.collection('rate_limits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+
+    db.collection('token_revocations').createIndex({ userId: 1 }),
   ]);
 }

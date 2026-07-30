@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ObjectId } from 'mongodb';
 import { canonicalizeSkillKey } from '@joblog/shared';
+import { ObjectId } from 'mongodb';
 import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
 
 interface SkillCount {
   skill: string;
@@ -39,74 +39,78 @@ async function findOwnedCv(cvId: string | undefined, userId: string) {
   return cvCol.findOne({ _id: new ObjectId(cvId), userId });
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET' && req.method !== 'DELETE') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+export default defineHandler({
+  GET: method({
+    async handle({ user, query }) {
+      const { cvId } = query as { cvId?: string };
+      const cv = await findOwnedCv(cvId, user.id);
+      if (!cv) throw ApiError.notFound('CV introuvable');
 
-  const session = await requireSession(req, res);
-  if (!session) return;
+      const analysesCol = await getCollection('cv_analyses');
+      const analyses = await analysesCol.find({ userId: user.id, cvHash: cv.content_hash }).toArray();
 
-  const { cvId } = req.query as { cvId?: string };
-  const cv = await findOwnedCv(cvId, session.user.id);
-  if (!cv) return res.status(404).json({ error: 'CV introuvable' });
+      const aggregates = new Map<string, SkillAggregate>();
 
-  if (req.method === 'DELETE') {
-    const analysesCol = await getCollection('cv_analyses');
-    const result = await analysesCol.deleteMany({ cvHash: cv.content_hash });
-    return res.status(200).json({ deleted: result.deletedCount });
-  }
+      function getAggregate(key: string): SkillAggregate {
+        let aggregate = aggregates.get(key);
+        if (!aggregate) {
+          aggregate = { presentCount: 0, missingCount: 0, labelCounts: new Map() };
+          aggregates.set(key, aggregate);
+        }
+        return aggregate;
+      }
 
-  const analysesCol = await getCollection('cv_analyses');
-  const analyses = await analysesCol.find({ cvHash: cv.content_hash }).toArray();
+      function recordLabel(aggregate: SkillAggregate, label: string) {
+        aggregate.labelCounts.set(label, (aggregate.labelCounts.get(label) ?? 0) + 1);
+      }
 
-  const aggregates = new Map<string, SkillAggregate>();
+      for (const analysis of analyses) {
+        for (const keyword of (analysis.keywords_matched ?? []) as string[]) {
+          const key = canonicalizeSkillKey(keyword);
+          if (!key) continue;
+          const aggregate = getAggregate(key);
+          aggregate.presentCount += 1;
+          recordLabel(aggregate, keyword);
+        }
+        for (const keyword of (analysis.keywords_missing ?? []) as string[]) {
+          const key = canonicalizeSkillKey(keyword);
+          if (!key) continue;
+          const aggregate = getAggregate(key);
+          aggregate.missingCount += 1;
+          recordLabel(aggregate, keyword);
+        }
+      }
 
-  function getAggregate(key: string): SkillAggregate {
-    let aggregate = aggregates.get(key);
-    if (!aggregate) {
-      aggregate = { presentCount: 0, missingCount: 0, labelCounts: new Map() };
-      aggregates.set(key, aggregate);
-    }
-    return aggregate;
-  }
+      const presentEntries: [string, number][] = [];
+      const missingEntries: [string, number][] = [];
 
-  function recordLabel(aggregate: SkillAggregate, label: string) {
-    aggregate.labelCounts.set(label, (aggregate.labelCounts.get(label) ?? 0) + 1);
-  }
+      for (const aggregate of aggregates.values()) {
+        const label = pickLabel(aggregate.labelCounts);
+        if (aggregate.presentCount > 0) {
+          presentEntries.push([label, aggregate.presentCount]);
+        } else if (aggregate.missingCount > 0) {
+          missingEntries.push([label, aggregate.missingCount]);
+        }
+      }
 
-  for (const analysis of analyses) {
-    for (const keyword of (analysis.keywords_matched ?? []) as string[]) {
-      const key = canonicalizeSkillKey(keyword);
-      if (!key) continue;
-      const aggregate = getAggregate(key);
-      aggregate.presentCount += 1;
-      recordLabel(aggregate, keyword);
-    }
-    for (const keyword of (analysis.keywords_missing ?? []) as string[]) {
-      const key = canonicalizeSkillKey(keyword);
-      if (!key) continue;
-      const aggregate = getAggregate(key);
-      aggregate.missingCount += 1;
-      recordLabel(aggregate, keyword);
-    }
-  }
+      return {
+        json: {
+          present: toSortedCounts(presentEntries),
+          missing: toSortedCounts(missingEntries),
+          analyzedCount: analyses.length,
+        },
+      };
+    },
+  }),
+  DELETE: method({
+    async handle({ user, query }) {
+      const { cvId } = query as { cvId?: string };
+      const cv = await findOwnedCv(cvId, user.id);
+      if (!cv) throw ApiError.notFound('CV introuvable');
 
-  const presentEntries: [string, number][] = [];
-  const missingEntries: [string, number][] = [];
-
-  for (const aggregate of aggregates.values()) {
-    const label = pickLabel(aggregate.labelCounts);
-    if (aggregate.presentCount > 0) {
-      presentEntries.push([label, aggregate.presentCount]);
-    } else if (aggregate.missingCount > 0) {
-      missingEntries.push([label, aggregate.missingCount]);
-    }
-  }
-
-  return res.status(200).json({
-    present: toSortedCounts(presentEntries),
-    missing: toSortedCounts(missingEntries),
-    analyzedCount: analyses.length,
-  });
-}
+      const analysesCol = await getCollection('cv_analyses');
+      const result = await analysesCol.deleteMany({ userId: user.id, cvHash: cv.content_hash });
+      return { json: { deleted: result.deletedCount } };
+    },
+  }),
+});

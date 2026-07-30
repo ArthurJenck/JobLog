@@ -1,43 +1,34 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { requireSession } from '../../lib/session.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
 import {
   UrlScrapeHttpError,
   createApplicationFromUrl,
   getFromUrlMeta,
   parseFromUrlRequest,
-} from './url-scrape-service.js';
+} from './scrape/index.js';
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET' && req.method !== 'POST') {
-    return res.status(405).json({ error: 'Method not allowed' });
-  }
+export default defineHandler({
+  GET: method({
+    async handle({ user }) {
+      return { json: await getFromUrlMeta(user.id) };
+    },
+  }),
+  POST: method({
+    async handle({ user, req }) {
+      const parsed = parseFromUrlRequest(req.body);
+      if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
 
-  const session = await requireSession(req, res);
-  if (!session) return;
-
-  if (req.method === 'GET') {
-    return res.status(200).json(await getFromUrlMeta(session.user.id));
-  }
-
-  const parsed = parseFromUrlRequest(req.body);
-  if (!parsed.success) {
-    return res.status(400).json({ error: parsed.error.flatten() });
-  }
-
-  try {
-    const result = await createApplicationFromUrl(session.user.id, parsed.data.url);
-    return res.status(result.cached ? 200 : 201).json(result);
-  } catch (err) {
-    if (err instanceof UrlScrapeHttpError) {
-      return res.status(err.status).json({
-        code: err.code,
-        error: err.message,
-        usage: err.usage,
-        extensionUrl: err.extensionUrl,
-      });
-    }
-
-    console.error('[job-postings/from-url] unhandled error', err);
-    return res.status(500).json({ error: 'Internal server error' });
-  }
-}
+      try {
+        const result = await createApplicationFromUrl(user.id, parsed.data.url);
+        return { status: result.cached ? 200 : 201, json: result };
+      } catch (err) {
+        if (err instanceof UrlScrapeHttpError) {
+          throw new ApiError(err.status, err.code, err.message, {
+            extra: { usage: err.usage, extensionUrl: err.extensionUrl },
+          });
+        }
+        throw err;
+      }
+    },
+  }),
+});

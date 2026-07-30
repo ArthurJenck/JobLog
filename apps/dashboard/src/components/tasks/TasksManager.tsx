@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   DndContext,
   PointerSensor,
@@ -13,26 +14,33 @@ import {
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
 } from '@dnd-kit/sortable';
-import { TASK_CATALOG } from '@joblog/shared';
+import { TASK_CATALOG, localDayKey } from '@joblog/shared';
 import type { TaskRecurrence } from '@joblog/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { TaskConfigRow } from '@/components/tasks/TaskConfigRow';
-import { useTasks } from '@/lib/app-context';
+import { useTaskMutations, useTasksQuery } from '@/hooks/queries/use-daily';
 import { api } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
 import { toast } from 'sonner';
 import { FlameIcon } from 'lucide-react';
 import { playAdd, playDelete, playDrop, playError, playToggle } from '@/lib/sound';
 import { cn } from '@/lib/utils';
+import { useConfirm } from '@/hooks/useConfirm';
 
 export function TasksManager() {
-  const { tasks, refreshTasks, toggleTaskCompleted, updateTask, deleteTask } = useTasks();
+  const qc = useQueryClient();
+  const { tasks } = useTasksQuery();
+  const { toggleTaskCompleted, updateTask, deleteTask } = useTaskMutations();
+  const { confirm, confirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState('');
   const [recurrence, setRecurrence] = useState<TaskRecurrence>('daily');
   const [target, setTarget] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const invalidateTasks = () =>
+    qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -44,19 +52,53 @@ export function TasksManager() {
     (entry) => !tasks.some((q) => q.key === entry.key && !q.removed),
   );
 
-  async function activateCatalogTask(key: string) {
-    try {
-      await api.tasks.activateCatalogTask(key);
+  const activateMutation = useMutation({
+    mutationFn: (key: string) => api.tasks.activateCatalogTask(key),
+    onSuccess: async () => {
       playAdd();
-      await refreshTasks();
-    } catch {
+      await invalidateTasks();
+    },
+    onError: () => {
       playError();
       toast.error("Impossible d'activer cette tâche");
-    }
-  }
+    },
+  });
+
+  const reorderMutation = useMutation({
+    mutationFn: (order: string[]) => api.tasks.reorder(order),
+    onSuccess: () => invalidateTasks(),
+    onError: () => {
+      playError();
+      toast.error('Impossible de réorganiser les tâches');
+    },
+  });
+
+  const createMutation = useMutation({
+    mutationFn: (body: {
+      title: string;
+      recurrence: TaskRecurrence;
+      target: number | null;
+    }) => api.tasks.createCustom(body),
+    onSuccess: async () => {
+      playAdd();
+      setTitle('');
+      setTarget('');
+      setRecurrence('daily');
+      setShowAdd(false);
+      await invalidateTasks();
+    },
+    onError: () => {
+      playError();
+      toast.error("Impossible d'ajouter cette tâche");
+    },
+  });
 
   async function handleDeleteTask(id: string) {
-    if (!confirm('Supprimer cette tâche ?')) return;
+    const ok = await confirm({
+      title: 'Supprimer cette tâche ?',
+      confirmLabel: 'Supprimer',
+    });
+    if (!ok) return;
     playDelete();
     await deleteTask(id);
   }
@@ -66,7 +108,7 @@ export function TasksManager() {
     await updateTask(id, { removed: true });
   }
 
-  async function handleDragEnd(event: DragEndEvent) {
+  function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
@@ -76,41 +118,22 @@ export function TasksManager() {
 
     const reordered = arrayMove(sortedTasks, oldIndex, newIndex);
     playDrop();
-    try {
-      await api.tasks.reorder(reordered.map((q) => q._id));
-      await refreshTasks();
-    } catch {
-      playError();
-      toast.error('Impossible de réorganiser les tâches');
-    }
+    reorderMutation.mutate(reordered.map((q) => q._id));
   }
 
-  async function submitCustomTask() {
+  function submitCustomTask() {
     const trimmed = title.trim();
     if (!trimmed) return;
-    setIsSubmitting(true);
-    try {
-      await api.tasks.createCustom({
-        title: trimmed,
-        recurrence,
-        target: target.trim() === '' ? null : Number(target),
-      });
-      playAdd();
-      setTitle('');
-      setTarget('');
-      setRecurrence('daily');
-      setShowAdd(false);
-      await refreshTasks();
-    } catch {
-      playError();
-      toast.error("Impossible d'ajouter cette tâche");
-    } finally {
-      setIsSubmitting(false);
-    }
+    createMutation.mutate({
+      title: trimmed,
+      recurrence,
+      target: target.trim() === '' ? null : Number(target),
+    });
   }
 
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
+      {confirmDialog}
       <div className="rounded-lg border p-4 flex items-start gap-3 bg-muted/30">
         <FlameIcon className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
         <p className="text-sm text-muted-foreground">
@@ -187,7 +210,7 @@ export function TasksManager() {
             <Button
               size="sm"
               onClick={submitCustomTask}
-              disabled={!title.trim() || isSubmitting}
+              disabled={!title.trim() || createMutation.isPending}
               className="self-start"
             >
               Ajouter
@@ -237,7 +260,7 @@ export function TasksManager() {
                       {entry.recurrence === 'daily' ? 'Quotidienne' : 'Ponctuelle'}
                     </p>
                   </div>
-                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => activateCatalogTask(entry.key)}>
+                  <Button size="sm" variant="outline" className="shrink-0" onClick={() => activateMutation.mutate(entry.key)}>
                     Activer
                   </Button>
                 </div>

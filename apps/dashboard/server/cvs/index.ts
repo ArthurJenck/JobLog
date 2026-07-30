@@ -1,9 +1,10 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
 import { sha256 } from '../../lib/hash.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
+import { withStringId } from '../../lib/http/serialize.js';
 
 const CreateCvSchema = z.object({
   label: z.string().min(1),
@@ -16,73 +17,70 @@ const UpdateCvSchema = z.object({
   isDefault: z.boolean().optional(),
 });
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return;
+export default defineHandler({
+  GET: method({
+    async handle({ user }) {
+      const col = await getCollection('cvs');
+      const cvs = await col.find({ userId: user.id }).sort({ uploadedAt: -1 }).toArray();
+      return {
+        json: { data: cvs.map((cv) => ({ ...withStringId(cv), content: undefined })) },
+      };
+    },
+  }),
+  POST: method({
+    body: CreateCvSchema,
+    async handle({ user, body }) {
+      const { label, filename, content } = body;
+      const content_hash = sha256(content);
 
-  const userId = session.user.id;
-  const col = await getCollection('cvs');
+      const doc = {
+        userId: user.id,
+        label,
+        filename,
+        content,
+        content_hash,
+        uploadedAt: new Date(),
+      };
 
-  if (req.method === 'GET') {
-    const cvs = await col.find({ userId }).sort({ uploadedAt: -1 }).toArray();
-    return res.status(200).json({
-      data: cvs.map((cv) => ({ ...cv, _id: cv._id.toString(), content: undefined })),
-    });
-  }
+      const col = await getCollection('cvs');
+      const result = await col.insertOne(doc);
+      return { status: 201, json: { cvId: result.insertedId.toString() } };
+    },
+  }),
+  PATCH: method({
+    body: UpdateCvSchema,
+    async handle({ user, query, body }) {
+      const { id } = query as { id?: string };
+      if (!id || !ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
 
-  if (req.method === 'POST') {
-    const parsed = CreateCvSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const { label, isDefault } = body;
+      const col = await getCollection('cvs');
 
-    const { label, filename, content } = parsed.data;
-    const content_hash = sha256(content);
+      if (isDefault) {
+        await col.updateMany({ userId: user.id }, { $set: { isDefault: false } });
+      }
 
-    const doc = {
-      userId,
-      label,
-      filename,
-      content,
-      content_hash,
-      uploadedAt: new Date(),
-    };
+      const update: Record<string, unknown> = {};
+      if (label !== undefined) update.label = label;
+      if (isDefault !== undefined) update.isDefault = isDefault;
 
-    const result = await col.insertOne(doc);
-    return res.status(201).json({ cvId: result.insertedId.toString() });
-  }
+      const result = await col.updateOne(
+        { _id: new ObjectId(id), userId: user.id },
+        { $set: update },
+      );
+      if (result.matchedCount === 0) throw ApiError.notFound();
+      return { json: { ok: true } };
+    },
+  }),
+  DELETE: method({
+    async handle({ user, query }) {
+      const { id } = query as { id?: string };
+      if (!id || !ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
 
-  if (req.method === 'PATCH') {
-    const { id } = req.query as { id: string };
-    if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
-
-    const parsed = UpdateCvSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-    const { label, isDefault } = parsed.data;
-
-    if (isDefault) {
-      await col.updateMany({ userId }, { $set: { isDefault: false } });
-    }
-
-    const update: Record<string, unknown> = {};
-    if (label !== undefined) update.label = label;
-    if (isDefault !== undefined) update.isDefault = isDefault;
-
-    const result = await col.updateOne(
-      { _id: new ObjectId(id), userId },
-      { $set: update },
-    );
-    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
-    return res.status(200).json({ ok: true });
-  }
-
-  if (req.method === 'DELETE') {
-    const { id } = req.query as { id: string };
-    if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
-
-    const result = await col.deleteOne({ _id: new ObjectId(id), userId });
-    if (result.deletedCount === 0) return res.status(404).json({ error: 'Not found' });
-    return res.status(200).json({ ok: true });
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' });
-}
+      const col = await getCollection('cvs');
+      const result = await col.deleteOne({ _id: new ObjectId(id), userId: user.id });
+      if (result.deletedCount === 0) throw ApiError.notFound();
+      return { json: { ok: true } };
+    },
+  }),
+});

@@ -1,8 +1,7 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
 
 interface UserStreakFields {
   streakCurrent?: number;
@@ -37,71 +36,69 @@ function toResponse(fields: UserStreakFields) {
   };
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return;
+export default defineHandler({
+  GET: method({
+    async handle({ user }) {
+      const col = await getCollection<UserStreakFields>('user');
+      const streakUser = await col.findOne({ _id: new ObjectId(user.id) });
+      return { json: toResponse(streakUser ?? {}) };
+    },
+  }),
+  POST: method({
+    body: DaySchema,
+    async handle({ user, body }) {
+      const { today } = body;
+      const col = await getCollection<UserStreakFields>('user');
+      const userFilter = { _id: new ObjectId(user.id) };
 
-  const userId = session.user.id;
-  const col = await getCollection<UserStreakFields>('user');
-  const userFilter = { _id: new ObjectId(userId) };
+      const streakUser = await col.findOne(userFilter);
+      const lastActiveDay = streakUser?.streakLastActiveDay ?? null;
+      let current = streakUser?.streakCurrent ?? 0;
 
-  if (req.method === 'GET') {
-    const user = await col.findOne(userFilter);
-    return res.status(200).json(toResponse(user ?? {}));
-  }
-
-  if (req.method === 'POST') {
-    const parsed = DaySchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const { today } = parsed.data;
-
-    const user = await col.findOne(userFilter);
-    const lastActiveDay = user?.streakLastActiveDay ?? null;
-    let current = user?.streakCurrent ?? 0;
-
-    if (lastActiveDay !== today) {
-      current = lastActiveDay === shiftDayKey(today, -1) ? current + 1 : 1;
-    }
-    const longest = Math.max(user?.streakLongest ?? 0, current);
-
-    await col.updateOne(
-      userFilter,
-      { $set: { streakCurrent: current, streakLongest: longest, streakLastActiveDay: today } },
-    );
-
-    return res.status(200).json(
-      toResponse({
-        streakCurrent: current,
-        streakLongest: longest,
-        streakLastActiveDay: today,
-        streakLastPerfectDay: user?.streakLastPerfectDay ?? null,
-        streakPrevPerfectDay: user?.streakPrevPerfectDay ?? null,
-      }),
-    );
-  }
-
-  if (req.method === 'PATCH') {
-    const parsed = PerfectSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-    const { today, perfect } = parsed.data;
-
-    const user = await col.findOne(userFilter);
-    const currentPerfect = user?.streakLastPerfectDay ?? null;
-    const prevPerfect = user?.streakPrevPerfectDay ?? null;
-
-    if (perfect) {
-      if (currentPerfect !== today) {
-        const update: UserStreakFields = { streakLastPerfectDay: today };
-        if (currentPerfect) update.streakPrevPerfectDay = currentPerfect;
-        await col.updateOne(userFilter, { $set: update });
+      if (lastActiveDay !== today) {
+        current = lastActiveDay === shiftDayKey(today, -1) ? current + 1 : 1;
       }
-    } else if (currentPerfect === today) {
-      await col.updateOne(userFilter, { $set: { streakLastPerfectDay: prevPerfect } });
-    }
+      const longest = Math.max(streakUser?.streakLongest ?? 0, current);
 
-    const updated = await col.findOne(userFilter);
-    return res.status(200).json(toResponse(updated ?? {}));
-  }
+      await col.updateOne(
+        userFilter,
+        { $set: { streakCurrent: current, streakLongest: longest, streakLastActiveDay: today } },
+      );
 
-  return res.status(405).json({ error: 'Method not allowed' });
-}
+      return {
+        json: toResponse({
+          streakCurrent: current,
+          streakLongest: longest,
+          streakLastActiveDay: today,
+          streakLastPerfectDay: streakUser?.streakLastPerfectDay ?? null,
+          streakPrevPerfectDay: streakUser?.streakPrevPerfectDay ?? null,
+        }),
+      };
+    },
+  }),
+  PATCH: method({
+    body: PerfectSchema,
+    async handle({ user, body }) {
+      const { today, perfect } = body;
+      const col = await getCollection<UserStreakFields>('user');
+      const userFilter = { _id: new ObjectId(user.id) };
+
+      const streakUser = await col.findOne(userFilter);
+      const currentPerfect = streakUser?.streakLastPerfectDay ?? null;
+      const prevPerfect = streakUser?.streakPrevPerfectDay ?? null;
+
+      if (perfect) {
+        if (currentPerfect !== today) {
+          const update: UserStreakFields = { streakLastPerfectDay: today };
+          if (currentPerfect) update.streakPrevPerfectDay = currentPerfect;
+          await col.updateOne(userFilter, { $set: update });
+        }
+      } else if (currentPerfect === today) {
+        await col.updateOne(userFilter, { $set: { streakLastPerfectDay: prevPerfect } });
+      }
+
+      const updated = await col.findOne(userFilter);
+      return { json: toResponse(updated ?? {}) };
+    },
+  }),
+});

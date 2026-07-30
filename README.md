@@ -16,8 +16,8 @@ packages/
 
 ## Stack
 
-- **Dashboard** : React 19, Vite, TypeScript, TanStack Router + Table, Tailwind CSS v4, shadcn/Radix UI, Sonner
-- **API** : Vercel serverless functions, MongoDB, better-auth, Resend (emails), web-push, Gemini (analyse IA + scraping)
+- **Dashboard** : React 19, Vite, TypeScript strict, TanStack Router + Query + Table, Tailwind CSS v4, shadcn/Radix UI, Sonner
+- **API** : Vercel serverless functions (point d'entrée unique `api/index.ts`), MongoDB, better-auth, Resend (emails), web-push, Gemini (analyse IA + extraction d'offres), Jina/Firecrawl (scraping de pages tierces), `@vercel/queue` (scraping asynchrone)
 - **Extension** : WXT, React 19 — supporte LinkedIn, WTTJ, Indeed, JobTeaser, HelloWork, Glassdoor
 - **Shared** : Zod (schémas et types communs)
 - **Monorepo** : pnpm workspaces
@@ -27,7 +27,7 @@ packages/
 ```bash
 pnpm install
 
-# Dashboard (port 5173 + API dev proxy)
+# Dashboard (port 3000, front + API servies par le même serveur Vite)
 pnpm dev:dashboard
 
 # Extension (build watch + navigateur)
@@ -36,6 +36,9 @@ pnpm dev:extension
 # Builds de production
 pnpm build:dashboard
 pnpm build:extension
+
+# Tests (tout le monorepo : packages/shared + apps/dashboard)
+pnpm test
 ```
 
 ## TODO / Roadmap

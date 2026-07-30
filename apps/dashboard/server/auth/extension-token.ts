@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { createHash, randomBytes } from 'crypto';
+import { createHash, randomBytes, randomUUID } from 'crypto';
 import jwt from 'jsonwebtoken';
 import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
+import { getExtensionJwtSecret } from '../../lib/env.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
 
 const REFRESH_TTL_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -10,27 +10,31 @@ function hashToken(token: string) {
   return createHash('sha256').update(token).digest('hex');
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
+export default defineHandler({
+  POST: method({
+    rateLimit: {
+      max: 10,
+      windowMs: 60 * 60 * 1000,
+      scope: ({ user }) => `extension-token:${user!.id}`,
+    },
+    async handle({ user }) {
+      const userId = user.id;
 
-  const session = await requireSession(req, res);
-  if (!session) return;
+      const accessToken = jwt.sign(
+        { sub: userId, email: user.email, type: 'access' },
+        getExtensionJwtSecret(),
+        { expiresIn: '15m', jwtid: randomUUID(), issuer: 'joblog', audience: 'joblog-extension' }
+      );
 
-  const userId = session.user.id;
+      const refreshToken = randomBytes(32).toString('hex');
+      const tokenHash = hashToken(refreshToken);
+      const now = new Date();
+      const expiresAt = new Date(now.getTime() + REFRESH_TTL_MS);
 
-  const accessToken = jwt.sign(
-    { sub: userId, email: session.user.email, type: 'access' },
-    process.env.BETTER_AUTH_SECRET!,
-    { expiresIn: '1d' }
-  );
+      const col = await getCollection('extension_tokens');
+      await col.insertOne({ userId, tokenHash, createdAt: now, expiresAt, lastUsedAt: now });
 
-  const refreshToken = randomBytes(32).toString('hex');
-  const tokenHash = hashToken(refreshToken);
-  const now = new Date();
-  const expiresAt = new Date(now.getTime() + REFRESH_TTL_MS);
-
-  const col = await getCollection('extension_tokens');
-  await col.insertOne({ userId, tokenHash, createdAt: now, expiresAt, lastUsedAt: now });
-
-  return res.status(200).json({ accessToken, refreshToken });
-}
+      return { json: { accessToken, refreshToken } };
+    },
+  }),
+});

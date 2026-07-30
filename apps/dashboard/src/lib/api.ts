@@ -103,9 +103,10 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw Object.assign(new Error(body.error ?? `HTTP ${res.status}`), {
+    throw Object.assign(new Error(typeof body.error === 'string' ? body.error : `HTTP ${res.status}`), {
       status: res.status,
       code: typeof body.code === 'string' ? body.code : undefined,
+      details: body.details,
       providerStatus: body.providerStatus,
       usage: body.usage,
       extensionUrl: body.extensionUrl,

@@ -1,7 +1,7 @@
 import { Badge } from '@/components/ui/badge';
 import { useDetectedShake } from '@/hooks/useDetectedShake';
 import type { Task } from '@/lib/api';
-import { useTasks } from '@/lib/app-context';
+import { useTaskMutations } from '@/hooks/queries/use-daily';
 import { burstAt } from '@/lib/confetti';
 import { isTaskDoneToday } from '@/lib/taskHelpers';
 import { cn } from '@/lib/utils';
@@ -16,7 +16,7 @@ export function TaskItem({
   task: Task;
   willCompleteAll: boolean;
 }) {
-  const { toggleTaskCompleted } = useTasks();
+  const { toggleTaskCompleted } = useTaskMutations();
   const rowRef = useRef<HTMLDivElement | null>(null);
   const doneToday = isTaskDoneToday(task);
   const displayTarget = task.progressTarget ?? task.target;

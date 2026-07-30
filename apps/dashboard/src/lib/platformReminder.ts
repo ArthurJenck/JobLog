@@ -1,9 +1,11 @@
-function startOfLocalDay(date: Date): Date {
-  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
-}
+import { localDayKey } from '@joblog/shared';
+
+export { localDayBounds, localDayKey } from '@joblog/shared';
 
 export function daysSince(iso: string | null): number | null {
   if (!iso) return null;
+  const startOfLocalDay = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth(), date.getDate());
   const then = startOfLocalDay(new Date(iso));
   const now = startOfLocalDay(new Date());
   const diffMs = now.getTime() - then.getTime();
@@ -14,23 +16,10 @@ export function isSameLocalDay(iso: string | null): boolean {
   return daysSince(iso) === 0;
 }
 
-export function localDayKey(date: Date = new Date()): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
 export function shiftDayKey(day: string, delta: number): string {
   const [y, m, d] = day.split('-').map(Number);
   const shifted = new Date(y, m - 1, d + delta);
   return localDayKey(shifted);
-}
-
-export function localDayBounds(): { dayStart: string; dayEnd: string } {
-  const start = startOfLocalDay(new Date());
-  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
-  return { dayStart: start.toISOString(), dayEnd: end.toISOString() };
 }
 
 export function reminderMessage(lastClickedAt: string | null): string | null {

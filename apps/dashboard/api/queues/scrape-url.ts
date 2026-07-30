@@ -2,7 +2,7 @@ import { QueueClient } from '@vercel/queue';
 import {
   UrlScrapeJobMessageSchema,
   processUrlScrapeMessage,
-} from '../../server/job-postings/url-scrape-service.js';
+} from '../../server/job-postings/scrape/index.js';
 
 const queue = new QueueClient();
 

@@ -1,24 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { z } from 'zod';
 import { getEnv } from '../../lib/env.js';
-import { requireSession } from '../../lib/session.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
+import { safeFetch } from '../../lib/safe-fetch.js';
 
 const QuerySchema = z.object({
   url: z.string().url(),
 });
-
-const PRIVATE_HOSTNAMES = new Set(['localhost', '0.0.0.0', '::1']);
-
-function isPrivateHostname(hostname: string) {
-  if (PRIVATE_HOSTNAMES.has(hostname.toLowerCase())) return true;
-  return (
-    /^127\./.test(hostname) ||
-    /^10\./.test(hostname) ||
-    /^192\.168\./.test(hostname) ||
-    /^169\.254\./.test(hostname) ||
-    /^172\.(1[6-9]|2\d|3[01])\./.test(hostname)
-  );
-}
 
 function extractDomain(rawUrl: string) {
   return new URL(rawUrl).hostname.replace(/^www\./i, '').toLowerCase();
@@ -84,50 +72,49 @@ function logoDevFallback(domain: string) {
   return `https://img.logo.dev/${encodeURIComponent(domain)}?${params.toString()}`;
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+export default defineHandler({
+  GET: method({
+    query: QuerySchema,
+    rateLimit: {
+      max: 30,
+      windowMs: 60 * 1000,
+      scope: ({ user }) => `metadata:${user!.id}`,
+    },
+    async handle({ query }) {
+      const pageUrl = query.url;
+      try {
+        const parsedUrl = new URL(pageUrl);
+        if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
+          throw ApiError.badRequest('Unsupported protocol');
+        }
+      } catch (err) {
+        if (err instanceof ApiError) throw err;
+        throw ApiError.badRequest('Invalid URL');
+      }
 
-  const session = await requireSession(req, res);
-  if (!session) return;
+      const domain = extractDomain(pageUrl);
+      const fallback = { name: prettyNameFromDomain(domain), faviconUrl: logoDevFallback(domain), domain };
 
-  const parsed = QuerySchema.safeParse(req.query);
-  if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      try {
+        const resp = await safeFetch(pageUrl, {
+          headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobLogBot/1.0)' },
+          timeoutMs: 8_000,
+        });
+        if (!resp.ok) return { json: fallback };
 
-  const pageUrl = parsed.data.url;
-  let hostname: string;
-  try {
-    const parsedUrl = new URL(pageUrl);
-    if (!['http:', 'https:'].includes(parsedUrl.protocol)) {
-      return res.status(400).json({ error: 'Unsupported protocol' });
-    }
-    hostname = parsedUrl.hostname;
-  } catch {
-    return res.status(400).json({ error: 'Invalid URL' });
-  }
+        const html = await resp.text();
+        const { name, faviconUrl } = parseHtmlMetadata(html, pageUrl);
 
-  if (isPrivateHostname(hostname)) {
-    return res.status(400).json({ error: 'URL not allowed' });
-  }
-
-  const domain = extractDomain(pageUrl);
-  const fallback = { name: prettyNameFromDomain(domain), faviconUrl: logoDevFallback(domain), domain };
-
-  try {
-    const resp = await fetch(pageUrl, {
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; JobLogBot/1.0)' },
-      signal: AbortSignal.timeout(8_000),
-    });
-    if (!resp.ok) return res.status(200).json(fallback);
-
-    const html = await resp.text();
-    const { name, faviconUrl } = parseHtmlMetadata(html, pageUrl);
-
-    return res.status(200).json({
-      name: name || fallback.name,
-      faviconUrl: faviconUrl || fallback.faviconUrl,
-      domain,
-    });
-  } catch {
-    return res.status(200).json(fallback);
-  }
-}
+        return {
+          json: {
+            name: name || fallback.name,
+            faviconUrl: faviconUrl || fallback.faviconUrl,
+            domain,
+          },
+        };
+      } catch {
+        return { json: fallback };
+      }
+    },
+  }),
+});

@@ -1,14 +1,12 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { getParisDateKey, getParisMonthKey, normalizeFrequencyDays, REMINDER_ELIGIBLE_STATUSES } from '@joblog/shared';
 import { ObjectId, type Filter } from 'mongodb';
 import { getCollection } from '../../lib/db.js';
 import { getEnv } from '../../lib/env.js';
 import { sendReminderEmail } from '../../lib/email.js';
+import { escapeHtml } from '../../lib/html.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
 import { sendEmail } from '../../lib/resend.js';
-import { REMINDER_ELIGIBLE_STATUSES } from '@joblog/shared';
-
-const JINA_ALERT_THRESHOLD_DEFAULT = 8_000_000;
-const FIRECRAWL_MONTHLY_SOFT_CAP = 900;
-const PARIS_TIME_ZONE = 'Europe/Paris';
+import { FIRECRAWL_MONTHLY_SOFT_CAP, getJinaAlertThreshold } from '../usage/provider-usage.js';
 
 interface ReminderApplicationDoc {
   userId: string;
@@ -53,132 +51,6 @@ interface FirecrawlUsageDoc {
   calls: number;
   lastErrorCode?: string;
   alertedAt: Date | null;
-}
-
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const authHeader = req.headers['authorization'];
-  if (authHeader !== `Bearer ${process.env.CRON_SECRET}`) {
-    return res.status(401).json({ error: 'Unauthorized' });
-  }
-
-  const [appCol, userCol, notifCol, jpCol] = await Promise.all([
-    getCollection<ReminderApplicationDoc>('applications'),
-    getCollection<ReminderUserDoc>('user'),
-    getCollection<ReminderNotificationDoc>('notification_settings'),
-    getCollection<ReminderJobPostingDoc>('job_postings'),
-  ]);
-
-  const now = new Date();
-
-  const dueFilter: Filter<ReminderApplicationDoc> = {
-    'reminder.at': { $lte: now },
-    $expr: { $lt: ['$reminder.sentCount', '$reminder.maxCount'] },
-    $or: [
-      { 'reminder.snoozedUntil': null },
-      { 'reminder.snoozedUntil': { $lte: now } },
-    ],
-    status: { $in: REMINDER_ELIGIBLE_STATUSES },
-  };
-
-  const due = await appCol.find(dueFilter).toArray();
-
-  let sent = 0;
-  let failed = 0;
-  let skipped = 0;
-  const errors: string[] = [];
-  let jinaAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
-  let firecrawlAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
-
-  for (const app of due) {
-    try {
-      const frequencyDays = normalizeFrequencyDays(app.reminder?.frequencyDays as number | undefined);
-      const [user, jp, notifSettings] = await Promise.all([
-        userCol.findOne({ _id: new ObjectId(String(app.userId)) }),
-        jpCol.findOne({ _id: new ObjectId(String(app.jobPostingId)) }),
-        notifCol.findOne({ userId: String(app.userId) }),
-      ]);
-
-      if (!user || !jp) {
-        skipped++;
-        errors.push(`${app._id.toString()}: missing ${!user ? 'user' : 'job posting'}`);
-        continue;
-      }
-
-      const emailEnabled = notifSettings?.email !== false;
-      const pushEnabled = notifSettings?.push === true;
-
-      if (emailEnabled && user.email) {
-        await sendReminderEmail({
-          to: user.email as string,
-          applicationId: app._id.toString(),
-          userId: String(app.userId),
-          jobTitle: String(jp.title ?? ''),
-          company: String(jp.company ?? ''),
-          frequencyDays,
-        });
-      }
-
-      if (pushEnabled && notifSettings?.vapidSubscription) {
-        await sendWebPush(notifSettings.vapidSubscription as PushSubscription, {
-          title: `Relance — ${jp.company}`,
-          body: `N'oublie pas de relancer pour "${jp.title}"`,
-          url: process.env.PUBLIC_APP_URL ?? 'https://joblog.arthurjenck.com',
-        });
-      }
-
-      const nextAt = new Date(now.getTime() + frequencyDays * 24 * 60 * 60 * 1000);
-
-      await appCol.updateOne(
-        { _id: app._id },
-        {
-          $inc: { 'reminder.sentCount': 1 },
-          $set: { 'reminder.at': nextAt, updated_at: now },
-        }
-      );
-
-      sent++;
-    } catch (error) {
-      failed++;
-      errors.push(
-        `${app._id.toString()}: ${error instanceof Error ? error.message : String(error)}`
-      );
-    }
-  }
-
-  try {
-    jinaAlert = await checkJinaUsageAlerts();
-  } catch (error) {
-    jinaAlert = {
-      checked: false,
-      sent: 0,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-
-  try {
-    firecrawlAlert = await checkFirecrawlUsageAlerts();
-  } catch (error) {
-    firecrawlAlert = {
-      checked: false,
-      sent: 0,
-      error: error instanceof Error ? error.message : String(error),
-    };
-  }
-
-  return res.status(200).json({
-    processed: due.length,
-    sent,
-    failed,
-    skipped,
-    jinaAlert,
-    firecrawlAlert,
-    errors: errors.slice(0, 10),
-  });
-}
-
-function normalizeFrequencyDays(value: number | undefined) {
-  const n = typeof value === 'number' ? value : NaN;
-  return Number.isFinite(n) && n > 0 ? Math.trunc(n) : 7;
 }
 
 interface PushSubscription {
@@ -282,38 +154,125 @@ async function checkFirecrawlUsageAlerts() {
   return { checked: true, sent: 1 };
 }
 
-function getParisMonthKey(date = new Date()) {
-  return getParisDateKey(date).slice(0, 7);
-}
+export default defineHandler({
+  POST: method({
+    auth: 'cron',
+    async handle() {
+      const [appCol, userCol, notifCol, jpCol] = await Promise.all([
+        getCollection<ReminderApplicationDoc>('applications'),
+        getCollection<ReminderUserDoc>('user'),
+        getCollection<ReminderNotificationDoc>('notification_settings'),
+        getCollection<ReminderJobPostingDoc>('job_postings'),
+      ]);
 
-function getJinaAlertThreshold() {
-  const raw = getEnv('JINA_ESTIMATED_TOKEN_ALERT_THRESHOLD');
-  const parsed = raw ? Number(raw) : NaN;
-  return Number.isFinite(parsed) && parsed > 0
-    ? Math.trunc(parsed)
-    : JINA_ALERT_THRESHOLD_DEFAULT;
-}
+      const now = new Date();
 
-function getParisDateKey(date = new Date()) {
-  const parts = new Intl.DateTimeFormat('en', {
-    timeZone: PARIS_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).formatToParts(date);
-  const get = (type: string) => parts.find((part) => part.type === type)?.value;
-  return `${get('year')}-${get('month')}-${get('day')}`;
-}
+      const dueFilter: Filter<ReminderApplicationDoc> = {
+        'reminder.at': { $lte: now },
+        $expr: { $lt: ['$reminder.sentCount', '$reminder.maxCount'] },
+        $or: [
+          { 'reminder.snoozedUntil': null },
+          { 'reminder.snoozedUntil': { $lte: now } },
+        ],
+        status: { $in: REMINDER_ELIGIBLE_STATUSES },
+      };
 
-function escapeHtml(value: string) {
-  return value.replace(/[&<>"']/g, (char) => {
-    const entities: Record<string, string> = {
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;',
-    };
-    return entities[char];
-  });
-}
+      const due = await appCol.find(dueFilter).toArray();
+
+      let sent = 0;
+      let failed = 0;
+      let skipped = 0;
+      const errors: string[] = [];
+      let jinaAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
+      let firecrawlAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
+
+      for (const app of due) {
+        try {
+          const frequencyDays = normalizeFrequencyDays(app.reminder?.frequencyDays);
+          const [user, jp, notifSettings] = await Promise.all([
+            userCol.findOne({ _id: new ObjectId(String(app.userId)) }),
+            jpCol.findOne({ _id: new ObjectId(String(app.jobPostingId)) }),
+            notifCol.findOne({ userId: String(app.userId) }),
+          ]);
+
+          if (!user || !jp) {
+            skipped++;
+            errors.push(`${app._id.toString()}: missing ${!user ? 'user' : 'job posting'}`);
+            continue;
+          }
+
+          const emailEnabled = notifSettings?.email !== false;
+          const pushEnabled = notifSettings?.push === true;
+
+          if (emailEnabled && user.email) {
+            await sendReminderEmail({
+              to: user.email as string,
+              applicationId: app._id.toString(),
+              userId: String(app.userId),
+              jobTitle: String(jp.title ?? ''),
+              company: String(jp.company ?? ''),
+              frequencyDays,
+            });
+          }
+
+          if (pushEnabled && notifSettings?.vapidSubscription) {
+            await sendWebPush(notifSettings.vapidSubscription as PushSubscription, {
+              title: `Relance — ${jp.company}`,
+              body: `N'oublie pas de relancer pour "${jp.title}"`,
+              url: process.env.PUBLIC_APP_URL ?? 'https://joblog.arthurjenck.com',
+            });
+          }
+
+          const nextAt = new Date(now.getTime() + frequencyDays * 24 * 60 * 60 * 1000);
+
+          await appCol.updateOne(
+            { _id: app._id },
+            {
+              $inc: { 'reminder.sentCount': 1 },
+              $set: { 'reminder.at': nextAt, updated_at: now },
+            }
+          );
+
+          sent++;
+        } catch (error) {
+          failed++;
+          errors.push(
+            `${app._id.toString()}: ${error instanceof Error ? error.message : String(error)}`
+          );
+        }
+      }
+
+      try {
+        jinaAlert = await checkJinaUsageAlerts();
+      } catch (error) {
+        jinaAlert = {
+          checked: false,
+          sent: 0,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+
+      try {
+        firecrawlAlert = await checkFirecrawlUsageAlerts();
+      } catch (error) {
+        firecrawlAlert = {
+          checked: false,
+          sent: 0,
+          error: error instanceof Error ? error.message : String(error),
+        };
+      }
+
+      return {
+        json: {
+          processed: due.length,
+          sent,
+          failed,
+          skipped,
+          jinaAlert,
+          firecrawlAlert,
+          errors: errors.slice(0, 10),
+        },
+      };
+    },
+  }),
+});

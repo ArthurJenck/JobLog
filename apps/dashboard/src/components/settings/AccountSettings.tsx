@@ -4,12 +4,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import { isSoundEnabled, setSoundEnabled } from '@/lib/sound';
 import { useUser } from '@/hooks/use-user';
+import { useConfirm } from '@/hooks/useConfirm';
 import { ProfileForm } from './ProfileForm';
 
 export function AccountSettings() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [soundEnabled, setSoundEnabledState] = useState(isSoundEnabled);
   const { user, loading: userLoading } = useUser();
+  const { confirm, confirmDialog } = useConfirm();
 
   function toggleSound(checked: boolean) {
     setSoundEnabledState(checked);
@@ -17,7 +19,13 @@ export function AccountSettings() {
   }
 
   async function deleteAccount() {
-    if (!confirm('Supprimer définitivement ton compte et toutes tes données ? Cette action est irréversible.')) return;
+    const ok = await confirm({
+      title: 'Supprimer définitivement ton compte ?',
+      description:
+        'Toutes tes données (candidatures, CVs…) seront effacées. Cette action est irréversible.',
+      confirmLabel: 'Continuer',
+    });
+    if (!ok) return;
     const confirm2 = window.prompt('Tape "SUPPRIMER" pour confirmer.');
     if (confirm2 !== 'SUPPRIMER') return;
 
@@ -32,6 +40,7 @@ export function AccountSettings() {
 
   return (
     <div className="flex flex-col gap-6 max-w-md">
+      {confirmDialog}
       <div className="rounded-lg border p-4 flex flex-col gap-4">
         <div>
           <p className="text-sm font-medium">Profil</p>

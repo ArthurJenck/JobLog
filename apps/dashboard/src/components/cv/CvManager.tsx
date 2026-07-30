@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { localDayKey } from '@joblog/shared';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -6,7 +8,8 @@ import { Separator } from '@/components/ui/separator';
 import { CvUpload } from './CvUpload';
 import { CvSkillsPanel } from './CvSkillsPanel';
 import { api } from '@/lib/api';
-import { useTasks } from '@/lib/app-context';
+import { qk } from '@/lib/query-keys';
+import { useConfirm } from '@/hooks/useConfirm';
 import type { Cv } from '@joblog/shared';
 import {
   FileTextIcon,
@@ -17,42 +20,46 @@ import {
 } from 'lucide-react';
 
 export function CvManager() {
-  const { refreshTasks } = useTasks();
-  const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
+  const qc = useQueryClient();
+  const { confirm, confirmDialog } = useConfirm();
   const [showUpload, setShowUpload] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState('');
 
-  async function load() {
-    setIsLoading(true);
-    try {
-      const { data } = await api.cvs.list();
-      setCvs(data);
-    } finally {
-      setIsLoading(false);
-    }
+  const cvsQuery = useQuery({
+    queryKey: qk.cvs.all,
+    queryFn: () => api.cvs.list().then((r) => r.data),
+  });
+  const cvs = cvsQuery.data ?? [];
+
+  const invalidateCvs = () => qc.invalidateQueries({ queryKey: qk.cvs.all });
+
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.cvs.delete(id),
+    onSuccess: () => invalidateCvs(),
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, body }: { id: string; body: { label?: string; isDefault?: boolean } }) =>
+      api.cvs.update(id, body),
+    onSuccess: () => {
+      setRenamingId(null);
+      return invalidateCvs();
+    },
+  });
+
+  function handleUploaded() {
+    void invalidateCvs();
+    void qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) });
   }
 
-  useEffect(() => {
-    let active = true;
-    api.cvs
-      .list()
-      .then(({ data }) => {
-        if (active) setCvs(data);
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   async function deleteCv(id: string) {
-    if (!confirm('Supprimer ce CV ?')) return;
-    await api.cvs.delete(id);
-    load();
+    const ok = await confirm({
+      title: 'Supprimer ce CV ?',
+      confirmLabel: 'Supprimer',
+    });
+    if (!ok) return;
+    deleteMutation.mutate(id);
   }
 
   function startRename(cv: Omit<Cv, 'content'>) {
@@ -60,17 +67,14 @@ export function CvManager() {
     setRenameValue(cv.label);
   }
 
-  async function confirmRename(id: string) {
+  function confirmRename(id: string) {
     const trimmed = renameValue.trim();
     if (!trimmed) return;
-    await api.cvs.update(id, { label: trimmed });
-    setRenamingId(null);
-    load();
+    updateMutation.mutate({ id, body: { label: trimmed } });
   }
 
-  async function setDefault(id: string) {
-    await api.cvs.update(id, { isDefault: true });
-    load();
+  function setDefault(id: string) {
+    updateMutation.mutate({ id, body: { isDefault: true } });
   }
 
   function cancelRename() {
@@ -78,19 +82,15 @@ export function CvManager() {
     setRenameValue('');
   }
 
-  if (isLoading) {
+  if (cvsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Chargement…</p>;
   }
 
   return (
     <div className="flex flex-col gap-4 max-w-3xl">
+      {confirmDialog}
       {cvs.length === 0 ? (
-        <CvUpload
-          onUploaded={() => {
-            load();
-            refreshTasks();
-          }}
-        />
+        <CvUpload onUploaded={handleUploaded} />
       ) : (
         <>
           <div className="flex items-center justify-between">
@@ -111,8 +111,7 @@ export function CvManager() {
               <CvUpload
                 onUploaded={() => {
                   setShowUpload(false);
-                  load();
-                  refreshTasks();
+                  handleUploaded();
                 }}
               />
               <Separator />

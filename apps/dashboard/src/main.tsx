@@ -1,9 +1,11 @@
 import { createRouter, RouterProvider } from '@tanstack/react-router';
+import { QueryClientProvider } from '@tanstack/react-query';
 import { Analytics } from '@vercel/analytics/react';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
 import { routeTree } from './routeTree.gen';
+import { queryClient } from '@/lib/query-client';
 
 const router = createRouter({ routeTree, defaultPreload: 'intent' });
 
@@ -15,7 +17,9 @@ declare module '@tanstack/react-router' {
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    <RouterProvider router={router} />
-    <Analytics />
+    <QueryClientProvider client={queryClient}>
+      <RouterProvider router={router} />
+      <Analytics />
+    </QueryClientProvider>
   </StrictMode>
 );

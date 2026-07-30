@@ -1,8 +1,9 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
+import { withStringIds } from '../../lib/http/serialize.js';
 
 const CreatePlatformSchema = z.object({
   url: z.string().url(),
@@ -26,112 +27,109 @@ const ClickAllPlatformsSchema = z.object({
   clickAll: z.literal(true),
 });
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return;
+export default defineHandler({
+  GET: method({
+    async handle({ user }) {
+      const col = await getCollection('platforms');
+      const platforms = await col.find({ userId: user.id }).sort({ order: 1, createdAt: -1 }).toArray();
+      return { json: { data: withStringIds(platforms) } };
+    },
+  }),
+  POST: method({
+    body: CreatePlatformSchema,
+    async handle({ user, body }) {
+      const { url, name, domain, faviconUrl } = body;
+      const col = await getCollection('platforms');
+      const now = new Date();
+      const order = await col.countDocuments({ userId: user.id });
 
-  const userId = session.user.id;
-  const col = await getCollection('platforms');
+      const doc = {
+        userId: user.id,
+        name,
+        url,
+        domain: domain ?? null,
+        faviconUrl: faviconUrl ?? null,
+        order,
+        lastClickedAt: null,
+        checkedAt: null,
+        createdAt: now,
+        updatedAt: now,
+      };
 
-  if (req.method === 'GET') {
-    const platforms = await col.find({ userId }).sort({ order: 1, createdAt: -1 }).toArray();
-    return res.status(200).json({
-      data: platforms.map((p) => ({ ...p, _id: p._id.toString() })),
-    });
-  }
+      const result = await col.insertOne(doc);
+      return { status: 201, json: { platformId: result.insertedId.toString() } };
+    },
+  }),
+  PATCH: method({
+    async handle({ user, query, req }) {
+      const { id } = query as { id?: string };
+      const col = await getCollection('platforms');
 
-  if (req.method === 'POST') {
-    const parsed = CreatePlatformSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      if (!id) {
+        if (req.body && typeof req.body === 'object' && 'clickAll' in req.body) {
+          const parsed = ClickAllPlatformsSchema.safeParse(req.body);
+          if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
 
-    const { url, name, domain, faviconUrl } = parsed.data;
-    const now = new Date();
-    const order = await col.countDocuments({ userId });
+          await col.updateMany(
+            { userId: user.id },
+            { $set: { lastClickedAt: new Date(), updatedAt: new Date() } },
+          );
+          return { json: { ok: true } };
+        }
 
-    const doc = {
-      userId,
-      name,
-      url,
-      domain: domain ?? null,
-      faviconUrl: faviconUrl ?? null,
-      order,
-      lastClickedAt: null,
-      checkedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
+        const parsed = ReorderPlatformsSchema.safeParse(req.body);
+        if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
 
-    const result = await col.insertOne(doc);
-    return res.status(201).json({ platformId: result.insertedId.toString() });
-  }
+        const ids = parsed.data.order;
+        if (!ids.every((platformId) => ObjectId.isValid(platformId))) {
+          throw ApiError.badRequest('Invalid id in order');
+        }
 
-  if (req.method === 'PATCH') {
-    const { id } = req.query as { id?: string };
-
-    if (!id) {
-      if (req.body && typeof req.body === 'object' && 'clickAll' in req.body) {
-        const parsed = ClickAllPlatformsSchema.safeParse(req.body);
-        if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-        await col.updateMany(
-          { userId },
-          { $set: { lastClickedAt: new Date(), updatedAt: new Date() } },
-        );
-        return res.status(200).json({ ok: true });
-      }
-
-      const parsed = ReorderPlatformsSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-      const ids = parsed.data.order;
-      if (!ids.every((platformId) => ObjectId.isValid(platformId))) {
-        return res.status(400).json({ error: 'Invalid id in order' });
-      }
-
-      await Promise.all(
-        ids.map((platformId, index) =>
-          col.updateOne(
-            { _id: new ObjectId(platformId), userId },
-            { $set: { order: index, updatedAt: new Date() } },
+        await Promise.all(
+          ids.map((platformId, index) =>
+            col.updateOne(
+              { _id: new ObjectId(platformId), userId: user.id },
+              { $set: { order: index, updatedAt: new Date() } },
+            ),
           ),
-        ),
+        );
+        return { json: { ok: true } };
+      }
+
+      if (!ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
+
+      const parsed = UpdatePlatformSchema.safeParse(req.body);
+      if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
+
+      const { name, url, clicked, checked } = parsed.data;
+      const update: Record<string, unknown> = {};
+      if (name !== undefined) update.name = name;
+      if (url !== undefined) update.url = url;
+      if (clicked) update.lastClickedAt = new Date();
+      if (checked !== undefined) update.checkedAt = checked ? new Date() : null;
+
+      if (Object.keys(update).length === 0) {
+        throw ApiError.badRequest('Nothing to update');
+      }
+      update.updatedAt = new Date();
+
+      const result = await col.updateOne(
+        { _id: new ObjectId(id), userId: user.id },
+        { $set: update },
       );
-      return res.status(200).json({ ok: true });
-    }
+      if (result.matchedCount === 0) throw ApiError.notFound();
+      return { json: { ok: true } };
+    },
+  }),
+  DELETE: method({
+    async handle({ user, query }) {
+      const { id } = query as { id?: string };
+      if (!id || !ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
 
-    if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
-
-    const parsed = UpdatePlatformSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-    const { name, url, clicked, checked } = parsed.data;
-    const update: Record<string, unknown> = {};
-    if (name !== undefined) update.name = name;
-    if (url !== undefined) update.url = url;
-    if (clicked) update.lastClickedAt = new Date();
-    if (checked !== undefined) update.checkedAt = checked ? new Date() : null;
-
-    if (Object.keys(update).length === 0) {
-      return res.status(400).json({ error: 'Nothing to update' });
-    }
-    update.updatedAt = new Date();
-
-    const result = await col.updateOne(
-      { _id: new ObjectId(id), userId },
-      { $set: update },
-    );
-    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
-    return res.status(200).json({ ok: true });
-  }
-
-  if (req.method === 'DELETE') {
-    const { id } = req.query as { id: string };
-    if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
-
-    const result = await col.deleteOne({ _id: new ObjectId(id), userId });
-    if (result.deletedCount === 0) return res.status(404).json({ error: 'Not found' });
-    return res.status(200).json({ ok: true });
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' });
-}
+      const col = await getCollection('platforms');
+      const result = await col.deleteOne({ _id: new ObjectId(id), userId: user.id });
+      if (result.deletedCount === 0) throw ApiError.notFound();
+      return { json: { ok: true } };
+    },
+  }),
+});

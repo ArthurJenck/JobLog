@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { z } from 'zod';
 
 let loaded = false;
 
@@ -57,3 +58,65 @@ export function requireEnv(key: string) {
   }
   return value;
 }
+
+export function getExtensionJwtSecret() {
+  return getEnv('EXTENSION_JWT_SECRET') || requireEnv('BETTER_AUTH_SECRET');
+}
+
+const envSchema = z.object({
+  MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
+  BETTER_AUTH_SECRET: z.string().min(1, 'BETTER_AUTH_SECRET is required'),
+  GOOGLE_CLIENT_ID: z.string().min(1, 'GOOGLE_CLIENT_ID is required'),
+  GOOGLE_CLIENT_SECRET: z.string().min(1, 'GOOGLE_CLIENT_SECRET is required'),
+  RESEND_API_KEY: z.string().min(1, 'RESEND_API_KEY is required'),
+  CRON_SECRET: z.string().min(1, 'CRON_SECRET is required'),
+  VAPID_PUBLIC_KEY: z.string().min(1, 'VAPID_PUBLIC_KEY is required'),
+  VAPID_PRIVATE_KEY: z.string().min(1, 'VAPID_PRIVATE_KEY is required'),
+  SNOOZE_JWT_SECRET: z.string().min(1, 'SNOOZE_JWT_SECRET is required'),
+
+  EXTENSION_JWT_SECRET: z.string().optional(),
+  GEMINI_API_KEY: z.string().optional(),
+  GEMINI_MODEL: z.string().optional(),
+  GEMINI_DAILY_QUOTA: z.string().optional(),
+  GEMINI_USER_DAILY_QUOTA: z.string().optional(),
+  FIRECRAWL_API_KEY: z.string().optional(),
+  JINA_API_KEY: z.string().optional(),
+  JINA_ALERT_EMAIL: z.string().optional(),
+  JINA_ESTIMATED_TOKEN_ALERT_THRESHOLD: z.string().optional(),
+  LOGO_DEV_SECRET_KEY: z.string().optional(),
+  VITE_LOGO_DEV_TOKEN: z.string().optional(),
+  ADMIN_MAIL: z.string().optional(),
+  RESEND_FROM: z.string().optional(),
+  RESEND_ALERT_FROM: z.string().optional(),
+  RESEND_AUTH_FROM: z.string().optional(),
+  RESEND_REMINDER_FROM: z.string().optional(),
+  PUBLIC_APP_URL: z.string().optional(),
+  PUBLIC_EXTENSION_URL: z.string().optional(),
+});
+
+export type Env = z.infer<typeof envSchema>;
+
+let validatedEnv: Env | null = null;
+
+function validateEnv(): Env {
+  if (validatedEnv) return validatedEnv;
+
+  loadLocalEnv();
+  const result = envSchema.safeParse(process.env);
+
+  if (!result.success) {
+    const details = result.error.issues
+      .map((issue) => `${issue.path.join('.')}: ${issue.message}`)
+      .join('; ');
+    throw new Error(`Invalid environment configuration - ${details}`);
+  }
+
+  validatedEnv = result.data;
+  return validatedEnv;
+}
+
+export const env: Env = new Proxy({} as Env, {
+  get(_target, prop: string) {
+    return validateEnv()[prop as keyof Env];
+  },
+});

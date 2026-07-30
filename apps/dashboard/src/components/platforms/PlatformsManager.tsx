@@ -1,4 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { localDayKey } from '@joblog/shared';
 import {
   DndContext,
   PointerSensor,
@@ -19,6 +21,7 @@ import { PlatformRow } from './PlatformRow';
 import { AddPlatformForm } from './AddPlatformForm';
 import { api } from '@/lib/api';
 import type { Platform } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
 import { ExternalLinkIcon } from 'lucide-react';
 import { toast } from 'sonner';
 import { isSameLocalDay } from '@/lib/platformReminder';
@@ -31,7 +34,7 @@ import {
   playCancel,
 } from '@/lib/sound';
 import { useAllDoneCelebration } from '@/hooks/useAllDoneCelebration';
-import { useTasks } from '@/lib/app-context';
+import { useConfirm } from '@/hooks/useConfirm';
 
 function isValidUrl(value: string) {
   try {
@@ -43,14 +46,24 @@ function isValidUrl(value: string) {
 }
 
 export function PlatformsManager() {
-  const [platforms, setPlatforms] = useState<Platform[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const qc = useQueryClient();
+  const { confirm, confirmDialog } = useConfirm();
   const [showAdd, setShowAdd] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
   const [editUrl, setEditUrl] = useState('');
   const [brokenFavicons, setBrokenFavicons] = useState<Set<string>>(new Set());
-  const { refreshTasks } = useTasks();
+
+  const platformsQuery = useQuery({
+    queryKey: qk.platforms.all,
+    queryFn: () => api.platforms.list().then((r) => r.data),
+  });
+  const platforms = platformsQuery.data ?? [];
+
+  const setPlatformsData = (updater: (prev: Platform[]) => Platform[]) =>
+    qc.setQueryData<Platform[]>(qk.platforms.all, (prev) => updater(prev ?? []));
+  const invalidatePlatforms = () =>
+    qc.invalidateQueries({ queryKey: qk.platforms.all });
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -59,41 +72,36 @@ export function PlatformsManager() {
     }),
   );
 
-  async function load() {
-    setIsLoading(true);
-    try {
-      const { data } = await api.platforms.list();
-      setPlatforms(data);
-    } finally {
-      setIsLoading(false);
-    }
-  }
-
-  useEffect(() => {
-    let active = true;
-    api.platforms
-      .list()
-      .then(({ data }) => {
-        if (active) setPlatforms(data);
-      })
-      .finally(() => {
-        if (active) setIsLoading(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
-
   const allChecked =
     platforms.length > 0 && platforms.every((p) => isSameLocalDay(p.checkedAt));
 
   useAllDoneCelebration(allChecked);
 
+  const deleteMutation = useMutation({
+    mutationFn: (id: string) => api.platforms.delete(id),
+    onSuccess: async () => {
+      playDelete();
+      await invalidatePlatforms();
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: ({ id, name, url }: { id: string; name: string; url: string }) =>
+      api.platforms.update(id, { name, url }),
+    onSuccess: async () => {
+      playAdd();
+      setEditingId(null);
+      await invalidatePlatforms();
+    },
+  });
+
   async function deletePlatform(id: string) {
-    if (!confirm('Supprimer cette plateforme ?')) return;
-    await api.platforms.delete(id);
-    playDelete();
-    load();
+    const ok = await confirm({
+      title: 'Supprimer cette plateforme ?',
+      confirmLabel: 'Supprimer',
+    });
+    if (!ok) return;
+    deleteMutation.mutate(id);
   }
 
   function startEdit(platform: Platform) {
@@ -102,7 +110,7 @@ export function PlatformsManager() {
     setEditUrl(platform.url);
   }
 
-  async function confirmEdit(id: string) {
+  function confirmEdit(id: string) {
     const trimmedName = editName.trim();
     const trimmedUrl = editUrl.trim();
     if (!trimmedName) return;
@@ -111,10 +119,7 @@ export function PlatformsManager() {
       toast.error('URL invalide');
       return;
     }
-    await api.platforms.update(id, { name: trimmedName, url: trimmedUrl });
-    playAdd();
-    setEditingId(null);
-    load();
+    updateMutation.mutate({ id, name: trimmedName, url: trimmedUrl });
   }
 
   function cancelEdit() {
@@ -136,7 +141,7 @@ export function PlatformsManager() {
     openInNewTab(platform.url);
     playPageOpen();
     const now = new Date().toISOString();
-    setPlatforms((prev) =>
+    setPlatformsData((prev) =>
       prev.map((p) =>
         p._id === platform._id ? { ...p, lastClickedAt: now } : p,
       ),
@@ -151,7 +156,7 @@ export function PlatformsManager() {
     platforms.forEach((platform) => openInNewTab(platform.url));
     playPageOpen();
     const now = new Date().toISOString();
-    setPlatforms((prev) => prev.map((p) => ({ ...p, lastClickedAt: now })));
+    setPlatformsData((prev) => prev.map((p) => ({ ...p, lastClickedAt: now })));
     api.platforms.markAllClicked().catch(() => {
       playError();
       toast.error("Impossible d'enregistrer l'ouverture");
@@ -160,18 +165,18 @@ export function PlatformsManager() {
 
   async function toggleChecked(platform: Platform, checked: boolean) {
     const now = new Date().toISOString();
-    setPlatforms((prev) =>
+    setPlatformsData((prev) =>
       prev.map((p) =>
         p._id === platform._id ? { ...p, checkedAt: checked ? now : null } : p,
       ),
     );
     try {
       await api.platforms.setChecked(platform._id, checked);
-      void refreshTasks();
+      void qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) });
     } catch {
       playError();
       toast.error('Impossible de mettre à jour la plateforme');
-      load();
+      void invalidatePlatforms();
     }
   }
 
@@ -184,7 +189,7 @@ export function PlatformsManager() {
     if (oldIndex === -1 || newIndex === -1) return;
 
     const reordered = arrayMove(platforms, oldIndex, newIndex);
-    setPlatforms(reordered);
+    setPlatformsData(() => reordered);
     playDrop();
 
     try {
@@ -192,21 +197,22 @@ export function PlatformsManager() {
     } catch {
       playError();
       toast.error('Impossible de réorganiser les plateformes');
-      load();
+      void invalidatePlatforms();
     }
   }
 
   async function handlePlatformAdded() {
-    await load();
+    await invalidatePlatforms();
     setShowAdd(true);
   }
 
-  if (isLoading) {
+  if (platformsQuery.isLoading) {
     return <p className="text-sm text-muted-foreground">Chargement…</p>;
   }
 
   return (
     <div className="flex flex-col gap-4 max-w-3xl">
+      {confirmDialog}
       <div className="flex flex-col gap-1">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <Button

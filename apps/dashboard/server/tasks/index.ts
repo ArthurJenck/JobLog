@@ -1,8 +1,3 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { ObjectId, type WithId } from 'mongodb';
-import { z } from 'zod';
-import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
 import {
   TASK_RECURRENCES,
   TASK_CATALOG,
@@ -11,6 +6,11 @@ import {
   type TaskRecurrence,
   type TaskDetectionSignal,
 } from '@joblog/shared';
+import { ObjectId, type WithId } from 'mongodb';
+import { z } from 'zod';
+import { getCollection } from '../../lib/db.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
 
 interface TaskDoc {
   userId: string;
@@ -220,50 +220,73 @@ async function enrichWithDetection(
   );
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return;
+export default defineHandler({
+  GET: method({
+    async handle({ user, query }) {
+      const userId = user.id;
+      await seedDefaultTasks(userId);
 
-  const userId = session.user.id;
-  const col = await getCollection<TaskDoc>('quest_templates');
+      const { dayStart, dayEnd } = query as { dayStart?: string; dayEnd?: string };
+      const col = await getCollection<TaskDoc>('quest_templates');
+      const tasks = await col.find({ userId }).sort({ order: 1, createdAt: 1 }).toArray();
+      const enriched = await enrichWithDetection(tasks, userId, dayStart, dayEnd);
 
-  if (req.method === 'GET') {
-    await seedDefaultTasks(userId);
+      return { json: { data: enriched } };
+    },
+  }),
+  POST: method({
+    async handle({ user, req }) {
+      const userId = user.id;
+      const col = await getCollection<TaskDoc>('quest_templates');
+      const now = new Date();
 
-    const { dayStart, dayEnd } = req.query as { dayStart?: string; dayEnd?: string };
-    const tasks = await col.find({ userId }).sort({ order: 1, createdAt: 1 }).toArray();
-    const enriched = await enrichWithDetection(tasks, userId, dayStart, dayEnd);
+      if (req.body && typeof req.body === 'object' && 'key' in req.body) {
+        const parsed = ActivateCatalogTaskSchema.safeParse(req.body);
+        if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
 
-    return res.status(200).json({ data: enriched });
-  }
+        const entry = TASK_CATALOG.find((c) => c.key === parsed.data.key);
+        if (!entry) throw ApiError.badRequest('Unknown catalog task');
 
-  if (req.method === 'POST') {
-    const now = new Date();
+        const existing = await col.findOne({ userId, key: entry.key });
+        if (existing) {
+          await col.updateOne(
+            { _id: existing._id },
+            { $set: { enabled: true, removed: false, updatedAt: now } },
+          );
+          return { json: { taskId: existing._id.toString() } };
+        }
 
-    if (req.body && typeof req.body === 'object' && 'key' in req.body) {
-      const parsed = ActivateCatalogTaskSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-      const entry = TASK_CATALOG.find((c) => c.key === parsed.data.key);
-      if (!entry) return res.status(400).json({ error: 'Unknown catalog task' });
-
-      const existing = await col.findOne({ userId, key: entry.key });
-      if (existing) {
-        await col.updateOne(
-          { _id: existing._id },
-          { $set: { enabled: true, removed: false, updatedAt: now } },
-        );
-        return res.status(200).json({ taskId: existing._id.toString() });
+        const order = await col.countDocuments({ userId });
+        const doc = {
+          userId,
+          key: entry.key,
+          title: entry.title,
+          recurrence: entry.recurrence,
+          target: entry.defaultTarget,
+          detectionSignal: entry.detectionSignal,
+          enabled: true,
+          removed: false,
+          order,
+          completedAt: null,
+          createdAt: now,
+          updatedAt: now,
+        };
+        const result = await col.insertOne(doc);
+        return { status: 201, json: { taskId: result.insertedId.toString() } };
       }
 
+      const parsed = CreateCustomTaskSchema.safeParse(req.body);
+      if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
+
+      const { title, recurrence, target } = parsed.data;
       const order = await col.countDocuments({ userId });
       const doc = {
         userId,
-        key: entry.key,
-        title: entry.title,
-        recurrence: entry.recurrence,
-        target: entry.defaultTarget,
-        detectionSignal: entry.detectionSignal,
+        key: null,
+        title,
+        recurrence,
+        target: target ?? null,
+        detectionSignal: null,
         enabled: true,
         removed: false,
         order,
@@ -272,92 +295,74 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         updatedAt: now,
       };
       const result = await col.insertOne(doc);
-      return res.status(201).json({ taskId: result.insertedId.toString() });
-    }
+      return { status: 201, json: { taskId: result.insertedId.toString() } };
+    },
+  }),
+  PATCH: method({
+    async handle({ user, query, req }) {
+      const userId = user.id;
+      const { id } = query as { id?: string };
+      const col = await getCollection<TaskDoc>('quest_templates');
 
-    const parsed = CreateCustomTaskSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      if (!id) {
+        const parsed = ReorderTasksSchema.safeParse(req.body);
+        if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
 
-    const { title, recurrence, target } = parsed.data;
-    const order = await col.countDocuments({ userId });
-    const doc = {
-      userId,
-      key: null,
-      title,
-      recurrence,
-      target: target ?? null,
-      detectionSignal: null,
-      enabled: true,
-      removed: false,
-      order,
-      completedAt: null,
-      createdAt: now,
-      updatedAt: now,
-    };
-    const result = await col.insertOne(doc);
-    return res.status(201).json({ taskId: result.insertedId.toString() });
-  }
+        const ids = parsed.data.order;
+        if (!ids.every((taskId) => ObjectId.isValid(taskId))) {
+          throw ApiError.badRequest('Invalid id in order');
+        }
 
-  if (req.method === 'PATCH') {
-    const { id } = req.query as { id?: string };
-
-    if (!id) {
-      const parsed = ReorderTasksSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-      const ids = parsed.data.order;
-      if (!ids.every((taskId) => ObjectId.isValid(taskId))) {
-        return res.status(400).json({ error: 'Invalid id in order' });
+        await Promise.all(
+          ids.map((taskId, index) =>
+            col.updateOne(
+              { _id: new ObjectId(taskId), userId },
+              { $set: { order: index, updatedAt: new Date() } },
+            ),
+          ),
+        );
+        return { json: { ok: true } };
       }
 
-      await Promise.all(
-        ids.map((taskId, index) =>
-          col.updateOne(
-            { _id: new ObjectId(taskId), userId },
-            { $set: { order: index, updatedAt: new Date() } },
-          ),
-        ),
-      );
-      return res.status(200).json({ ok: true });
-    }
+      if (!ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
 
-    if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
+      const parsed = UpdateTaskSchema.safeParse(req.body);
+      if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
 
-    const parsed = UpdateTaskSchema.safeParse(req.body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const { title, recurrence, target, enabled, removed, completed } = parsed.data;
+      const update: Record<string, unknown> = {};
+      if (title !== undefined) update.title = title;
+      if (recurrence !== undefined) update.recurrence = recurrence;
+      if (target !== undefined) update.target = target;
+      if (enabled !== undefined) update.enabled = enabled;
+      if (removed !== undefined) update.removed = removed;
+      if (completed !== undefined) update.completedAt = completed ? new Date() : null;
 
-    const { title, recurrence, target, enabled, removed, completed } = parsed.data;
-    const update: Record<string, unknown> = {};
-    if (title !== undefined) update.title = title;
-    if (recurrence !== undefined) update.recurrence = recurrence;
-    if (target !== undefined) update.target = target;
-    if (enabled !== undefined) update.enabled = enabled;
-    if (removed !== undefined) update.removed = removed;
-    if (completed !== undefined) update.completedAt = completed ? new Date() : null;
+      if (Object.keys(update).length === 0) {
+        throw ApiError.badRequest('Nothing to update');
+      }
+      update.updatedAt = new Date();
 
-    if (Object.keys(update).length === 0) {
-      return res.status(400).json({ error: 'Nothing to update' });
-    }
-    update.updatedAt = new Date();
+      const result = await col.updateOne({ _id: new ObjectId(id), userId }, { $set: update });
+      if (result.matchedCount === 0) throw ApiError.notFound();
+      return { json: { ok: true } };
+    },
+  }),
+  DELETE: method({
+    async handle({ user, query }) {
+      const userId = user.id;
+      const { id } = query as { id?: string };
+      if (!id || !ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
 
-    const result = await col.updateOne({ _id: new ObjectId(id), userId }, { $set: update });
-    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
-    return res.status(200).json({ ok: true });
-  }
+      const col = await getCollection<TaskDoc>('quest_templates');
+      const task = await col.findOne({ _id: new ObjectId(id), userId });
+      if (!task) throw ApiError.notFound();
+      if (task.key !== null) {
+        throw ApiError.badRequest('Une quête du catalogue ne peut être que désactivée');
+      }
 
-  if (req.method === 'DELETE') {
-    const { id } = req.query as { id: string };
-    if (!id || !ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
-
-    const task = await col.findOne({ _id: new ObjectId(id), userId });
-    if (!task) return res.status(404).json({ error: 'Not found' });
-    if (task.key !== null) {
-      return res.status(400).json({ error: 'Une quête du catalogue ne peut être que désactivée' });
-    }
-
-    await col.deleteOne({ _id: new ObjectId(id), userId });
-    return res.status(200).json({ ok: true });
-  }
-
-  return res.status(405).json({ error: 'Method not allowed' });
-}
+      await col.deleteOne({ _id: new ObjectId(id), userId });
+      return { json: { ok: true } };
+    },
+  }),
+});

@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Textarea } from '@/components/ui/textarea';
 import { SparklesIcon, CheckCircleIcon, XCircleIcon } from 'lucide-react';
-import { api, type AnalysisResult } from '@/lib/api';
+import { api } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
 
 interface Props {
   applicationId: string;
   cvId: string | null;
 }
-
-const inFlightAnalyses = new Map<string, Promise<AnalysisResult>>();
 
 function mapAnalysisError(e: unknown): { error: string; needsJobDescription: boolean } {
   const apiError = e as { code?: string; status?: number; message?: string };
@@ -37,101 +37,73 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
 }
 
 function AnalyzePanelInner({ applicationId, cvId }: Props) {
-  const [result, setResult] = useState<AnalysisResult | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [isCheckingCache, setIsCheckingCache] = useState(() => Boolean(cvId));
+  const qc = useQueryClient();
   const [error, setError] = useState('');
   const [needsJobDescription, setNeedsJobDescription] = useState(false);
   const [jobDescription, setJobDescription] = useState('');
 
-  useEffect(() => {
-    if (!cvId) return;
+  const analysisKey = qk.analyses(cvId ?? 'none', applicationId);
 
-    let isCancelled = false;
-    const key = `${applicationId}:${cvId}`;
-
-    const pending = inFlightAnalyses.get(key);
-    if (pending) {
-      setIsCheckingCache(false);
-      setIsLoading(true);
-      pending
-        .then((data) => {
-          if (!isCancelled) setResult(data);
-        })
-        .catch((e) => {
-          if (!isCancelled) {
-            const mapped = mapAnalysisError(e);
-            if (mapped.needsJobDescription) setNeedsJobDescription(true);
-            setError(mapped.error);
-          }
-        })
-        .finally(() => {
-          if (!isCancelled) setIsLoading(false);
-        });
-
-      return () => {
-        isCancelled = true;
-      };
-    }
-
-    api.analyses
-      .getCached({ cvId, applicationId })
-      .then(({ analysis }) => {
-        if (!isCancelled) setResult(analysis);
-      })
-      .catch((e) => {
-        if (!isCancelled) {
-          const apiError = e as { code?: string; message?: string };
-          if (apiError.code === 'no_comparison_data') {
-            setNeedsJobDescription(true);
-            setError(apiError.message ?? 'Aucune donnée à comparer avec votre CV.');
-          } else {
-            setError(e instanceof Error ? e.message : 'Erreur inconnue');
-          }
-        }
-      })
-      .finally(() => {
-        if (!isCancelled) setIsCheckingCache(false);
+  const cacheQuery = useQuery({
+    queryKey: analysisKey,
+    queryFn: async () => {
+      const { analysis } = await api.analyses.getCached({
+        cvId: cvId!,
+        applicationId,
       });
+      return analysis;
+    },
+    enabled: Boolean(cvId),
+    retry: false,
+  });
 
-    return () => {
-      isCancelled = true;
-    };
-  }, [applicationId, cvId]);
+  useEffect(() => {
+    if (!cacheQuery.error) return;
+    const apiError = cacheQuery.error as { code?: string; message?: string };
+    if (apiError.code === 'no_comparison_data') {
+      setNeedsJobDescription(true);
+      setError(apiError.message ?? 'Aucune donnée à comparer avec votre CV.');
+    } else {
+      setError(
+        cacheQuery.error instanceof Error
+          ? cacheQuery.error.message
+          : 'Erreur inconnue',
+      );
+    }
+  }, [cacheQuery.error]);
 
-  async function analyze(options?: { force?: boolean }) {
+  const analyzeMutation = useMutation({
+    mutationFn: (options?: { force?: boolean }) =>
+      api.analyses.create({
+        cvId: cvId!,
+        applicationId,
+        force: options?.force,
+        jobDescription: jobDescription.trim() || undefined,
+      }),
+    onSuccess: (data) => {
+      setError('');
+      qc.setQueryData(analysisKey, data);
+    },
+    onError: (e) => {
+      const mapped = mapAnalysisError(e);
+      if (mapped.needsJobDescription) setNeedsJobDescription(true);
+      setError(mapped.error);
+    },
+  });
+
+  const result = cacheQuery.data ?? null;
+  const isCheckingCache = cacheQuery.isLoading;
+  const isLoading = analyzeMutation.isPending;
+
+  function analyze(options?: { force?: boolean }) {
     if (!cvId) return;
     const pastedJobDescription = jobDescription.trim();
     if (needsJobDescription && pastedJobDescription.length < 40) {
       setError('Collez le texte de l’offre pour lancer l’analyse.');
       return;
     }
-
-    setIsLoading(true);
-    setIsCheckingCache(false);
     setError('');
-    if (options?.force) setResult(null);
-
-    const key = `${applicationId}:${cvId}`;
-    const promise = api.analyses.create({
-      cvId,
-      applicationId,
-      force: options?.force,
-      jobDescription: pastedJobDescription || undefined,
-    });
-    inFlightAnalyses.set(key, promise);
-
-    try {
-      const data = await promise;
-      setResult(data);
-    } catch (e) {
-      const mapped = mapAnalysisError(e);
-      if (mapped.needsJobDescription) setNeedsJobDescription(true);
-      setError(mapped.error);
-    } finally {
-      if (inFlightAnalyses.get(key) === promise) inFlightAnalyses.delete(key);
-      setIsLoading(false);
-    }
+    analyzeMutation.mutate(options);
   }
 
   if (isLoading || isCheckingCache) {

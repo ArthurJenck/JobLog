@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { localDayKey } from '@joblog/shared';
 import {
   Sheet,
   SheetClose,
@@ -34,6 +36,8 @@ import { ContactFields } from './ContactFields';
 import { NotesField } from './NotesField';
 import { ReminderFields } from './ReminderFields';
 import { api } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
+import { useConfirm } from '@/hooks/useConfirm';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import { toast } from 'sonner';
@@ -56,7 +60,6 @@ import {
   type ContractType,
   type RemoteType,
   type EventType,
-  type Cv,
 } from '@joblog/shared';
 import {
   ExternalLinkIcon,
@@ -69,9 +72,14 @@ interface Props {
   application: ApplicationWithJob | null;
   open: boolean;
   onClose: () => void;
-  onUpdated: () => void;
-  onPatch: (id: string, body: Record<string, unknown>) => Promise<void>;
 }
+
+type ApplicationListPage = {
+  data: ApplicationWithJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+};
 
 function scrapeFailureHint(
   category: ApplicationWithJob['jobPosting']['scrape_error_category'],
@@ -89,70 +97,142 @@ function scrapeFailureHint(
   }
 }
 
-export function ApplicationDetail({
-  application,
-  open,
-  onClose,
-  onUpdated,
-  onPatch,
-}: Props) {
-  const [cvs, setCvs] = useState<Omit<Cv, 'content'>[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isRetryingScrape, setIsRetryingScrape] = useState(false);
+export function ApplicationDetail({ application, open, onClose }: Props) {
+  const qc = useQueryClient();
+  const { confirm, confirmDialog } = useConfirm();
   const [cancelAllOpen, setCancelAllOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      api.cvs
-        .list()
-        .then((r) => setCvs(r.data))
-        .catch(() => {});
-    }
-  }, [open]);
+  const cvsQuery = useQuery({
+    queryKey: qk.cvs.all,
+    queryFn: () => api.cvs.list().then((r) => r.data),
+    enabled: open,
+  });
+  const cvs = cvsQuery.data ?? [];
 
-  if (!application) return null;
+  const id = application?._id ?? '';
 
-  const jp = application.jobPosting;
-  const logoUrl = getCompanyLogoUrl(jp, 80);
-  const scrapeStatus = getJobScrapeStatus(jp);
-  const scrapeReady = scrapeStatus === 'succeeded';
-  const canEditJob = scrapeReady || scrapeStatus === 'failed';
-  const defaultCv =
-    cvs.find((cv) => cv.isDefault) ?? (cvs.length === 1 ? cvs[0] : undefined);
-  const effectiveCvId = application.cvId ?? defaultCv?._id ?? null;
+  const invalidateAll = () =>
+    Promise.all([
+      qc.invalidateQueries({ queryKey: qk.applications.all }),
+      qc.invalidateQueries({ queryKey: qk.stats }),
+      qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) }),
+    ]);
+
+  const patchMutation = useMutation({
+    mutationFn: (body: Record<string, unknown>) =>
+      api.applications.patch(id, body),
+    onMutate: async (body) => {
+      await qc.cancelQueries({ queryKey: qk.applications.all });
+      const prevDetail = qc.getQueryData<ApplicationWithJob>(
+        qk.applications.detail(id),
+      );
+      qc.setQueryData<ApplicationWithJob>(qk.applications.detail(id), (curr) =>
+        curr ? { ...curr, ...body } : curr,
+      );
+      qc.setQueriesData<ApplicationListPage>(
+        { queryKey: ['applications', 'list'] },
+        (page) =>
+          page
+            ? {
+                ...page,
+                data: page.data.map((a) =>
+                  a._id === id ? { ...a, ...body } : a,
+                ),
+              }
+            : page,
+      );
+      return { prevDetail };
+    },
+    onError: (_err, _body, context) => {
+      playError();
+      toast.error('Impossible de mettre à jour la candidature');
+      if (context?.prevDetail) {
+        qc.setQueryData(qk.applications.detail(id), context.prevDetail);
+      }
+    },
+    onSettled: () => invalidateAll(),
+  });
+
+  const addEventMutation = useMutation({
+    mutationFn: (input: { type: EventType; meta?: Record<string, unknown> }) =>
+      api.applications.addEvent(id, {
+        type: input.type,
+        at: new Date().toISOString(),
+        meta: input.meta,
+      }),
+    onSuccess: () => invalidateAll(),
+  });
+
+  const deleteEventMutation = useMutation({
+    mutationFn: (input: { type: EventType; at: string }) =>
+      api.applications.deleteEvent(id, input),
+    onSuccess: () => invalidateAll(),
+  });
+
+  const updateEventDateMutation = useMutation({
+    mutationFn: (input: { type: EventType; at: string; newAt: string }) =>
+      api.applications.updateEventDate(id, input),
+    onSuccess: () => invalidateAll(),
+  });
+
+  const retryScrapeMutation = useMutation({
+    mutationFn: () => {
+      playLoading();
+      return api.jobPostings.retryFromUrl(id);
+    },
+    onSuccess: async () => {
+      playReady();
+      toast.success('Relance lancée', {
+        description: "La récupération de l'offre reprend en arrière-plan.",
+      });
+      await invalidateAll();
+    },
+    onError: (err) => {
+      playError();
+      toast.error('Relance impossible', {
+        description: err instanceof Error ? err.message : 'Erreur inconnue',
+      });
+    },
+  });
+
+  const cancelAllMutation = useMutation({
+    mutationFn: () => api.applications.cancelAll(id),
+    onSuccess: () => invalidateAll(),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => api.applications.delete(id),
+    onSuccess: async () => {
+      playDelete();
+      await invalidateAll();
+      onClose();
+    },
+  });
+
+  const isSaving = patchMutation.isPending;
+  const isRetryingScrape = retryScrapeMutation.isPending;
 
   async function patch(body: Record<string, unknown>) {
-    setIsSaving(true);
-    try {
-      await onPatch(application!._id, body);
-      if (body.status === 'accepted') {
-        setCancelAllOpen(true);
-        playAccepted();
-      } else if (
-        body.status === 'rejected' ||
-        body.status === 'ghosted' ||
-        body.status === 'cancelled'
-      ) {
-        playReject();
-      }
-    } finally {
-      setIsSaving(false);
+    await patchMutation.mutateAsync(body);
+    if (body.status === 'accepted') {
+      setCancelAllOpen(true);
+      playAccepted();
+    } else if (
+      body.status === 'rejected' ||
+      body.status === 'ghosted' ||
+      body.status === 'cancelled'
+    ) {
+      playReject();
     }
   }
 
   async function addEvent(type: EventType, meta?: Record<string, unknown>) {
-    await api.applications.addEvent(application!._id, {
-      type,
-      at: new Date().toISOString(),
-      meta,
-    });
-    onUpdated();
+    await addEventMutation.mutateAsync({ type, meta });
   }
 
   async function deleteEvent(type: EventType, at: string) {
-    await api.applications.deleteEvent(application!._id, { type, at });
-    onUpdated();
+    await deleteEventMutation.mutateAsync({ type, at });
   }
 
   async function confirmFuture(type: EventType) {
@@ -167,36 +247,35 @@ export function ApplicationDetail({
   }
 
   async function updateEventDate(type: EventType, at: string, newAt: string) {
-    await api.applications.updateEventDate(application!._id, {
-      type,
-      at,
-      newAt,
-    });
-    onUpdated();
+    await updateEventDateMutation.mutateAsync({ type, at, newAt });
   }
 
-  async function retryScrape() {
-    setIsRetryingScrape(true);
-    playLoading();
-    try {
-      await api.jobPostings.retryFromUrl(application!._id);
-      playReady();
-      toast.success('Relance lancée', {
-        description: "La récupération de l'offre reprend en arrière-plan.",
-      });
-      onUpdated();
-    } catch (err) {
-      playError();
-      toast.error('Relance impossible', {
-        description: err instanceof Error ? err.message : 'Erreur inconnue',
-      });
-    } finally {
-      setIsRetryingScrape(false);
-    }
+  function retryScrape() {
+    retryScrapeMutation.mutate();
   }
+
+  async function handleDelete() {
+    const ok = await confirm({
+      title: 'Supprimer cette candidature ?',
+      confirmLabel: 'Supprimer',
+    });
+    if (ok) deleteMutation.mutate();
+  }
+
+  if (!application) return null;
+
+  const jp = application.jobPosting;
+  const logoUrl = getCompanyLogoUrl(jp, 80);
+  const scrapeStatus = getJobScrapeStatus(jp);
+  const scrapeReady = scrapeStatus === 'succeeded';
+  const canEditJob = scrapeReady || scrapeStatus === 'failed';
+  const defaultCv =
+    cvs.find((cv) => cv.isDefault) ?? (cvs.length === 1 ? cvs[0] : undefined);
+  const effectiveCvId = application.cvId ?? defaultCv?._id ?? null;
 
   return (
     <>
+      {confirmDialog}
       <Dialog open={cancelAllOpen} onOpenChange={setCancelAllOpen}>
         <DialogContent className="max-w-sm">
           <DialogHeader>
@@ -216,10 +295,9 @@ export function ApplicationDetail({
             </Button>
             <Button
               size="sm"
-              onClick={async () => {
-                await api.applications.cancelAll(application._id);
+              onClick={() => {
+                cancelAllMutation.mutate();
                 setCancelAllOpen(false);
-                onUpdated();
               }}
             >
               Oui, tout annuler
@@ -231,7 +309,7 @@ export function ApplicationDetail({
         application={application}
         open={editJobOpen}
         onClose={() => setEditJobOpen(false)}
-        onSaved={onUpdated}
+        onSaved={() => void invalidateAll()}
       />
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
         <SheetContent
@@ -480,14 +558,7 @@ export function ApplicationDetail({
               <Button
                 variant="destructive"
                 size="sm"
-                onClick={async () => {
-                  if (confirm('Supprimer cette candidature ?')) {
-                    await api.applications.delete(application._id);
-                    playDelete();
-                    onUpdated();
-                    onClose();
-                  }
-                }}
+                onClick={handleDelete}
               >
                 Supprimer
               </Button>

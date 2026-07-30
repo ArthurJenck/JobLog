@@ -1,7 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { normalizeFrequencyDays } from '@joblog/shared';
 import { ObjectId } from 'mongodb';
 import { getCollection } from '../lib/db.js';
 import { getEnv } from '../lib/env.js';
+import { defineHandler, method } from '../lib/http/define-handler.js';
 import { verifySnoozeToken } from '../lib/snooze.js';
 
 function buildAppUrl(params: Record<string, string>) {
@@ -13,44 +14,57 @@ function buildAppUrl(params: Record<string, string>) {
   return url.toString();
 }
 
-function normalizeFrequencyDays(value: unknown) {
-  const days = Number(value);
-  return Number.isFinite(days) && days > 0 ? Math.trunc(days) : 7;
-}
+export default defineHandler({
+  GET: method({
+    auth: 'public',
+    async handle({ req, res }) {
+      const { token } = req.query as { token?: string };
+      if (!token) {
+        res.status(400).send('Token manquant.');
+        return;
+      }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  if (req.method !== 'GET') return res.status(405).json({ error: 'Method not allowed' });
+      const payload = verifySnoozeToken(token);
+      if (!payload) {
+        res.status(400).send('Lien invalide ou expiré.');
+        return;
+      }
+      if (!ObjectId.isValid(payload.applicationId)) {
+        res.status(400).send('Lien invalide.');
+        return;
+      }
 
-  const { token } = req.query as { token?: string };
-  if (!token) return res.status(400).send('Token manquant.');
+      const col = await getCollection('applications');
+      const appFilter = { _id: new ObjectId(payload.applicationId), userId: payload.userId };
+      const app = await col.findOne(appFilter, { projection: { reminder: 1 } }) as {
+        reminder?: { frequencyDays?: unknown };
+      } | null;
+      if (!app) {
+        res.status(404).send('Candidature introuvable.');
+        return;
+      }
 
-  const payload = verifySnoozeToken(token);
-  if (!payload) return res.status(400).send('Lien invalide ou expiré.');
-  if (!ObjectId.isValid(payload.applicationId)) return res.status(400).send('Lien invalide.');
+      const frequencyDays = normalizeFrequencyDays(app.reminder?.frequencyDays);
+      const snoozedUntil = new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
 
-  const col = await getCollection('applications');
-  const appFilter = { _id: new ObjectId(payload.applicationId), userId: payload.userId };
-  const app = await col.findOne(appFilter, { projection: { reminder: 1 } }) as {
-    reminder?: { frequencyDays?: unknown };
-  } | null;
-  if (!app) return res.status(404).send('Candidature introuvable.');
+      const result = await col.updateOne(
+        appFilter,
+        { $set: { 'reminder.snoozedUntil': snoozedUntil, updated_at: new Date() } }
+      );
 
-  const frequencyDays = normalizeFrequencyDays(app.reminder?.frequencyDays);
-  const snoozedUntil = new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
+      if (result.matchedCount === 0) {
+        res.status(404).send('Candidature introuvable.');
+        return;
+      }
 
-  const result = await col.updateOne(
-    appFilter,
-    { $set: { 'reminder.snoozedUntil': snoozedUntil, updated_at: new Date() } }
-  );
-
-  if (result.matchedCount === 0) return res.status(404).send('Candidature introuvable.');
-
-  res.writeHead(302, {
-    Location: buildAppUrl({
-      applicationId: payload.applicationId,
-      toast: 'reminder-snoozed',
-      snoozeDays: String(frequencyDays),
-    }),
-  });
-  res.end();
-}
+      res.writeHead(302, {
+        Location: buildAppUrl({
+          applicationId: payload.applicationId,
+          toast: 'reminder-snoozed',
+          snoozeDays: String(frequencyDays),
+        }),
+      });
+      res.end();
+    },
+  }),
+});

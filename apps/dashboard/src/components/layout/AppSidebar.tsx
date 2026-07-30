@@ -27,9 +27,14 @@ import { SidebarSummary } from '@/components/layout/SidebarSummary';
 import { TasksPanel } from '@/components/tasks/TasksPanel';
 import { DailyCelebration } from '@/components/streak/DailyCelebration';
 import { getExtensionStoreUrl } from '@/lib/extension-url';
-import { resetSessionCache, useTasks, useStreak } from '@/lib/app-context';
+import { localDayKey } from '@joblog/shared';
+import { resetSessionCache } from '@/hooks/queries/use-session';
+import {
+  useDailySync,
+  useStreakQuery,
+  useTasksQuery,
+} from '@/hooks/queries/use-daily';
 import { getPendingTasks } from '@/lib/taskHelpers';
-import { localDayKey } from '@/lib/platformReminder';
 
 const navItems = [
   { to: '/', label: 'Candidatures', icon: BriefcaseIcon },
@@ -45,8 +50,9 @@ export function AppSidebar() {
   const router = useRouter();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { isMobile, setOpenMobile } = useSidebar();
-  const { tasks } = useTasks();
-  const streak = useStreak();
+  useDailySync();
+  const { tasks } = useTasksQuery();
+  const streak = useStreakQuery();
   const hasPendingTasks = getPendingTasks(tasks).length > 0;
   const isPerfectToday = streak.lastPerfectDay === localDayKey();
   const extensionUrl = isMobile ? null : getExtensionStoreUrl();

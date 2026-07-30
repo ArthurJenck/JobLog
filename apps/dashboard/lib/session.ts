@@ -4,6 +4,7 @@ import jwt from 'jsonwebtoken';
 import { ObjectId } from 'mongodb';
 import { getAuth } from './auth.js';
 import { getCollection } from './db.js';
+import { getExtensionJwtSecret } from './env.js';
 
 interface SessionUser {
   id: string;
@@ -32,14 +33,30 @@ export async function requireSession(
   if (authHeader?.startsWith('Bearer ')) {
     const token = authHeader.slice(7);
     try {
-      const payload = jwt.verify(token, process.env.BETTER_AUTH_SECRET!) as {
+      const payload = jwt.verify(token, getExtensionJwtSecret(), {
+        algorithms: ['HS256'],
+        issuer: 'joblog',
+        audience: 'joblog-extension',
+      }) as {
         sub: string;
         email: string;
         type?: string;
+        iat?: number;
       };
       if (payload.type && payload.type !== 'access') {
         res.status(401).json({ error: 'Token invalide' });
         return null;
+      }
+      if (payload.iat) {
+        const revocations = await getCollection('token_revocations');
+        const revoked = await revocations.findOne({
+          userId: payload.sub,
+          revokedAt: { $gt: new Date(payload.iat * 1000) },
+        });
+        if (revoked) {
+          res.status(401).json({ error: 'Token révoqué' });
+          return null;
+        }
       }
       await touchLastActive(payload.sub);
       return { user: { id: payload.sub, email: payload.email } };

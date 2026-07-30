@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Button } from '@/components/ui/button';
 import {
   Select,
@@ -8,60 +9,59 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { api, type SkillCount } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
+import { useConfirm } from '@/hooks/useConfirm';
 import type { Cv } from '@joblog/shared';
 
 interface Props {
   cvs: Omit<Cv, 'content'>[];
 }
 
+const EMPTY_SKILLS: { present: SkillCount[]; missing: SkillCount[]; analyzedCount: number } = {
+  present: [],
+  missing: [],
+  analyzedCount: 0,
+};
+
 export function CvSkillsPanel({ cvs }: Props) {
+  const qc = useQueryClient();
+  const { confirm, confirmDialog } = useConfirm();
   const [selectedCvId, setSelectedCvId] = useState<string | null>(null);
-  const [loadedForId, setLoadedForId] = useState<string | null>(null);
-  const [present, setPresent] = useState<SkillCount[]>([]);
-  const [missing, setMissing] = useState<SkillCount[]>([]);
-  const [analyzedCount, setAnalyzedCount] = useState(0);
 
   const effectiveCvId =
     selectedCvId && cvs.some((cv) => cv._id === selectedCvId) ? selectedCvId : (cvs[0]?._id ?? null);
-  const isLoading = effectiveCvId !== null && loadedForId !== effectiveCvId;
 
-  useEffect(() => {
-    if (!effectiveCvId) return;
-    let active = true;
-    api.cvs
-      .skills(effectiveCvId)
-      .then((res) => {
-        if (!active) return;
-        setPresent(res.present);
-        setMissing(res.missing);
-        setAnalyzedCount(res.analyzedCount);
-        setLoadedForId(effectiveCvId);
-      })
-      .catch(() => {
-        if (!active) return;
-        setPresent([]);
-        setMissing([]);
-        setAnalyzedCount(0);
-        setLoadedForId(effectiveCvId);
-      });
-    return () => {
-      active = false;
-    };
-  }, [effectiveCvId]);
+  const skillsQuery = useQuery({
+    queryKey: effectiveCvId ? qk.cvs.skills(effectiveCvId) : qk.cvs.skills('none'),
+    queryFn: () => api.cvs.skills(effectiveCvId!),
+    enabled: !!effectiveCvId,
+  });
+  const { present, missing, analyzedCount } = skillsQuery.data ?? EMPTY_SKILLS;
+  const isLoading = skillsQuery.isLoading;
+
+  const resetMutation = useMutation({
+    mutationFn: (cvId: string) => api.cvs.resetAnalyses(cvId),
+    onSuccess: (_data, cvId) =>
+      qc.invalidateQueries({ queryKey: qk.cvs.skills(cvId) }),
+  });
 
   async function resetAnalyses() {
     if (!effectiveCvId) return;
-    if (!confirm('Réinitialiser les analyses de ce CV ? Elles seront recalculées à la demande depuis chaque candidature.')) return;
-    await api.cvs.resetAnalyses(effectiveCvId);
-    setPresent([]);
-    setMissing([]);
-    setAnalyzedCount(0);
+    const ok = await confirm({
+      title: 'Réinitialiser les analyses de ce CV ?',
+      description:
+        'Elles seront recalculées à la demande depuis chaque candidature.',
+      confirmLabel: 'Réinitialiser',
+    });
+    if (!ok) return;
+    resetMutation.mutate(effectiveCvId);
   }
 
   if (cvs.length === 0) return null;
 
   return (
     <div className="flex flex-col gap-3 max-w-3xl">
+      {confirmDialog}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-3">
         <p className="text-sm font-medium">Compétences des offres analysées</p>
         <div className="flex items-center gap-2 w-full sm:w-auto">

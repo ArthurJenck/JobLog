@@ -1,8 +1,8 @@
-import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
-import { requireSession } from '../../lib/session.js';
+import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
 import { normalizeLocationForStorage } from '../../lib/addresses.js';
 import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS, TERMINAL_STATUSES, REMINDER_ELIGIBLE_STATUSES, resolveStatusOnEvent, deriveStatusFromEvents, type ApplicationStatus, type EventType } from '@joblog/shared';
 
@@ -61,6 +61,14 @@ const PatchJobPostingSchema = z.object({
   url: z.string().url().optional(),
 }).strict();
 
+const PatchEnvelopeSchema = z.union([
+  z.object({ event: AddEventSchema }),
+  z.object({ jobPosting: PatchJobPostingSchema }),
+  z.object({ deleteEvent: DeleteEventSchema }),
+  z.object({ updateEventDate: UpdateEventDateSchema }),
+  PatchApplicationSchema,
+]);
+
 function toDateOrNull(value: string | null) {
   return value === null ? null : new Date(value);
 }
@@ -78,181 +86,183 @@ function computeReminderInitAt(app: ApplicationDoc) {
   return new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
 }
 
-export default async function handler(req: VercelRequest, res: VercelResponse) {
-  const session = await requireSession(req, res);
-  if (!session) return;
+export default defineHandler({
+  GET: method({
+    async handle({ user, query }) {
+      const { id } = query as { id: string };
+      if (!ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
 
-  const { id } = req.query as { id: string };
-  if (!ObjectId.isValid(id)) return res.status(400).json({ error: 'Invalid id' });
-
-  const col = await getCollection<ApplicationDoc>('applications');
-  const userId = session.user.id;
-  const appFilter = { _id: new ObjectId(id), userId };
-
-  if (req.method === 'GET') {
-    const app = await col.findOne(appFilter);
-    if (!app) return res.status(404).json({ error: 'Not found' });
-
-    const jpCol = await getCollection('job_postings');
-    const jp = await jpCol.findOne({ _id: new ObjectId(String(app.jobPostingId)) });
-
-    return res.status(200).json({
-      ...app,
-      _id: app._id.toString(),
-      jobPosting: jp
-        ? {
-            ...jp,
-            _id: jp._id.toString(),
-          }
-        : null,
-    });
-  }
-
-  if (req.method === 'PATCH') {
-    const body = req.body as Record<string, unknown>;
-
-    if (body.event) {
-      const parsed = AddEventSchema.safeParse(body.event);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-      const event = { ...parsed.data, at: parsed.data.at ? new Date(parsed.data.at) : new Date(), meta: parsed.data.meta ?? null };
-      const setOps: Record<string, unknown> = { updated_at: new Date() };
-
-      if (EVENT_AUTO_STATUS[parsed.data.type] !== undefined) {
-        const app = await col.findOne(appFilter);
-        if (!app) return res.status(404).json({ error: 'Not found' });
-        const newStatus = resolveStatusOnEvent(app.status, parsed.data.type);
-        if (newStatus) {
-          setOps['status'] = newStatus;
-          if (REMINDER_ELIGIBLE_STATUSES.includes(newStatus) && !app.reminder?.at) {
-            setOps['reminder.at'] = computeReminderInitAt(app);
-          }
-        }
-      }
-
-      await col.updateOne(appFilter, {
-        $push: { events: event },
-        $set: setOps,
-      });
-      return res.status(200).json({ ok: true });
-    }
-
-    if (body.jobPosting) {
-      const parsed = PatchJobPostingSchema.safeParse(body.jobPosting);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+      const col = await getCollection<ApplicationDoc>('applications');
+      const appFilter = { _id: new ObjectId(id), userId: user.id };
 
       const app = await col.findOne(appFilter);
-      if (!app) return res.status(404).json({ error: 'Not found' });
+      if (!app) throw ApiError.notFound();
 
       const jpCol = await getCollection('job_postings');
-      const now = new Date();
-      const updates: Record<string, unknown> = {
-        ...parsed.data,
-        scrape_status: 'succeeded',
-        scrape_error: null,
-        scrape_finished_at: now,
-        updated_at: now,
+      const jp = await jpCol.findOne({ _id: new ObjectId(String(app.jobPostingId)), userId: user.id });
+
+      return {
+        json: {
+          ...app,
+          _id: app._id.toString(),
+          jobPosting: jp
+            ? {
+                ...jp,
+                _id: jp._id.toString(),
+              }
+            : null,
+        },
       };
-      if (Object.prototype.hasOwnProperty.call(parsed.data, 'location')) {
-        Object.assign(updates, await normalizeLocationForStorage(parsed.data.location));
+    },
+  }),
+  PATCH: method({
+    body: PatchEnvelopeSchema,
+    async handle({ user, query, body }) {
+      const { id } = query as { id: string };
+      if (!ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
+
+      const col = await getCollection<ApplicationDoc>('applications');
+      const userId = user.id;
+      const appFilter = { _id: new ObjectId(id), userId };
+
+      if ('event' in body) {
+        const eventInput = body.event;
+        const event = { ...eventInput, at: eventInput.at ? new Date(eventInput.at) : new Date(), meta: eventInput.meta ?? null };
+        const setOps: Record<string, unknown> = { updated_at: new Date() };
+
+        if (EVENT_AUTO_STATUS[eventInput.type] !== undefined) {
+          const app = await col.findOne(appFilter);
+          if (!app) throw ApiError.notFound();
+          const newStatus = resolveStatusOnEvent(app.status, eventInput.type);
+          if (newStatus) {
+            setOps['status'] = newStatus;
+            if (REMINDER_ELIGIBLE_STATUSES.includes(newStatus) && !app.reminder?.at) {
+              setOps['reminder.at'] = computeReminderInitAt(app);
+            }
+          }
+        }
+
+        await col.updateOne(appFilter, {
+          $push: { events: event },
+          $set: setOps,
+        });
+        return { json: { ok: true } };
       }
 
-      await jpCol.updateOne(
-        { _id: new ObjectId(String(app.jobPostingId)) },
-        { $set: updates }
-      );
-      return res.status(200).json({ ok: true });
-    }
+      if ('jobPosting' in body) {
+        const jobPostingInput = body.jobPosting;
 
-    if (body.deleteEvent) {
-      const parsed = DeleteEventSchema.safeParse(body.deleteEvent);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-      const setOps: Record<string, unknown> = { updated_at: new Date() };
-
-      if (EVENT_AUTO_STATUS[parsed.data.type] !== undefined) {
         const app = await col.findOne(appFilter);
-        if (!app) return res.status(404).json({ error: 'Not found' });
-        const remaining = (app.events ?? []).filter(
-          (e: { type: string; at: Date }) =>
-            !(e.type === parsed.data.type && e.at.toISOString() === new Date(parsed.data.at).toISOString()),
+        if (!app) throw ApiError.notFound();
+
+        const jpCol = await getCollection('job_postings');
+        const now = new Date();
+        const updates: Record<string, unknown> = {
+          ...jobPostingInput,
+          scrape_status: 'succeeded',
+          scrape_error: null,
+          scrape_finished_at: now,
+          updated_at: now,
+        };
+        if (Object.prototype.hasOwnProperty.call(jobPostingInput, 'location')) {
+          Object.assign(updates, await normalizeLocationForStorage(jobPostingInput.location ?? null));
+        }
+
+        await jpCol.updateOne(
+          { _id: new ObjectId(String(app.jobPostingId)), userId },
+          { $set: updates }
         );
-        setOps['status'] = deriveStatusFromEvents(remaining as Array<{ type: EventType; at: Date }>);
+        return { json: { ok: true } };
       }
 
-      await col.updateOne(appFilter, {
-        $pull: { events: { type: parsed.data.type, at: new Date(parsed.data.at) } },
-        $set: setOps,
-      });
-      return res.status(200).json({ ok: true });
-    }
+      if ('deleteEvent' in body) {
+        const deleteEventInput = body.deleteEvent;
+        const setOps: Record<string, unknown> = { updated_at: new Date() };
 
-    if (body.updateEventDate) {
-      const parsed = UpdateEventDateSchema.safeParse(body.updateEventDate);
-      if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
+        if (EVENT_AUTO_STATUS[deleteEventInput.type] !== undefined) {
+          const app = await col.findOne(appFilter);
+          if (!app) throw ApiError.notFound();
+          const remaining = (app.events ?? []).filter(
+            (e: { type: string; at: Date }) =>
+              !(e.type === deleteEventInput.type && e.at.toISOString() === new Date(deleteEventInput.at).toISOString()),
+          );
+          setOps['status'] = deriveStatusFromEvents(remaining as Array<{ type: EventType; at: Date }>);
+        }
 
-      await col.updateOne(
-        appFilter,
-        { $set: { 'events.$[elem].at': new Date(parsed.data.newAt), updated_at: new Date() } },
-        { arrayFilters: [{ 'elem.type': parsed.data.type, 'elem.at': new Date(parsed.data.at) }] }
-      );
-      return res.status(200).json({ ok: true });
-    }
-
-    const parsed = PatchApplicationSchema.safeParse(body);
-    if (!parsed.success) return res.status(400).json({ error: parsed.error.flatten() });
-
-    const updates: Record<string, unknown> = { updated_at: new Date() };
-    const { reminder, status, ...restFields } = parsed.data;
-
-    for (const [k, v] of Object.entries(restFields)) {
-      if (v !== undefined) updates[k] = k === 'appliedAt' ? toDateOrNull(v as string | null) : v;
-    }
-
-    if (status !== undefined) {
-      const app = await col.findOne(appFilter);
-      if (!app) return res.status(404).json({ error: 'Not found' });
-
-      updates['status'] = status;
-      if (status === 'applied' && !parsed.data.appliedAt) {
-        updates['appliedAt'] = new Date();
+        await col.updateOne(appFilter, {
+          $pull: { events: { type: deleteEventInput.type, at: new Date(deleteEventInput.at) } },
+          $set: setOps,
+        });
+        return { json: { ok: true } };
       }
-      if (TERMINAL_STATUSES.includes(status)) {
-        updates['reminder.at'] = null;
-      } else if (REMINDER_ELIGIBLE_STATUSES.includes(status) && !app.reminder?.at) {
-        updates['reminder.at'] = computeReminderInitAt(app);
+
+      if ('updateEventDate' in body) {
+        const updateEventDateInput = body.updateEventDate;
+        await col.updateOne(
+          appFilter,
+          { $set: { 'events.$[elem].at': new Date(updateEventDateInput.newAt), updated_at: new Date() } },
+          { arrayFilters: [{ 'elem.type': updateEventDateInput.type, 'elem.at': new Date(updateEventDateInput.at) }] }
+        );
+        return { json: { ok: true } };
       }
-      if (status !== app.status) {
-        const newType = STATUS_EVENT[status];
-        if (newType) {
-          const events = (app.events ?? []) as Array<{ type: string; at: Date; meta: unknown }>;
-          if (!events.some(e => e.type === newType)) {
-            updates['events'] = [...events, { type: newType, at: new Date(), meta: null }];
+
+      const updates: Record<string, unknown> = { updated_at: new Date() };
+      const { reminder, status, ...restFields } = body;
+
+      for (const [k, v] of Object.entries(restFields)) {
+        if (v !== undefined) updates[k] = k === 'appliedAt' ? toDateOrNull(v as string | null) : v;
+      }
+
+      if (status !== undefined) {
+        const app = await col.findOne(appFilter);
+        if (!app) throw ApiError.notFound();
+
+        updates['status'] = status;
+        if (status === 'applied' && !body.appliedAt) {
+          updates['appliedAt'] = new Date();
+        }
+        if (TERMINAL_STATUSES.includes(status)) {
+          updates['reminder.at'] = null;
+        } else if (REMINDER_ELIGIBLE_STATUSES.includes(status) && !app.reminder?.at) {
+          updates['reminder.at'] = computeReminderInitAt(app);
+        }
+        if (status !== app.status) {
+          const newType = STATUS_EVENT[status];
+          if (newType) {
+            const events = (app.events ?? []) as Array<{ type: string; at: Date; meta: unknown }>;
+            if (!events.some(e => e.type === newType)) {
+              updates['events'] = [...events, { type: newType, at: new Date(), meta: null }];
+            }
           }
         }
       }
-    }
 
-    if (reminder) {
-      for (const [k, v] of Object.entries(reminder)) {
-        if (v !== undefined) {
-          updates[`reminder.${k}`] =
-            k === 'at' || k === 'snoozedUntil' ? toDateOrNull(v as string | null) : v;
+      if (reminder) {
+        for (const [k, v] of Object.entries(reminder)) {
+          if (v !== undefined) {
+            updates[`reminder.${k}`] =
+              k === 'at' || k === 'snoozedUntil' ? toDateOrNull(v as string | null) : v;
+          }
         }
       }
-    }
 
-    const result = await col.updateOne(appFilter, { $set: updates });
-    if (result.matchedCount === 0) return res.status(404).json({ error: 'Not found' });
+      const result = await col.updateOne(appFilter, { $set: updates });
+      if (result.matchedCount === 0) throw ApiError.notFound();
 
-    return res.status(200).json({ ok: true });
-  }
+      return { json: { ok: true } };
+    },
+  }),
+  DELETE: method({
+    async handle({ user, query }) {
+      const { id } = query as { id: string };
+      if (!ObjectId.isValid(id)) throw ApiError.badRequest('Invalid id');
 
-  if (req.method === 'DELETE') {
-    const result = await col.deleteOne(appFilter);
-    if (result.deletedCount === 0) return res.status(404).json({ error: 'Not found' });
-    return res.status(200).json({ ok: true });
-  }
+      const col = await getCollection<ApplicationDoc>('applications');
+      const appFilter = { _id: new ObjectId(id), userId: user.id };
 
-  return res.status(405).json({ error: 'Method not allowed' });
-}
+      const result = await col.deleteOne(appFilter);
+      if (result.deletedCount === 0) throw ApiError.notFound();
+      return { json: { ok: true } };
+    },
+  }),
+});
