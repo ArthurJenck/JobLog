@@ -12,18 +12,23 @@ interface Props {
   cvId: string | null;
 }
 
-function mapAnalysisError(e: unknown): { error: string; needsJobDescription: boolean } {
+type JobDescriptionInput = 'required' | 'optional' | null;
+
+function mapAnalysisError(e: unknown): { error: string; jobDescriptionInput: JobDescriptionInput } {
   const apiError = e as { code?: string; status?: number; message?: string };
   if (apiError.code === 'no_comparison_data') {
-    return { needsJobDescription: true, error: apiError.message ?? 'Aucune donnée à comparer avec votre CV.' };
+    return { jobDescriptionInput: 'required', error: apiError.message ?? 'Aucune donnée à comparer avec votre CV.' };
   }
   if (apiError.status === 503) {
-    return { needsJobDescription: false, error: apiError.message ?? "Service d'analyse temporairement indisponible, réessayez plus tard." };
+    return { jobDescriptionInput: null, error: apiError.message ?? "Service d'analyse temporairement indisponible, réessayez plus tard." };
   }
   if (apiError.code === 'analysis_failed') {
-    return { needsJobDescription: false, error: apiError.message ?? "L'analyse n'a pas pu être produite, réessayez." };
+    return {
+      jobDescriptionInput: 'optional',
+      error: "L'analyse n'a pas pu être produite. Réessaie, ou colle le texte de l'offre ci-dessous pour analyser à partir de ce texte.",
+    };
   }
-  return { needsJobDescription: false, error: e instanceof Error ? e.message : 'Erreur inconnue' };
+  return { jobDescriptionInput: null, error: e instanceof Error ? e.message : 'Erreur inconnue' };
 }
 
 export function AnalyzePanel({ applicationId, cvId }: Props) {
@@ -39,7 +44,7 @@ export function AnalyzePanel({ applicationId, cvId }: Props) {
 function AnalyzePanelInner({ applicationId, cvId }: Props) {
   const qc = useQueryClient();
   const [error, setError] = useState('');
-  const [needsJobDescription, setNeedsJobDescription] = useState(false);
+  const [jobDescriptionInput, setJobDescriptionInput] = useState<JobDescriptionInput>(null);
   const [jobDescription, setJobDescription] = useState('');
 
   const analysisKey = qk.analyses(cvId ?? 'none', applicationId);
@@ -61,7 +66,7 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
     if (!cacheQuery.error) return;
     const apiError = cacheQuery.error as { code?: string; message?: string };
     if (apiError.code === 'no_comparison_data') {
-      setNeedsJobDescription(true);
+      setJobDescriptionInput('required');
       setError(apiError.message ?? 'Aucune donnée à comparer avec votre CV.');
     } else {
       setError(
@@ -86,7 +91,9 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
     },
     onError: (e) => {
       const mapped = mapAnalysisError(e);
-      if (mapped.needsJobDescription) setNeedsJobDescription(true);
+      if (mapped.jobDescriptionInput) {
+        setJobDescriptionInput((current) => (current === 'required' ? 'required' : mapped.jobDescriptionInput));
+      }
       setError(mapped.error);
     },
   });
@@ -98,7 +105,7 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
   function analyze(options?: { force?: boolean }) {
     if (!cvId) return;
     const pastedJobDescription = jobDescription.trim();
-    if (needsJobDescription && pastedJobDescription.length < 40) {
+    if (jobDescriptionInput === 'required' && pastedJobDescription.length < 40) {
       setError('Collez le texte de l’offre pour lancer l’analyse.');
       return;
     }
@@ -117,6 +124,10 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
     );
   }
 
+  const usesManualText =
+    jobDescriptionInput === 'required' ||
+    (jobDescriptionInput === 'optional' && jobDescription.trim().length >= 40);
+
   if (!result) {
     return (
       <div className="flex flex-col gap-2">
@@ -124,17 +135,17 @@ function AnalyzePanelInner({ applicationId, cvId }: Props) {
           variant="outline"
           size="sm"
           onClick={() => { void analyze(); }}
-          disabled={!cvId || (needsJobDescription && jobDescription.trim().length < 40)}
+          disabled={!cvId || (jobDescriptionInput === 'required' && jobDescription.trim().length < 40)}
           title={!cvId ? 'Sélectionne un CV pour analyser' : undefined}
           className="w-fit"
         >
           <SparklesIcon className="h-3.5 w-3.5 mr-1.5" />
-          {needsJobDescription ? 'Analyser avec ce texte' : 'Analyser CV vs offre'}
+          {usesManualText ? 'Analyser avec ce texte' : 'Analyser CV vs offre'}
         </Button>
         {!cvId && (
           <p className="text-xs text-muted-foreground">Sélectionne d'abord un CV.</p>
         )}
-        {needsJobDescription && (
+        {jobDescriptionInput !== null && (
           <div className="flex flex-col gap-1.5 max-w-xl">
             <Textarea
               value={jobDescription}
