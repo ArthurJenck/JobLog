@@ -9,6 +9,7 @@ interface UserStreakFields {
   streakLastActiveDay?: string | null;
   streakLastPerfectDay?: string | null;
   streakPrevPerfectDay?: string | null;
+  streakPerfectCurrent?: number;
 }
 
 const DaySchema = z.object({
@@ -26,6 +27,13 @@ function shiftDayKey(day: string, delta: number): string {
   return d.toISOString().slice(0, 10);
 }
 
+function perfectCurrentOf(fields: UserStreakFields): number {
+  if (typeof fields.streakPerfectCurrent === 'number') return fields.streakPerfectCurrent;
+  const last = fields.streakLastPerfectDay ?? null;
+  if (!last) return 0;
+  return fields.streakPrevPerfectDay === shiftDayKey(last, -1) ? 2 : 1;
+}
+
 function toResponse(fields: UserStreakFields) {
   return {
     current: fields.streakCurrent ?? 0,
@@ -33,6 +41,7 @@ function toResponse(fields: UserStreakFields) {
     lastActiveDay: fields.streakLastActiveDay ?? null,
     lastPerfectDay: fields.streakLastPerfectDay ?? null,
     prevPerfectDay: fields.streakPrevPerfectDay ?? null,
+    perfectCurrent: perfectCurrentOf(fields),
   };
 }
 
@@ -60,9 +69,21 @@ export default defineHandler({
       }
       const longest = Math.max(streakUser?.streakLongest ?? 0, current);
 
+      const lastPerfectDay = streakUser?.streakLastPerfectDay ?? null;
+      const perfectBroken =
+        lastPerfectDay !== today && lastPerfectDay !== shiftDayKey(today, -1);
+      const perfectCurrent = perfectBroken ? 0 : perfectCurrentOf(streakUser ?? {});
+
       await col.updateOne(
         userFilter,
-        { $set: { streakCurrent: current, streakLongest: longest, streakLastActiveDay: today } },
+        {
+          $set: {
+            streakCurrent: current,
+            streakLongest: longest,
+            streakLastActiveDay: today,
+            streakPerfectCurrent: perfectCurrent,
+          },
+        },
       );
 
       return {
@@ -70,8 +91,9 @@ export default defineHandler({
           streakCurrent: current,
           streakLongest: longest,
           streakLastActiveDay: today,
-          streakLastPerfectDay: streakUser?.streakLastPerfectDay ?? null,
+          streakLastPerfectDay: lastPerfectDay,
           streakPrevPerfectDay: streakUser?.streakPrevPerfectDay ?? null,
+          streakPerfectCurrent: perfectCurrent,
         }),
       };
     },
@@ -89,12 +111,26 @@ export default defineHandler({
 
       if (perfect) {
         if (currentPerfect !== today) {
-          const update: UserStreakFields = { streakLastPerfectDay: today };
+          const update: UserStreakFields = {
+            streakLastPerfectDay: today,
+            streakPerfectCurrent:
+              currentPerfect === shiftDayKey(today, -1)
+                ? perfectCurrentOf(streakUser ?? {}) + 1
+                : 1,
+          };
           if (currentPerfect) update.streakPrevPerfectDay = currentPerfect;
           await col.updateOne(userFilter, { $set: update });
         }
       } else if (currentPerfect === today) {
-        await col.updateOne(userFilter, { $set: { streakLastPerfectDay: prevPerfect } });
+        await col.updateOne(userFilter, {
+          $set: {
+            streakLastPerfectDay: prevPerfect,
+            streakPerfectCurrent:
+              prevPerfect === shiftDayKey(today, -1)
+                ? Math.max(0, perfectCurrentOf(streakUser ?? {}) - 1)
+                : 0,
+          },
+        });
       }
 
       const updated = await col.findOne(userFilter);

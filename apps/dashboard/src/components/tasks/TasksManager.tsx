@@ -24,7 +24,8 @@ import { useTaskMutations, useTasksQuery } from '@/hooks/queries/use-daily';
 import { api } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { toast } from 'sonner';
-import { FlameIcon } from 'lucide-react';
+import { ToonFlame } from '@/components/streak/ToonFlame';
+import { ToonCrown } from '@/components/streak/ToonCrown';
 import { playAdd, playDelete, playDrop, playError, playToggle } from '@/lib/sound';
 import { cn } from '@/lib/utils';
 import { useConfirm } from '@/hooks/useConfirm';
@@ -134,13 +135,26 @@ export function TasksManager() {
   return (
     <div className="flex flex-col gap-6 max-w-3xl">
       {confirmDialog}
-      <div className="rounded-lg border p-4 flex items-start gap-3 bg-muted/30">
-        <FlameIcon className="h-5 w-5 text-orange-600 shrink-0 mt-0.5" />
-        <p className="text-sm text-muted-foreground">
-          Ta flamme s'entretient simplement en te connectant chaque jour. Quand tu valides
-          toutes tes tâches quotidiennes, elle devient dorée pour la journée. Si elle était dorée
-          hier mais pas encore aujourd'hui, elle vacille pour te rappeler de la raviver.
-        </p>
+      <div className="rounded-lg border p-4 flex flex-col gap-3 bg-muted/30">
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5">
+            <ToonFlame />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Ta flamme s'entretient simplement en te connectant chaque jour : sa série
+            grandit à chaque jour consécutif.
+          </p>
+        </div>
+        <div className="flex items-start gap-3">
+          <div className="mt-0.5">
+            <ToonCrown />
+          </div>
+          <p className="text-sm text-muted-foreground">
+            Ta couronne compte tes journées parfaites d'affilée : valide toutes tes tâches
+            quotidiennes pour la faire grandir. Si elle brillait hier mais pas encore
+            aujourd'hui, elle vacille pour te rappeler de la raviver.
+          </p>
+        </div>
       </div>
 
       <div className="flex flex-col gap-2">

@@ -80,6 +80,7 @@ export interface Streak {
   lastActiveDay: string | null;
   lastPerfectDay: string | null;
   prevPerfectDay: string | null;
+  perfectCurrent: number;
 }
 
 export interface SkillCount {

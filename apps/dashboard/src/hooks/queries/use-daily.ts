@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import type { Task, Streak } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { getPendingTasks } from '@/lib/taskHelpers';
+import { shiftDayKey } from '@/lib/platformReminder';
 import { useAllDoneCelebration } from '@/hooks/useAllDoneCelebration';
 import { playError } from '@/lib/sound';
 
@@ -23,6 +24,7 @@ const EMPTY_STREAK: Streak = {
   lastActiveDay: null,
   lastPerfectDay: null,
   prevPerfectDay: null,
+  perfectCurrent: 0,
 };
 
 export function useTasksQuery() {
@@ -145,10 +147,21 @@ export function useDailySync() {
             ...base,
             prevPerfectDay: base.lastPerfectDay ?? base.prevPerfectDay,
             lastPerfectDay: today,
+            perfectCurrent:
+              base.lastPerfectDay === shiftDayKey(today, -1)
+                ? base.perfectCurrent + 1
+                : 1,
           };
         }
         if (base.lastPerfectDay !== today) return base;
-        return { ...base, lastPerfectDay: base.prevPerfectDay };
+        return {
+          ...base,
+          lastPerfectDay: base.prevPerfectDay,
+          perfectCurrent:
+            base.prevPerfectDay === shiftDayKey(today, -1)
+              ? Math.max(0, base.perfectCurrent - 1)
+              : 0,
+        };
       });
       return { prev };
     },

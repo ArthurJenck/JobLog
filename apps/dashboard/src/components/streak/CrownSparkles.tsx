@@ -8,7 +8,7 @@ const SPARKLES = [
   { style: { bottom: '0px', left: '-7px' }, size: 5, delay: 1.2 },
 ];
 
-export function FlameSparkles({ active }: { active: boolean }) {
+export function CrownSparkles({ active }: { active: boolean }) {
   return (
     <AnimatePresence>
       {active && (
