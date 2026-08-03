@@ -1,7 +1,11 @@
 {
   "files": [],
   "compilerOptions": {
-    "types": ["node"]
+    "types": ["node"],
+    "target": "es2023",
+    "lib": ["ES2023"],
+    "strict": true,
+    "skipLibCheck": true
   },
   "references": [
     { "path": "./tsconfig.app.json" },
