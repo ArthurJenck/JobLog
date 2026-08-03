@@ -1,12 +1,13 @@
-import { getParisDateKey, getParisMonthKey, normalizeFrequencyDays, REMINDER_ELIGIBLE_STATUSES } from '@joblog/shared';
-import { ObjectId, type Filter } from 'mongodb';
+import { getParisDateKey, getParisMonthKey, REMINDER_ELIGIBLE_STATUSES } from '@joblog/shared';
+import { ObjectId, type AnyBulkWriteOperation, type Filter } from 'mongodb';
 import { getCollection } from '../../lib/db.js';
 import { getEnv } from '../../lib/env.js';
-import { sendReminderEmail } from '../../lib/email.js';
+import { buildReminderDigestEmail } from '../../lib/email.js';
 import { escapeHtml } from '../../lib/html.js';
 import { defineHandler, method } from '../../lib/http/define-handler.js';
-import { sendEmail } from '../../lib/resend.js';
+import { sendEmail, sendEmails } from '../../lib/resend.js';
 import { FIRECRAWL_MONTHLY_SOFT_CAP, getJinaAlertThreshold } from '../usage/provider-usage.js';
+import { buildPushPayload, groupDueReminders, type ReminderGroup } from './reminders-digest.js';
 
 interface ReminderApplicationDoc {
   userId: string;
@@ -154,13 +155,48 @@ async function checkFirecrawlUsageAlerts() {
   return { checked: true, sent: 1 };
 }
 
-export async function runReminders() {
-  const [appCol, userCol, notifCol, jpCol] = await Promise.all([
-    getCollection<ReminderApplicationDoc>('applications'),
+function toObjectIds(ids: Iterable<string>) {
+  return [...new Set(ids)].filter((id) => ObjectId.isValid(id)).map((id) => new ObjectId(id));
+}
+
+async function loadReminderContext(due: DueApplicationRow[]) {
+  const [userCol, notifCol, jpCol] = await Promise.all([
     getCollection<ReminderUserDoc>('user'),
     getCollection<ReminderNotificationDoc>('notification_settings'),
     getCollection<ReminderJobPostingDoc>('job_postings'),
   ]);
+
+  const userIds = due.map((app) => app.userId);
+
+  const [userDocs, jpDocs, notifDocs] = await Promise.all([
+    userCol.find({ _id: { $in: toObjectIds(userIds) } }).toArray(),
+    jpCol.find({ _id: { $in: toObjectIds(due.map((app) => app.jobPostingId)) } }).toArray(),
+    notifCol.find({ userId: { $in: [...new Set(userIds)] } }).toArray(),
+  ]);
+
+  return {
+    users: new Map(userDocs.map((doc) => [doc._id.toString(), doc])),
+    jobPostings: new Map(jpDocs.map((doc) => [doc._id.toString(), doc])),
+    notificationSettings: new Map(notifDocs.map((doc) => [doc.userId, doc])),
+  };
+}
+
+interface DueApplicationRow {
+  applicationId: string;
+  userId: string;
+  jobPostingId: string;
+  frequencyDays?: number;
+}
+
+async function notifyGroup(group: ReminderGroup) {
+  if (!group.pushEnabled || !group.vapidSubscription) return;
+
+  const url = getEnv('PUBLIC_APP_URL') ?? 'https://joblog.arthurjenck.com';
+  await sendWebPush(group.vapidSubscription as PushSubscription, buildPushPayload(group, url));
+}
+
+export async function runReminders() {
+  const appCol = await getCollection<ReminderApplicationDoc>('applications');
 
   const now = new Date();
 
@@ -174,68 +210,89 @@ export async function runReminders() {
     status: { $in: REMINDER_ELIGIBLE_STATUSES },
   };
 
-  const due = await appCol.find(dueFilter).toArray();
+  const dueDocs = await appCol.find(dueFilter).toArray();
+  const due: DueApplicationRow[] = dueDocs.map((doc) => ({
+    applicationId: doc._id.toString(),
+    userId: String(doc.userId),
+    jobPostingId: String(doc.jobPostingId),
+    frequencyDays: doc.reminder?.frequencyDays,
+  }));
 
   let sent = 0;
   let failed = 0;
-  let skipped = 0;
   const errors: string[] = [];
+  let groups: ReminderGroup[] = [];
+  let skipped = 0;
   let jinaAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
   let firecrawlAlert: { checked: boolean; sent: number; skipped?: string; error?: string };
 
-  for (const app of due) {
-    try {
-      const frequencyDays = normalizeFrequencyDays(app.reminder?.frequencyDays);
-      const [user, jp, notifSettings] = await Promise.all([
-        userCol.findOne({ _id: new ObjectId(String(app.userId)) }),
-        jpCol.findOne({ _id: new ObjectId(String(app.jobPostingId)) }),
-        notifCol.findOne({ userId: String(app.userId) }),
-      ]);
+  if (due.length > 0) {
+    const context = await loadReminderContext(due);
+    const grouped = groupDueReminders({ due, ...context });
+    groups = grouped.groups;
+    skipped = grouped.skipped.length;
+    errors.push(...grouped.skipped);
 
-      if (!user || !jp) {
-        skipped++;
-        errors.push(`${app._id.toString()}: missing ${!user ? 'user' : 'job posting'}`);
+    const mailable = groups.filter((group) => group.emailEnabled && group.email);
+    const emailResults = await sendEmails(
+      mailable.map((group) =>
+        buildReminderDigestEmail({
+          to: group.email as string,
+          userId: group.userId,
+          items: group.items,
+        })
+      )
+    );
+
+    const emailFailures = new Map<string, string>();
+    emailResults.forEach((result, index) => {
+      if (result.status === 'rejected') {
+        const reason = result.reason;
+        emailFailures.set(
+          mailable[index].userId,
+          reason instanceof Error ? reason.message : String(reason)
+        );
+      }
+    });
+
+    const operations: AnyBulkWriteOperation<ReminderApplicationDoc>[] = [];
+
+    for (const group of groups) {
+      const emailError = emailFailures.get(group.userId);
+      if (emailError) {
+        failed += group.items.length;
+        errors.push(`${group.userId}: ${emailError}`);
         continue;
       }
 
-      const emailEnabled = notifSettings?.email !== false;
-      const pushEnabled = notifSettings?.push === true;
+      try {
+        await notifyGroup(group);
+      } catch (error) {
+        errors.push(
+          `${group.userId}: push failed: ${error instanceof Error ? error.message : String(error)}`
+        );
+      }
 
-      if (emailEnabled && user.email) {
-        await sendReminderEmail({
-          to: user.email as string,
-          applicationId: app._id.toString(),
-          userId: String(app.userId),
-          jobTitle: String(jp.title ?? ''),
-          company: String(jp.company ?? ''),
-          frequencyDays,
+      for (const item of group.items) {
+        operations.push({
+          updateOne: {
+            filter: { _id: new ObjectId(item.applicationId) } as Filter<ReminderApplicationDoc>,
+            update: {
+              $inc: { 'reminder.sentCount': 1 },
+              $set: {
+                'reminder.at': new Date(now.getTime() + item.frequencyDays * 24 * 60 * 60 * 1000),
+                updated_at: now,
+              },
+            },
+          },
         });
       }
 
-      if (pushEnabled && notifSettings?.vapidSubscription) {
-        await sendWebPush(notifSettings.vapidSubscription as PushSubscription, {
-          title: `Relance — ${jp.company}`,
-          body: `N'oublie pas de relancer pour "${jp.title}"`,
-          url: process.env.PUBLIC_APP_URL ?? 'https://joblog.arthurjenck.com',
-        });
-      }
+      sent += group.items.length;
+    }
 
-      const nextAt = new Date(now.getTime() + frequencyDays * 24 * 60 * 60 * 1000);
-
-      await appCol.updateOne(
-        { _id: app._id },
-        {
-          $inc: { 'reminder.sentCount': 1 },
-          $set: { 'reminder.at': nextAt, updated_at: now },
-        }
-      );
-
-      sent++;
-    } catch (error) {
-      failed++;
-      errors.push(
-        `${app._id.toString()}: ${error instanceof Error ? error.message : String(error)}`
-      );
+    if (operations.length > 0) {
+      await appCol.bulkWrite(operations);
     }
   }
 
@@ -261,6 +318,8 @@ export async function runReminders() {
 
   return {
     processed: due.length,
+    users: groups.length,
+    emails: groups.filter((group) => group.emailEnabled && group.email).length,
     sent,
     failed,
     skipped,

@@ -1,4 +1,4 @@
-import { TERMINAL_STATUSES } from '@joblog/shared';
+import { REMINDER_ELIGIBLE_STATUSES } from '@joblog/shared';
 import { getCollection } from '../../lib/db.js';
 import { defineHandler, method } from '../../lib/http/define-handler.js';
 
@@ -16,7 +16,7 @@ export default defineHandler({
           { 'reminder.snoozedUntil': null },
           { 'reminder.snoozedUntil': { $lte: now } },
         ],
-        status: { $nin: [...TERMINAL_STATUSES, 'offer'] },
+        status: { $in: REMINDER_ELIGIBLE_STATUSES },
       });
 
       return { json: { count } };

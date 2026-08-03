@@ -15,9 +15,16 @@ import type { ApplicationWithJob } from '@joblog/shared';
 
 type IndexSearch = {
   applicationId?: string;
+  snoozeCount?: number;
   snoozeDays?: number;
   toast?: string;
 };
+
+function numericSearch(value: unknown) {
+  return typeof value === 'string' && Number.isFinite(Number(value))
+    ? Number(value)
+    : undefined;
+}
 
 export const Route = createFileRoute('/')({
   validateSearch: (search): IndexSearch => ({
@@ -25,11 +32,8 @@ export const Route = createFileRoute('/')({
       typeof search.applicationId === 'string'
         ? search.applicationId
         : undefined,
-    snoozeDays:
-      typeof search.snoozeDays === 'string' &&
-      Number.isFinite(Number(search.snoozeDays))
-        ? Number(search.snoozeDays)
-        : undefined,
+    snoozeCount: numericSearch(search.snoozeCount),
+    snoozeDays: numericSearch(search.snoozeDays),
     toast: typeof search.toast === 'string' ? search.toast : undefined,
   }),
   component: IndexOrLanding,
@@ -53,15 +57,14 @@ function clearSearchKeys(keys: string[]) {
 
 function readSnoozeToastFromUrl() {
   const params = new URLSearchParams(window.location.search);
-  if (params.get('toast') !== 'reminder-snoozed') return null;
-
-  const rawDays = params.get('snoozeDays');
-  const snoozeDays =
-    rawDays && Number.isFinite(Number(rawDays)) ? Number(rawDays) : undefined;
+  const toast = params.get('toast');
+  if (toast !== 'reminder-snoozed' && toast !== 'reminders-snoozed') return null;
 
   return {
+    bulk: toast === 'reminders-snoozed',
     applicationId: params.get('applicationId') ?? '',
-    snoozeDays,
+    snoozeCount: numericSearch(params.get('snoozeCount') ?? undefined),
+    snoozeDays: numericSearch(params.get('snoozeDays') ?? undefined),
   };
 }
 
@@ -104,18 +107,27 @@ export function IndexPage() {
     const snoozeToast = readSnoozeToastFromUrl();
     if (!snoozeToast) return;
 
-    const toastKey = `reminder-snoozed:${snoozeToast.applicationId}:${snoozeToast.snoozeDays ?? ''}`;
+    const toastKey = snoozeToast.bulk
+      ? `reminders-snoozed:${snoozeToast.snoozeCount ?? ''}`
+      : `reminder-snoozed:${snoozeToast.applicationId}:${snoozeToast.snoozeDays ?? ''}`;
     if (shownToast.current === toastKey) return;
 
     shownToast.current = toastKey;
 
+    const count = snoozeToast.snoozeCount ?? 0;
     const timeout = window.setTimeout(() => {
+      if (snoozeToast.bulk) {
+        toast.success(count > 1 ? `${count} rappels snoozés` : 'Rappel snoozé', {
+          description: 'On te les rappellera selon la fréquence de chaque candidature.',
+        });
+        return;
+      }
       toast.success('Rappel snoozé', {
         description: `On te le rappellera ${formatSnoozeToastDelay(snoozeToast.snoozeDays)}`,
       });
     }, 150);
 
-    clearSearchKeys(['toast', 'snoozeDays']);
+    clearSearchKeys(['toast', 'snoozeCount', 'snoozeDays']);
     return () => window.clearTimeout(timeout);
   }, []);
 
