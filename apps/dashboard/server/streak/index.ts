@@ -1,5 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
+import { isStreakContinuation } from '@joblog/shared';
 import { getCollection } from '../../lib/db.js';
 import { defineHandler, method } from '../../lib/http/define-handler.js';
 
@@ -21,17 +22,11 @@ const PerfectSchema = z.object({
   perfect: z.boolean().optional().default(true),
 });
 
-function shiftDayKey(day: string, delta: number): string {
-  const d = new Date(`${day}T00:00:00.000Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
-
 function perfectCurrentOf(fields: UserStreakFields): number {
   if (typeof fields.streakPerfectCurrent === 'number') return fields.streakPerfectCurrent;
   const last = fields.streakLastPerfectDay ?? null;
   if (!last) return 0;
-  return fields.streakPrevPerfectDay === shiftDayKey(last, -1) ? 2 : 1;
+  return isStreakContinuation(fields.streakPrevPerfectDay, last) ? 2 : 1;
 }
 
 function toResponse(fields: UserStreakFields) {
@@ -65,13 +60,13 @@ export default defineHandler({
       let current = streakUser?.streakCurrent ?? 0;
 
       if (lastActiveDay !== today) {
-        current = lastActiveDay === shiftDayKey(today, -1) ? current + 1 : 1;
+        current = isStreakContinuation(lastActiveDay, today) ? current + 1 : 1;
       }
       const longest = Math.max(streakUser?.streakLongest ?? 0, current);
 
       const lastPerfectDay = streakUser?.streakLastPerfectDay ?? null;
       const perfectBroken =
-        lastPerfectDay !== today && lastPerfectDay !== shiftDayKey(today, -1);
+        lastPerfectDay !== today && !isStreakContinuation(lastPerfectDay, today);
       const perfectCurrent = perfectBroken ? 0 : perfectCurrentOf(streakUser ?? {});
 
       await col.updateOne(
@@ -114,7 +109,7 @@ export default defineHandler({
           const update: UserStreakFields = {
             streakLastPerfectDay: today,
             streakPerfectCurrent:
-              currentPerfect === shiftDayKey(today, -1)
+              isStreakContinuation(currentPerfect, today)
                 ? perfectCurrentOf(streakUser ?? {}) + 1
                 : 1,
           };
@@ -126,7 +121,7 @@ export default defineHandler({
           $set: {
             streakLastPerfectDay: prevPerfect,
             streakPerfectCurrent:
-              prevPerfect === shiftDayKey(today, -1)
+              isStreakContinuation(prevPerfect, today)
                 ? Math.max(0, perfectCurrentOf(streakUser ?? {}) - 1)
                 : 0,
           },

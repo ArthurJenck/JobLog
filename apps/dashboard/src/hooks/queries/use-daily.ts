@@ -1,12 +1,11 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { localDayBounds, localDayKey } from '@joblog/shared';
+import { isStreakContinuation, localDayBounds, localDayKey } from '@joblog/shared';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import type { Task, Streak } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { getPendingTasks } from '@/lib/taskHelpers';
-import { shiftDayKey } from '@/lib/platformReminder';
 import { useAllDoneCelebration } from '@/hooks/useAllDoneCelebration';
 import { playError } from '@/lib/sound';
 
@@ -148,7 +147,7 @@ export function useDailySync() {
             prevPerfectDay: base.lastPerfectDay ?? base.prevPerfectDay,
             lastPerfectDay: today,
             perfectCurrent:
-              base.lastPerfectDay === shiftDayKey(today, -1)
+              isStreakContinuation(base.lastPerfectDay, today)
                 ? base.perfectCurrent + 1
                 : 1,
           };
@@ -158,7 +157,7 @@ export function useDailySync() {
           ...base,
           lastPerfectDay: base.prevPerfectDay,
           perfectCurrent:
-            base.prevPerfectDay === shiftDayKey(today, -1)
+            isStreakContinuation(base.prevPerfectDay, today)
               ? Math.max(0, base.perfectCurrent - 1)
               : 0,
         };

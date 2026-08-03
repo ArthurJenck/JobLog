@@ -36,3 +36,27 @@ export function localDayBounds(): { dayStart: string; dayEnd: string } {
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { dayStart: start.toISOString(), dayEnd: end.toISOString() };
 }
+
+function shiftDayKeyUTC(day: string, delta: number): string {
+  const d = new Date(`${day}T00:00:00.000Z`);
+  d.setUTCDate(d.getUTCDate() + delta);
+  return d.toISOString().slice(0, 10);
+}
+
+export function isWeekendDayKey(day: string): boolean {
+  const dow = new Date(`${day}T00:00:00.000Z`).getUTCDay();
+  return dow === 0 || dow === 6;
+}
+
+export function isStreakContinuation(
+  previousDay: string | null | undefined,
+  today: string,
+): boolean {
+  if (!previousDay || previousDay >= today) return false;
+  let cursor = shiftDayKeyUTC(previousDay, 1);
+  while (cursor < today) {
+    if (!isWeekendDayKey(cursor)) return false;
+    cursor = shiftDayKeyUTC(cursor, 1);
+  }
+  return true;
+}

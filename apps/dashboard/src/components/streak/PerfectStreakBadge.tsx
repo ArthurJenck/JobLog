@@ -1,8 +1,7 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { localDayKey } from '@joblog/shared';
+import { isStreakContinuation, isWeekendDayKey, localDayKey } from '@joblog/shared';
 import { useStreakQuery } from '@/hooks/queries/use-daily';
-import { shiftDayKey } from '@/lib/platformReminder';
 import { cn } from '@/lib/utils';
 import { ToonCrown } from './ToonCrown';
 import { CrownSparkles } from './CrownSparkles';
@@ -19,8 +18,10 @@ export function PerfectStreakBadge() {
   const streak = useStreakQuery();
   const today = localDayKey();
   const isPerfectToday = streak.lastPerfectDay === today;
-  const atRisk =
-    streak.lastPerfectDay === shiftDayKey(today, -1) && !isPerfectToday;
+  const alive =
+    isStreakContinuation(streak.lastPerfectDay, today) && !isPerfectToday;
+  const isWeekend = isWeekendDayKey(today);
+  const atRisk = alive && !isWeekend;
   const [pulseFaded, setPulseFaded] = useState(false);
 
   useEffect(() => {
@@ -39,14 +40,16 @@ export function PerfectStreakBadge() {
     return () => clearTimeout(timer);
   }, [atRisk]);
 
-  const count = isPerfectToday || atRisk ? streak.perfectCurrent : 0;
+  const count = isPerfectToday || alive ? streak.perfectCurrent : 0;
 
   const faded = atRisk && pulseFaded;
   const tooltip = isPerfectToday
     ? 'Journée parfaite : toutes tes tâches quotidiennes sont validées !'
     : atRisk
       ? 'Ta couronne vacille : valide toutes tes tâches quotidiennes pour prolonger ta série.'
-      : 'Valide toutes tes tâches quotidiennes pour démarrer une série de journées parfaites.';
+      : alive && isWeekend
+        ? 'Repos du week-end : ta série est préservée. Valide tes tâches pour la prolonger.'
+        : 'Valide toutes tes tâches quotidiennes pour démarrer une série de journées parfaites.';
 
   return (
     <Tooltip>
