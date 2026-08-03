@@ -60,6 +60,9 @@ export function NotificationSettings() {
       toast.error('Impossible de mettre à jour les notifications');
       if (context?.prev) qc.setQueryData(qk.pushSettings, context.prev);
     },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: qk.pushSettings });
+    },
   });
 
   const isSaving = saveMutation.isPending;

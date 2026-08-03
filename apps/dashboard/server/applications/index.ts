@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { defineHandler, method } from '../../lib/http/define-handler.js';
 import { buildStatusChangeUpdates } from '../../lib/application-status.js';
+import { getReminderDefaultDays } from '../../lib/notification-settings.js';
 import {
   APPLICATION_STATUSES,
   ACTIVE_STATUSES,
@@ -247,9 +248,13 @@ export default defineHandler({
 
         const col2 = await getCollection<ApplicationStatusDoc>('applications');
         const docs = await col2.find({ userId, _id: { $in: objectIds } }).toArray();
+        const defaultFrequencyDays = await getReminderDefaultDays(userId);
         await Promise.all(
           docs.map((doc) =>
-            col2.updateOne({ _id: doc._id }, { $set: buildStatusChangeUpdates(doc, bulkNewStatus) }),
+            col2.updateOne(
+              { _id: doc._id },
+              { $set: buildStatusChangeUpdates(doc, bulkNewStatus, defaultFrequencyDays) },
+            ),
           ),
         );
         return { json: { ok: true, updated: docs.length } };
@@ -277,7 +282,7 @@ export default defineHandler({
       }
 
       const now = new Date();
-      const reminderFrequencyDays = 7;
+      const reminderFrequencyDays = await getReminderDefaultDays(userId);
       const doc = {
         userId,
         jobPostingId,

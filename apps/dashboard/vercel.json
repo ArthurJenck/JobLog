@@ -66,12 +66,8 @@
       "schedule": "0 7 * * *"
     },
     {
-      "path": "/api/cron/delete-inactive",
+      "path": "/api/cron/maintenance",
       "schedule": "0 3 * * *"
-    },
-    {
-      "path": "/api/cron/normalize-addresses",
-      "schedule": "30 3 * * *"
     }
   ]
 }

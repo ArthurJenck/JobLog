@@ -30,6 +30,7 @@ async function handleAuth(req: VercelRequest, res: VercelResponse, segs: string[
 
 const routes: [string, Loader][] = [
   ['cron/reminders', () => import('../server/cron/reminders.js')],
+  ['cron/maintenance', () => import('../server/cron/maintenance.js')],
   ['cron/delete-inactive', () => import('../server/cron/delete-inactive.js')],
   ['cron/normalize-addresses', () => import('../server/cron/normalize-addresses.js')],
   ['analyses', () => import('../server/analyses.js')],

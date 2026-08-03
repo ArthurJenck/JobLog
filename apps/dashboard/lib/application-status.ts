@@ -7,7 +7,11 @@ interface StatusChangeSource {
   reminder?: { at?: Date | null; frequencyDays?: number } | null;
 }
 
-export function buildStatusChangeUpdates(app: StatusChangeSource, newStatus: ApplicationStatus) {
+export function buildStatusChangeUpdates(
+  app: StatusChangeSource,
+  newStatus: ApplicationStatus,
+  defaultFrequencyDays = 7,
+) {
   const updates: Record<string, unknown> = { status: newStatus, updated_at: new Date() };
 
   if (newStatus === 'applied' && !app.appliedAt) {
@@ -17,8 +21,9 @@ export function buildStatusChangeUpdates(app: StatusChangeSource, newStatus: App
   if (TERMINAL_STATUSES.includes(newStatus)) {
     updates['reminder.at'] = null;
   } else if (REMINDER_ELIGIBLE_STATUSES.includes(newStatus) && !app.reminder?.at) {
-    const frequencyDays = app.reminder?.frequencyDays ?? 7;
+    const frequencyDays = app.reminder?.frequencyDays ?? defaultFrequencyDays;
     updates['reminder.at'] = new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
+    updates['reminder.frequencyDays'] = frequencyDays;
   }
 
   if (newStatus !== app.status) {

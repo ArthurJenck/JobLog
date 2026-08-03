@@ -4,6 +4,7 @@ import { getCollection } from '../../lib/db.js';
 import { defineHandler, method } from '../../lib/http/define-handler.js';
 import { ApiError } from '../../lib/http/errors.js';
 import { normalizeLocationForStorage } from '../../lib/addresses.js';
+import { getReminderDefaultDays } from '../../lib/notification-settings.js';
 import { APPLICATION_STATUSES, CONTRACT_TYPES, REMOTE_TYPES, EVENT_TYPES, STATUS_EVENT, EVENT_AUTO_STATUS, TERMINAL_STATUSES, REMINDER_ELIGIBLE_STATUSES, resolveStatusOnEvent, deriveStatusFromEvents, type ApplicationStatus, type EventType } from '@joblog/shared';
 
 const PatchApplicationSchema = z.object({
@@ -81,9 +82,12 @@ interface ApplicationDoc {
   reminder?: { at?: Date | null; frequencyDays?: number } | null;
 }
 
-function computeReminderInitAt(app: ApplicationDoc) {
-  const frequencyDays = app.reminder?.frequencyDays ?? 7;
-  return new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
+async function buildReminderInit(app: ApplicationDoc, userId: string) {
+  const frequencyDays = app.reminder?.frequencyDays ?? (await getReminderDefaultDays(userId));
+  return {
+    'reminder.at': new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000),
+    'reminder.frequencyDays': frequencyDays,
+  };
 }
 
 export default defineHandler({
@@ -137,7 +141,7 @@ export default defineHandler({
           if (newStatus) {
             setOps['status'] = newStatus;
             if (REMINDER_ELIGIBLE_STATUSES.includes(newStatus) && !app.reminder?.at) {
-              setOps['reminder.at'] = computeReminderInitAt(app);
+              Object.assign(setOps, await buildReminderInit(app, userId));
             }
           }
         }
@@ -224,7 +228,7 @@ export default defineHandler({
         if (TERMINAL_STATUSES.includes(status)) {
           updates['reminder.at'] = null;
         } else if (REMINDER_ELIGIBLE_STATUSES.includes(status) && !app.reminder?.at) {
-          updates['reminder.at'] = computeReminderInitAt(app);
+          Object.assign(updates, await buildReminderInit(app, userId));
         }
         if (status !== app.status) {
           const newType = STATUS_EVENT[status];

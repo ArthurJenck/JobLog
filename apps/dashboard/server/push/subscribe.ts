@@ -9,9 +9,9 @@ const SubscribeSchema = z.object({
       auth: z.string(),
       p256dh: z.string(),
     }),
-  }).nullable(),
+  }).nullable().optional(),
   email: z.boolean().optional(),
-  reminderDefaultDays: z.number().int().positive().optional(),
+  reminderDefaultDays: z.number().int().positive().max(60).optional(),
 });
 
 export default defineHandler({

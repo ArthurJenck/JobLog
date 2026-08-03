@@ -92,6 +92,25 @@ describe('defineHandler', () => {
     expect(res.body).toEqual({ ok: true });
   });
 
+  it('runs a cron method declared on GET, the way Vercel Cron triggers it', async () => {
+    process.env.CRON_SECRET = 'expected-secret';
+
+    const cron = method({
+      auth: 'cron',
+      async handle() {
+        return { json: { ran: true } };
+      },
+    });
+    const handler = defineHandler({ GET: cron, POST: cron });
+
+    const req = fakeReq({ method: 'GET', headers: { authorization: 'Bearer expected-secret' } });
+    const res = fakeRes();
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ ran: true });
+  });
+
   it('returns a unified 400 validation_error with zod flatten() details', async () => {
     const handler = defineHandler({
       GET: method({
