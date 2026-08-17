@@ -37,7 +37,7 @@ export default defineHandler({
 
       const existing = await col.findOne({ url_hash, userId });
       if (existing) {
-        if (isBlockedOrErrorJobPosting(existing)) {
+        if (existing.scrape_status === 'failed' || isBlockedOrErrorJobPosting(existing)) {
           const now = new Date();
           const locationNormalization = await normalizeLocationForStorage(data.location ?? null);
           await col.updateOne(
