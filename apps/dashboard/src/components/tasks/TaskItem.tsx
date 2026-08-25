@@ -41,26 +41,24 @@ export function TaskItem({
         silent={willCompleteAll}
         onCheckedChange={(value) => handleToggle(value === true)}
       />
-      <div className="flex-1 min-w-0">
+      <span
+        className={cn(
+          'relative inline-block max-w-full text-sm transition-opacity duration-500',
+          doneToday && 'opacity-50',
+        )}
+        title={task.title}
+      >
+        <span className="line-clamp-2">{task.title}</span>
         <span
-          className={cn(
-            'relative inline-block max-w-full text-sm transition-opacity duration-500',
-            doneToday && 'opacity-50',
-          )}
-          title={task.title}
+          aria-hidden
+          className="absolute inset-0 line-clamp-2 line-through decoration-foreground/70 decoration-[1.5px] transition-[clip-path] duration-500 ease-out"
+          style={{
+            clipPath: doneToday ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
+          }}
         >
-          <span className="line-clamp-2">{task.title}</span>
-          <span
-            aria-hidden
-            className="absolute inset-0 line-clamp-2 line-through decoration-foreground/70 decoration-[1.5px] transition-[clip-path] duration-500 ease-out"
-            style={{
-              clipPath: doneToday ? 'inset(0 0 0 0)' : 'inset(0 100% 0 0)',
-            }}
-          >
-            {task.title}
-          </span>
+          {task.title}
         </span>
-      </div>
+      </span>
       {displayTarget !== null && (
         <Badge variant="secondary" className="shrink-0 text-xs">
           {task.progress ?? 0}/{displayTarget}
