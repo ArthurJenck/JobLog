@@ -43,8 +43,12 @@ export const LocationDetailsSchema = z.object({
 export const JobPostingSchema = z.object({
   _id: z.string(),
   url: z.string().url(),
-  url_hash: z.string(),
+  dedup_key: z.string().optional(),
+  dedup_version: z.literal(2).optional(),
   source: z.enum(JOB_SOURCES),
+  source_key: z.string().optional(),
+  source_label: z.string().nullable().optional(),
+  native_job_id: z.string().nullable().optional(),
   title: z.string(),
   company: z.string(),
   location: z.string().nullable(),
@@ -82,7 +86,8 @@ export const JobPostingSchema = z.object({
 
 export const JobPostingDraftSchema = JobPostingSchema.omit({
   _id: true,
-  url_hash: true,
+  dedup_key: true,
+  dedup_version: true,
   scrape_method: true,
   scraped_at: true,
   created_at: true,
@@ -112,6 +117,7 @@ export const ContactSchema = z.object({
 });
 
 export const ReminderSchema = z.object({
+  enabled: z.boolean().default(true),
   at: z.string().datetime().nullable(),
   frequencyDays: z.number().int().positive().default(7),
   maxCount: z.number().int().positive().default(3),
@@ -159,6 +165,28 @@ export const ApplicationWithJobSchema = ApplicationSchema.extend({
   jobPosting: JobPostingSchema,
 });
 
+export const UrlScrapeMessageV1Schema = z.object({
+  jobPostingId: z.string(),
+  userId: z.string(),
+  url: z.string().url(),
+  url_hash: z.string().regex(/^[a-f0-9]{64}$/),
+  attempt: z.number().int().positive(),
+}).strict();
+
+export const UrlScrapeMessageV2Schema = z.object({
+  version: z.literal(2),
+  jobPostingId: z.string(),
+  userId: z.string(),
+  url: z.string().url(),
+  dedup_key: z.string().regex(/^[a-f0-9]{64}$/),
+  attempt: z.number().int().positive(),
+}).strict();
+
+export const UrlScrapeMessageSchema = z.union([
+  UrlScrapeMessageV2Schema,
+  UrlScrapeMessageV1Schema,
+]);
+
 export type Salary = z.infer<typeof SalarySchema>;
 export type ScrapeStep = z.infer<typeof ScrapeStepSchema>;
 export type LocationDetails = z.infer<typeof LocationDetailsSchema>;
@@ -171,3 +199,6 @@ export type Application = z.infer<typeof ApplicationSchema>;
 export type Cv = z.infer<typeof CvSchema>;
 export type CvAnalysis = z.infer<typeof CvAnalysisSchema>;
 export type ApplicationWithJob = z.infer<typeof ApplicationWithJobSchema>;
+export type UrlScrapeMessageV1 = z.infer<typeof UrlScrapeMessageV1Schema>;
+export type UrlScrapeMessageV2 = z.infer<typeof UrlScrapeMessageV2Schema>;
+export type UrlScrapeMessage = z.infer<typeof UrlScrapeMessageSchema>;

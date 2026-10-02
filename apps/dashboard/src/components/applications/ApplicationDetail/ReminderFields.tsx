@@ -19,15 +19,20 @@ export function ReminderFields({
   events,
   appliedAt,
   onSave,
+  togglePending,
+  fieldsPending,
 }: {
   reminder: ApplicationWithJob['reminder'];
   status: ApplicationStatus;
   events: ApplicationWithJob['events'];
   appliedAt: ApplicationWithJob['appliedAt'];
   onSave: (r: Partial<ApplicationWithJob['reminder']>) => void;
+  togglePending: boolean;
+  fieldsPending: boolean;
 }) {
   const [frequencyDays, setFrequencyDays] = useState(reminder.frequencyDays);
   const [at, setAt] = useState(reminder.at ?? null);
+  const enabled = reminder.enabled !== false;
 
   const isTerminal = !REMINDER_ELIGIBLE_STATUSES.includes(status);
 
@@ -46,6 +51,20 @@ export function ReminderFields({
     onSave({ frequencyDays: days, at: nextAt });
   }
 
+  function handleEnabledChange() {
+    const nextEnabled = !enabled;
+    const nextAt =
+      nextEnabled && REMINDER_ELIGIBLE_STATUSES.includes(status)
+        ? computeNextAt(null, frequencyDays)
+        : null;
+    setAt(nextAt);
+    onSave({
+      enabled: nextEnabled,
+      at: nextAt,
+      snoozedUntil: null,
+    });
+  }
+
   function handleLastFollowupChange(dateValue: string) {
     if (!dateValue) return;
     const newBase = new Date(dateValue + 'T12:00:00').toISOString();
@@ -55,20 +74,39 @@ export function ReminderFields({
   }
 
   return (
-    <div
-      className={`flex flex-col gap-3 ${isTerminal ? 'opacity-50 pointer-events-none' : ''}`}
-    >
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <Label htmlFor="reminder-enabled" className="text-sm">
+          Rappels de relance
+        </Label>
+        <button
+          id="reminder-enabled"
+          type="button"
+          role="switch"
+          aria-checked={enabled}
+          disabled={togglePending}
+          onClick={handleEnabledChange}
+          className={`relative h-6 w-11 rounded-full transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${enabled ? 'bg-primary' : 'bg-muted-foreground/30'}`}
+        >
+          <span
+            className={`absolute left-0.5 top-0.5 h-5 w-5 rounded-full bg-background shadow-sm transition-transform ${enabled ? 'translate-x-5' : 'translate-x-0'}`}
+          />
+        </button>
+      </div>
       {isTerminal && (
         <p className="text-xs text-muted-foreground">
           Les relances sont désactivées pour ce statut.
         </p>
       )}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+      <div
+        className={`grid grid-cols-1 sm:grid-cols-2 gap-3 ${!enabled || isTerminal ? 'opacity-50' : ''}`}
+      >
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Fréquence (jours)</Label>
           <Input
             type="number"
             min={1}
+            disabled={!enabled || isTerminal || fieldsPending}
             value={frequencyDays}
             onChange={(e) => setFrequencyDays(Number(e.target.value) || 7)}
             onBlur={(e) => handleFrequencyBlur(Number(e.target.value) || 7)}
@@ -79,6 +117,7 @@ export function ReminderFields({
           <Label className="text-xs">Prochaine relance</Label>
           <Input
             type="date"
+            disabled={!enabled || isTerminal || fieldsPending}
             value={at ? new Date(at).toISOString().slice(0, 10) : ''}
             onChange={(e) => {
               const iso = e.target.value
@@ -91,11 +130,12 @@ export function ReminderFields({
           />
         </div>
       </div>
-      {hasFollowup && (
+      {hasFollowup && enabled && !isTerminal && (
         <div className="flex flex-col gap-1.5">
           <Label className="text-xs">Dernière relance envoyée</Label>
           <Input
             type="date"
+            disabled={fieldsPending}
             defaultValue={
               lastFollowupAt
                 ? new Date(lastFollowupAt).toISOString().slice(0, 10)

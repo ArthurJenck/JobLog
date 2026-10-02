@@ -17,6 +17,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as CvRouteImport } from './routes/cv'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthConnectRouteImport } from './routes/auth.connect'
+import { Route as AdminExtensionRecipesRouteImport } from './routes/admin.extension-recipes'
 
 const TasksRoute = TasksRouteImport.update({
   id: '/tasks',
@@ -58,6 +59,11 @@ const AuthConnectRoute = AuthConnectRouteImport.update({
   path: '/auth/connect',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminExtensionRecipesRoute = AdminExtensionRecipesRouteImport.update({
+  id: '/admin/extension-recipes',
+  path: '/admin/extension-recipes',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -67,6 +73,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/tasks': typeof TasksRoute
+  '/admin/extension-recipes': typeof AdminExtensionRecipesRoute
   '/auth/connect': typeof AuthConnectRoute
 }
 export interface FileRoutesByTo {
@@ -77,6 +84,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/tasks': typeof TasksRoute
+  '/admin/extension-recipes': typeof AdminExtensionRecipesRoute
   '/auth/connect': typeof AuthConnectRoute
 }
 export interface FileRoutesById {
@@ -88,6 +96,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/settings': typeof SettingsRoute
   '/tasks': typeof TasksRoute
+  '/admin/extension-recipes': typeof AdminExtensionRecipesRoute
   '/auth/connect': typeof AuthConnectRoute
 }
 export interface FileRouteTypes {
@@ -100,6 +109,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/settings'
     | '/tasks'
+    | '/admin/extension-recipes'
     | '/auth/connect'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -110,6 +120,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/settings'
     | '/tasks'
+    | '/admin/extension-recipes'
     | '/auth/connect'
   id:
     | '__root__'
@@ -120,6 +131,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/settings'
     | '/tasks'
+    | '/admin/extension-recipes'
     | '/auth/connect'
   fileRoutesById: FileRoutesById
 }
@@ -131,6 +143,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   SettingsRoute: typeof SettingsRoute
   TasksRoute: typeof TasksRoute
+  AdminExtensionRecipesRoute: typeof AdminExtensionRecipesRoute
   AuthConnectRoute: typeof AuthConnectRoute
 }
 
@@ -192,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthConnectRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/extension-recipes': {
+      id: '/admin/extension-recipes'
+      path: '/admin/extension-recipes'
+      fullPath: '/admin/extension-recipes'
+      preLoaderRoute: typeof AdminExtensionRecipesRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -203,6 +223,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   SettingsRoute: SettingsRoute,
   TasksRoute: TasksRoute,
+  AdminExtensionRecipesRoute: AdminExtensionRecipesRoute,
   AuthConnectRoute: AuthConnectRoute,
 }
 export const routeTree = rootRouteImport

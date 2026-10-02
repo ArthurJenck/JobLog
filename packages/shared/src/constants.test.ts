@@ -21,6 +21,12 @@ describe('resolveStatusOnEvent', () => {
     expect(resolveStatusOnEvent('offer', 'rejected')).toBe('rejected');
     expect(resolveStatusOnEvent('saved', 'ghosted')).toBe('ghosted');
     expect(resolveStatusOnEvent('interview', 'cancelled')).toBe('cancelled');
+    expect(resolveStatusOnEvent('offer', 'offer_accepted')).toBe('accepted');
+  });
+
+  it('does not reopen a terminal status with a pipeline event', () => {
+    expect(resolveStatusOnEvent('accepted', 'applied')).toBeNull();
+    expect(resolveStatusOnEvent('rejected', 'interview_scheduled')).toBeNull();
   });
 
   it('returns null when a forced terminal event repeats the current status', () => {
@@ -65,5 +71,15 @@ describe('deriveStatusFromEvents', () => {
       { type: 'ghosted' as const, at: '2024-01-10' },
     ];
     expect(deriveStatusFromEvents(events)).toBe('ghosted');
+  });
+
+  it('replays accepted as a terminal status', () => {
+    const events = [
+      { type: 'applied' as const, at: '2024-01-01' },
+      { type: 'offer_received' as const, at: '2024-01-02' },
+      { type: 'offer_accepted' as const, at: '2024-01-03' },
+      { type: 'interview_scheduled' as const, at: '2024-01-04' },
+    ];
+    expect(deriveStatusFromEvents(events)).toBe('accepted');
   });
 });

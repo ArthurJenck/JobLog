@@ -8,7 +8,7 @@ import {
 
 export default defineHandler({
   POST: method({
-    async handle({ user, req }) {
+    async handle({ user, req, res }) {
       const parsed = parseRetryRequest(req.body);
       if (!parsed.success) throw ApiError.validation(parsed.error.flatten());
 
@@ -17,6 +17,7 @@ export default defineHandler({
         return { json: result };
       } catch (err) {
         if (err instanceof UrlScrapeHttpError) {
+          if (err.retryAfter) res.setHeader('Retry-After', String(err.retryAfter));
           throw new ApiError(err.status, err.code, err.message, {
             extra: { usage: err.usage, extensionUrl: err.extensionUrl },
           });

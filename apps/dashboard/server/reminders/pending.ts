@@ -10,6 +10,7 @@ export default defineHandler({
 
       const count = await col.countDocuments({
         userId: user.id,
+        'reminder.enabled': { $ne: false },
         'reminder.at': { $lte: now },
         $expr: { $lt: ['$reminder.sentCount', '$reminder.maxCount'] },
         $or: [

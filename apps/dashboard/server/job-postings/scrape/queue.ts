@@ -1,23 +1,24 @@
 import { QueueClient, registerDevConsumer, DuplicateMessageError } from '@vercel/queue';
-import { z } from 'zod';
+import {
+  UrlScrapeMessageSchema,
+  type UrlScrapeMessage,
+  type UrlScrapeMessageV2,
+} from '@joblog/shared';
 import { processUrlScrapeMessage } from './service.js';
+import {
+  MIGRATION_RETRY_AFTER_SECONDS,
+  MigrationMaintenanceError,
+} from '../../migrations/maintenance.js';
 
 export const URL_SCRAPE_TOPIC = 'joblog-url-scrape';
 
 const queue = new QueueClient();
 let didRegisterDevConsumer = false;
 
-export const UrlScrapeJobMessageSchema = z.object({
-  jobPostingId: z.string(),
-  userId: z.string(),
-  url: z.string().url(),
-  url_hash: z.string(),
-  attempt: z.number().int().positive(),
-});
+export const UrlScrapeJobMessageSchema = UrlScrapeMessageSchema;
+export type UrlScrapeJobMessage = UrlScrapeMessage;
 
-export type UrlScrapeJobMessage = z.infer<typeof UrlScrapeJobMessageSchema>;
-
-export async function enqueueUrlScrapeJob(message: UrlScrapeJobMessage) {
+export async function enqueueUrlScrapeJob(message: UrlScrapeMessageV2) {
   ensureDevConsumerRegistered();
 
   try {
@@ -41,6 +42,9 @@ function ensureDevConsumerRegistered() {
     consumerGroup: 'joblog-url-scrape-dev',
     visibilityTimeoutSeconds: 300,
     retry: (_error, metadata) => {
+      if (_error instanceof MigrationMaintenanceError) {
+        return { afterSeconds: MIGRATION_RETRY_AFTER_SECONDS };
+      }
       if (metadata.deliveryCount > 3) return { acknowledge: true };
       return { afterSeconds: Math.min(300, 2 ** metadata.deliveryCount * 5) };
     },

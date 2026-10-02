@@ -40,20 +40,34 @@ export function normalizeWhitespace(value: string) {
 }
 
 export function detectSource(url: string): JobSource {
-  if (url.includes('linkedin.com')) return 'linkedin';
-  if (url.includes('welcometothejungle.com')) return 'wttj';
-  if (url.includes('hellowork.com')) return 'hellowork';
-  if (url.includes('indeed.com')) return 'indeed';
-  if (url.includes('glassdoor.')) return 'glassdoor';
-  if (url.includes('jobteaser.com')) return 'jobteaser';
-  if (url.includes('jobijoba.com')) return 'jobijoba';
-  if (url.includes('meteojob.com')) return 'meteojob';
-  if (url.includes('apec.fr')) return 'apec';
-  if (url.includes('francetravail.fr')) return 'francetravail';
-  if (url.includes('cadremploi.fr')) return 'cadremploi';
-  if (url.includes('talent.com')) return 'talent';
-  if (url.includes('lesjeudis.com')) return 'lesjeudis';
+  let hostname: string;
+  try {
+    hostname = new URL(url).hostname.toLowerCase();
+  } catch {
+    return 'paste';
+  }
+
+  if (hasDomain(hostname, 'linkedin.com')) return 'linkedin';
+  if (hasDomain(hostname, 'welcometothejungle.com')) return 'wttj';
+  if (hasDomain(hostname, 'hellowork.com')) return 'hellowork';
+  if (hasDomain(hostname, 'indeed.com')) return 'indeed';
+  if (hostname === 'glassdoor.fr' || hostname.startsWith('glassdoor.') || hostname.includes('.glassdoor.')) return 'glassdoor';
+  if (hasDomain(hostname, 'jobteaser.com')) return 'jobteaser';
+  if (hasDomain(hostname, 'jobijoba.com')) return 'jobijoba';
+  if (hasDomain(hostname, 'meteojob.com')) return 'meteojob';
+  if (hasDomain(hostname, 'apec.fr')) return 'apec';
+  if (hasDomain(hostname, 'francetravail.fr')) return 'francetravail';
+  if (hasDomain(hostname, 'cadremploi.fr')) return 'cadremploi';
+  if (hasDomain(hostname, 'talent.com')) return 'talent';
+  if (hasDomain(hostname, 'lesjeudis.com')) return 'lesjeudis';
+  if (hasDomain(hostname, 'asfored.org')) return 'asfored';
+  if (hasDomain(hostname, 'livremploi.fr')) return 'livremploi';
+  if (hasDomain(hostname, 'profilculture.com')) return 'profilculture';
   return 'paste';
+}
+
+function hasDomain(hostname: string, domain: string) {
+  return hostname === domain || hostname.endsWith(`.${domain}`);
 }
 
 export function getDisplayDomain(rawUrl: string) {

@@ -5,9 +5,11 @@ import type { ApplicationWithJob } from '@joblog/shared';
 
 export function ContactFields({
   contact,
+  disabled,
   onSave,
 }: {
   contact: ApplicationWithJob['contact'];
+  disabled: boolean;
   onSave: (c: ApplicationWithJob['contact']) => void;
 }) {
   const [v, setV] = useState(
@@ -27,6 +29,7 @@ export function ContactFields({
           <Label className="text-xs capitalize">{fieldLabel(field)}</Label>
           <Input
             value={v[field] ?? ''}
+            disabled={disabled}
             onChange={(e) => update(field, e.target.value)}
             onBlur={() => {
               if (dirty) {

@@ -68,7 +68,8 @@ Définies et validées par `lib/env.ts` (schéma Zod, objet `env` proxy paresseu
 | `GEMINI_API_KEY`, `GEMINI_MODEL`, `GEMINI_DAILY_QUOTA`, `GEMINI_USER_DAILY_QUOTA` | extraction IA des offres / analyse CV |
 | `FIRECRAWL_API_KEY`, `JINA_API_KEY`, `JINA_ALERT_EMAIL`, `JINA_ESTIMATED_TOKEN_ALERT_THRESHOLD` | providers de scraping d'offres |
 | `LOGO_DEV_SECRET_KEY`, `VITE_LOGO_DEV_TOKEN` | recherche de logos d'entreprise |
-| `ADMIN_MAIL`, `RESEND_FROM`, `RESEND_ALERT_FROM`, `RESEND_AUTH_FROM`, `RESEND_REMINDER_FROM` | expéditeurs / destinataire d'alertes email |
+| `ADMIN_USER_ID`, `ADMIN_MAIL` | identité better-auth exacte autorisée à ouvrir l'administration des recettes d'extension ; `ADMIN_MAIL` accepte aussi le préfixe `mailto:` et reste le destinataire des alertes |
+| `RESEND_FROM`, `RESEND_ALERT_FROM`, `RESEND_AUTH_FROM`, `RESEND_REMINDER_FROM` | expéditeurs d'emails |
 | `PUBLIC_APP_URL`, `PUBLIC_EXTENSION_URL` | URLs publiques utilisées dans les emails/liens |
 
 Note : le front consomme aussi des variables `VITE_*` (ex. `VITE_VAPID_PUBLIC_KEY`, `VITE_CHROME_EXTENSION_URL`) injectées par Vite au build — elles ne passent pas par `lib/env.ts` (côté serveur uniquement) et ne sont pas validées par ce schéma.
@@ -96,6 +97,18 @@ Ces routes sont protégées par `auth: 'cron'` dans `defineHandler` : elles exig
 - recrée les index d'`ensureIndexes()` (dont les nouveaux index uniques `{userId, url_hash}` et `{userId, cvHash, jobPostingId}`).
 
 À exécuter une seule fois par environnement, avant ou juste après la mise en prod du code du Lot B.
+
+## Migration `dedup_key` v2
+
+`POST /api/admin/migrate-dedup-key-v2` est protégé par `Authorization: Bearer <CRON_SECRET>` et accepte trois actions JSON :
+
+- `{"action":"dry-run"}` analyse les collisions, références invalides, nettoyages de rappels et replis de statut sans mutation ;
+- `{"action":"run","ownerId":"<uuid>"}` active le verrou d'écriture, reprend la migration idempotente, fusionne les collisions et vérifie les invariants ;
+- `{"action":"unlock","ownerId":"<même uuid>"}` libère explicitement le verrou après diagnostic si une exécution a échoué.
+
+Une exécution réussie libère elle-même le verrou. Une exécution échouée le conserve volontairement afin d'empêcher de nouvelles écritures avant diagnostic. Le dry-run doit d'abord être exécuté sur une copie représentative, puis la production doit être sauvegardée avant l'action `run`.
+
+Cette livraison reste compatible avec les messages queue v1 et conserve temporairement `url_hash`. Leur suppression appartient à la phase finale, après observation d'une fenêtre complète de rétention de queue sans aucune livraison v1, plutôt qu'après un délai fixe arbitraire.
 
 ## Sécurité
 

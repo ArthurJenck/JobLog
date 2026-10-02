@@ -2,6 +2,7 @@ import { ObjectId } from 'mongodb';
 import { z } from 'zod';
 import { getCollection } from '../../lib/db.js';
 import { defineHandler, method } from '../../lib/http/define-handler.js';
+import { ApiError } from '../../lib/http/errors.js';
 import { buildStatusChangeUpdates } from '../../lib/application-status.js';
 import { getReminderDefaultDays } from '../../lib/notification-settings.js';
 import {
@@ -54,7 +55,7 @@ interface ApplicationStatusDoc {
   status: ApplicationStatus;
   appliedAt?: Date | null;
   events?: Array<{ type: EventType; at: Date; meta: unknown }>;
-  reminder?: { at?: Date | null; frequencyDays?: number } | null;
+  reminder?: { enabled?: boolean; at?: Date | null; frequencyDays?: number } | null;
 }
 
 async function resolveDefaultCvId(userId: string): Promise<string | null> {
@@ -72,6 +73,7 @@ const SORT_FIELD_MAP: Record<string, string> = {
   nextInterview: 'nextInterview',
   reminder: 'reminder.at',
   appliedAt: 'effectiveDate',
+  updatedAt: 'effectiveUpdatedAt',
 };
 
 export default defineHandler({
@@ -83,7 +85,7 @@ export default defineHandler({
         search,
         dateFrom,
         dateTo,
-        sort = 'appliedAt',
+        sort,
         dir = 'desc',
         page = '1',
         pageSize = '25',
@@ -93,24 +95,27 @@ export default defineHandler({
       const pageSizeNum = Math.min(100, Math.max(1, Number(pageSize)));
       const skip = (pageNum - 1) * pageSizeNum;
 
-      const sortField = SORT_FIELD_MAP[sort] ?? 'effectiveDate';
+      const normalizedSearch = typeof search === 'string' ? search.trim() : '';
+      const hasExplicitSort = typeof sort === 'string' && sort in SORT_FIELD_MAP;
+      const sortField = hasExplicitSort ? SORT_FIELD_MAP[sort] : 'effectiveUpdatedAt';
       const sortDir = dir === 'asc' ? 1 : -1;
 
       const pipeline: object[] = [];
 
       const initialMatch: Record<string, unknown> = { userId };
-      const statusValues = parseStatusFilter(status);
-      if (statusValues.length) initialMatch['status'] = { $in: statusValues };
+      const statusValues = normalizedSearch ? [] : parseStatusFilter(status);
+      if (statusValues.length > 0) initialMatch['status'] = { $in: statusValues };
       pipeline.push({ $match: initialMatch });
 
       pipeline.push({
         $addFields: {
           effectiveDate: { $ifNull: ['$appliedAt', '$created_at'] },
+          effectiveUpdatedAt: { $ifNull: ['$updated_at', '$created_at'] },
         },
       });
 
-      const validDateFrom = DateParamSchema.safeParse(dateFrom).success ? dateFrom : undefined;
-      const validDateTo = DateParamSchema.safeParse(dateTo).success ? dateTo : undefined;
+      const validDateFrom = !normalizedSearch && DateParamSchema.safeParse(dateFrom).success ? dateFrom : undefined;
+      const validDateTo = !normalizedSearch && DateParamSchema.safeParse(dateTo).success ? dateTo : undefined;
       if (validDateFrom || validDateTo) {
         const dateMatch: Record<string, unknown> = {};
         if (validDateFrom) dateMatch['$gte'] = new Date(validDateFrom + 'T00:00:00');
@@ -121,9 +126,18 @@ export default defineHandler({
       pipeline.push({
         $lookup: {
           from: 'job_postings',
-          let: { jpId: '$jobPostingId' },
+          let: { jpId: '$jobPostingId', ownerId: '$userId' },
           pipeline: [
-            { $match: { $expr: { $eq: ['$_id', { $toObjectId: '$$jpId' }] } } },
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ['$_id', { $toObjectId: '$$jpId' }] },
+                    { $eq: ['$userId', '$$ownerId'] },
+                  ],
+                },
+              },
+            },
           ],
           as: 'jobPosting',
         },
@@ -185,8 +199,8 @@ export default defineHandler({
         },
       });
 
-      if (search) {
-        const q = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      if (normalizedSearch) {
+        const q = normalizedSearch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         pipeline.push({
           $match: {
             $or: [
@@ -195,12 +209,49 @@ export default defineHandler({
             ],
           },
         });
+        if (!hasExplicitSort) {
+          const exact = `^${q}$`;
+          const prefix = `^${q}`;
+          pipeline.push({
+            $addFields: {
+              searchRank: {
+                $switch: {
+                  branches: [
+                    {
+                      case: {
+                        $or: [
+                          { $regexMatch: { input: { $ifNull: ['$title', ''] }, regex: exact, options: 'i' } },
+                          { $regexMatch: { input: { $ifNull: ['$company', ''] }, regex: exact, options: 'i' } },
+                        ],
+                      },
+                      then: 0,
+                    },
+                    {
+                      case: {
+                        $or: [
+                          { $regexMatch: { input: { $ifNull: ['$title', ''] }, regex: prefix, options: 'i' } },
+                          { $regexMatch: { input: { $ifNull: ['$company', ''] }, regex: prefix, options: 'i' } },
+                        ],
+                      },
+                      then: 1,
+                    },
+                  ],
+                  default: 2,
+                },
+              },
+            },
+          });
+        }
       }
+
+      const sortSpec = normalizedSearch && !hasExplicitSort
+        ? { searchRank: 1, effectiveUpdatedAt: -1, _id: -1 }
+        : { [sortField]: sortDir, _id: sortDir };
 
       pipeline.push({
         $facet: {
           data: [
-            { $sort: { [sortField]: sortDir } },
+            { $sort: sortSpec },
             { $skip: skip },
             { $limit: pageSizeNum },
           ],
@@ -227,6 +278,7 @@ export default defineHandler({
     },
   }),
   PATCH: method({
+    maintenanceSensitive: true,
     body: PatchBodySchema,
     async handle({ user, body }) {
       const userId = user.id;
@@ -237,7 +289,14 @@ export default defineHandler({
           filter['_id'] = { $ne: new ObjectId(body.excludeId) };
         }
         const col2 = await getCollection('applications');
-        await col2.updateMany(filter, { $set: { status: 'cancelled', 'reminder.at': null, updated_at: new Date() } });
+        await col2.updateMany(filter, {
+          $set: {
+            status: 'cancelled',
+            'reminder.at': null,
+            'reminder.snoozedUntil': null,
+            updated_at: new Date(),
+          },
+        });
         return { json: { ok: true } };
       }
 
@@ -269,17 +328,19 @@ export default defineHandler({
     },
   }),
   POST: method({
+    maintenanceSensitive: true,
     body: CreateApplicationSchema,
     async handle({ user, body }) {
       const userId = user.id;
       const { jobPostingId, status, cvId } = body;
 
       const col = await getCollection('applications');
-
-      const existing = await col.findOne({ userId, jobPostingId });
-      if (existing) {
-        return { json: { applicationId: existing._id.toString(), duplicate: true } };
-      }
+      if (!ObjectId.isValid(jobPostingId)) throw ApiError.badRequest('Offre invalide');
+      const jobPosting = await (await getCollection('job_postings')).findOne({
+        _id: new ObjectId(jobPostingId),
+        userId,
+      });
+      if (!jobPosting) throw ApiError.notFound('Offre introuvable');
 
       const now = new Date();
       const reminderFrequencyDays = await getReminderDefaultDays(userId);
@@ -293,6 +354,7 @@ export default defineHandler({
         notes: null,
         events: [{ type: 'created', at: now, meta: null }],
         reminder: {
+          enabled: true,
           at: REMINDER_ELIGIBLE_STATUSES.includes(status)
             ? new Date(now.getTime() + reminderFrequencyDays * 24 * 60 * 60 * 1000)
             : null,
@@ -305,8 +367,20 @@ export default defineHandler({
         updated_at: now,
       };
 
-      const result = await col.insertOne(doc);
-      return { status: 201, json: { applicationId: result.insertedId.toString() } };
+      const result = await col.findOneAndUpdate(
+        { userId, jobPostingId },
+        { $setOnInsert: doc },
+        { upsert: true, returnDocument: 'after', includeResultMetadata: true },
+      );
+      const application = result?.value;
+      if (!application) throw new Error('Application upsert failed');
+      return {
+        status: result.lastErrorObject?.upserted ? 201 : 200,
+        json: {
+          applicationId: application._id.toString(),
+          duplicate: !result.lastErrorObject?.upserted,
+        },
+      };
     },
   }),
 });

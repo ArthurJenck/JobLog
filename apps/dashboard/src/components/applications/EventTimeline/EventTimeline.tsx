@@ -15,6 +15,7 @@ import {
 import { EventTypeIcon } from './EventTypeIcon';
 import { EVENT_ICONS } from './event-icons';
 import { EditableEventDate } from './EditableEventDate';
+import { eventControlKey } from '@/lib/optimistic-application';
 import {
   ADDABLE_EVENTS,
   getNextPipelineEvent,
@@ -29,6 +30,7 @@ interface Props {
   onDeleteEvent: (type: EventType, at: string) => void;
   onConfirmFuture: (type: EventType) => void;
   onUpdateEventDate: (type: EventType, at: string, newAt: string) => void;
+  isPending: (controlKey: string) => boolean;
 }
 
 export function EventTimeline({
@@ -38,6 +40,7 @@ export function EventTimeline({
   onDeleteEvent,
   onConfirmFuture,
   onUpdateEventDate,
+  isPending,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [addingCustom, setAddingCustom] = useState(false);
@@ -72,6 +75,7 @@ export function EventTimeline({
             {ADDABLE_EVENTS.map((type) => (
               <DropdownMenuItem
                 key={type}
+                disabled={isPending(eventControlKey('add', type))}
                 onClick={() => {
                   if (type === 'custom') {
                     setAddingCustom(true);
@@ -114,8 +118,15 @@ export function EventTimeline({
       <div className="flex flex-col gap-0">
         {futureType && (
           <div
-            className="flex gap-3 cursor-pointer opacity-50 hover:opacity-75 transition-opacity"
-            onClick={() => onConfirmFuture(futureType)}
+            className={`flex gap-3 opacity-50 transition-opacity ${isPending(eventControlKey('add', futureType)) || isPending('status') ? 'cursor-not-allowed' : 'cursor-pointer hover:opacity-75'}`}
+            onClick={() => {
+              if (
+                !isPending(eventControlKey('add', futureType)) &&
+                !isPending('status')
+              ) {
+                onConfirmFuture(futureType);
+              }
+            }}
           >
             <div className="flex flex-col items-center">
               <div className="flex h-7 w-7 items-center justify-center rounded-full flex-shrink-0 border-2 border-dashed border-muted-foreground/40 bg-muted">
@@ -140,7 +151,7 @@ export function EventTimeline({
             ? Object.entries(event.meta).filter(([k]) => k !== 'label')
             : [];
           return (
-            <div key={i} className="flex gap-3 group">
+            <div key={`${event.type}:${event.at}:${i}`} className="flex gap-3 group">
               <div className="flex flex-col items-center">
                 <EventTypeIcon type={event.type} />
                 {i < sorted.length - 1 && (
@@ -155,6 +166,9 @@ export function EventTimeline({
                   {event.type !== 'created' && (
                     <button
                       className="opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive flex-shrink-0 mt-0.5"
+                      disabled={isPending(
+                        eventControlKey('delete', event.type, event.at),
+                      )}
                       onClick={() => onDeleteEvent(event.type, event.at)}
                     >
                       <TrashIcon className="h-3.5 w-3.5" />
@@ -163,6 +177,9 @@ export function EventTimeline({
                 </div>
                 <EditableEventDate
                   at={event.at}
+                  disabled={isPending(
+                    eventControlKey('date', event.type, event.at),
+                  )}
                   onUpdate={(newAt) =>
                     onUpdateEventDate(event.type, event.at, newAt)
                   }

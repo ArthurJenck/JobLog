@@ -7,6 +7,7 @@ import { sha256 } from '../lib/hash.js';
 import { defineHandler, method } from '../lib/http/define-handler.js';
 import { ApiError } from '../lib/http/errors.js';
 import { checkAndIncrementQuota, getUserDailyQuota } from './usage/gemini-quota.js';
+import { resolveApplicationId } from './applications/aliases.js';
 
 const Schema = z.object({
   cvId: z.string(),
@@ -217,9 +218,12 @@ function normalizeCompactText(value: string) {
 }
 
 async function loadCvAndApplication(userId: string, cvId: string, applicationId: string) {
-  if (!ObjectId.isValid(cvId) || !ObjectId.isValid(applicationId)) {
+  if (!ObjectId.isValid(cvId)) {
     throw ApiError.badRequest('Invalid id');
   }
+
+  const resolvedApplicationId = await resolveApplicationId(userId, applicationId);
+  if (!resolvedApplicationId) throw ApiError.notFound('Candidature introuvable');
 
   const [cvCol, appCol] = await Promise.all([
     getCollection('cvs'),
@@ -228,7 +232,7 @@ async function loadCvAndApplication(userId: string, cvId: string, applicationId:
 
   const [cv, app] = await Promise.all([
     cvCol.findOne({ _id: new ObjectId(cvId), userId }),
-    appCol.findOne({ _id: new ObjectId(applicationId), userId }),
+    appCol.findOne({ _id: resolvedApplicationId, userId }),
   ]);
 
   if (!cv) throw ApiError.notFound('CV introuvable');
@@ -287,10 +291,11 @@ export default defineHandler({
     },
   }),
   POST: method({
+    maintenanceSensitive: true,
     body: Schema,
     async handle({ user, body }) {
       const { cvId, applicationId, force, jobDescription } = body;
-      const { cv, jp, jpCol } = await loadCvAndApplication(user.id, cvId, applicationId);
+      const { cv, app, jp, jpCol } = await loadCvAndApplication(user.id, cvId, applicationId);
 
       const cvHash = cv.content_hash as string;
       const jobPostingId = String(jp._id);
@@ -306,6 +311,14 @@ export default defineHandler({
 
       if (jobDescriptionOverride && !hasComparableJobText(storedJobDescription)) {
         const now = new Date();
+        const manualFields = [
+          ...new Set([
+            ...(Array.isArray(jp.manual_fields)
+              ? jp.manual_fields.filter((field): field is string => typeof field === 'string')
+              : []),
+            'description',
+          ]),
+        ];
         await jpCol.updateOne(
           { _id: jp._id, userId: user.id },
           {
@@ -313,13 +326,22 @@ export default defineHandler({
               description: jobDescriptionOverride,
               description_source: 'manual',
               scrape_status: 'succeeded',
+              scrape_steps: [],
               scrape_error: null,
               scrape_error_code: null,
               scrape_error_category: null,
+              scrape_message_id: null,
+              scrape_started_at: null,
               scrape_finished_at: now,
+              manually_repaired_at: now,
+              manual_fields: manualFields,
               updated_at: now,
             },
           },
+        );
+        await (await getCollection('applications')).updateOne(
+          { _id: app._id, userId: user.id },
+          { $set: { updated_at: now } },
         );
       }
 

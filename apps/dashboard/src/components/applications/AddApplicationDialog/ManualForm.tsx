@@ -3,27 +3,40 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { localDayKey } from '@joblog/shared';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { api, type LogoSearchResult } from '@/lib/api';
+import { Textarea } from '@/components/ui/textarea';
+import { Label } from '@/components/ui/label';
+import { api, type LogoSearchResult, type ManualHandoffDraft } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { getLogoUrlForDomain } from '@/lib/company-logo';
 import { JobPostingFields } from '@/components/applications/JobPostingFields';
 
 const LAST_CONTRACT_TYPE_KEY = 'joblog:lastContractType';
 
-export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
+export function ManualForm({
+  onCreated,
+  initialUrl = '',
+  initialDraft,
+  handoffToken,
+}: {
+  onCreated: (id: string) => void;
+  initialUrl?: string;
+  initialDraft?: ManualHandoffDraft;
+  handoffToken?: string;
+}) {
   const qc = useQueryClient();
   const [selectedCompany, setSelectedCompany] = useState<LogoSearchResult | null>(null);
   const [isCompanyFocused, setIsCompanyFocused] = useState(false);
   const [debouncedCompany, setDebouncedCompany] = useState('');
-  const [form, setForm] = useState({
-    title: '',
-    company: '',
+  const [form, setForm] = useState(() => ({
+    title: initialDraft?.title ?? '',
+    company: initialDraft?.company ?? '',
     company_website: '',
-    location: '',
-    url: '',
-    contract_type: localStorage.getItem(LAST_CONTRACT_TYPE_KEY) ?? '',
-    remote: '',
-  });
+    location: initialDraft?.location ?? '',
+    description: initialDraft?.description ?? '',
+    url: initialDraft?.url ?? initialUrl,
+    contract_type: initialDraft?.contract_type ?? localStorage.getItem(LAST_CONTRACT_TYPE_KEY) ?? '',
+    remote: initialDraft?.remote ?? '',
+  }));
 
   useEffect(() => {
     const t = window.setTimeout(() => setDebouncedCompany(form.company.trim()), 300);
@@ -62,12 +75,27 @@ export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
       } else {
         localStorage.removeItem(LAST_CONTRACT_TYPE_KEY);
       }
+      if (handoffToken) {
+        const application = await api.manualHandoffs.consume(handoffToken, {
+          url: form.url || undefined,
+          title: form.title,
+          company: form.company,
+          location: form.location || null,
+          description: form.description || null,
+          company_website: form.company_website || null,
+          contract_type: form.contract_type || null,
+          remote: form.remote || null,
+        });
+        return application._id;
+      }
+
       const jpRes = await api.jobPostings.create({
-        url: form.url || `manual://joblog/${Date.now()}`,
+        url: form.url || `manual://joblog/${crypto.randomUUID()}`,
         source: 'manual',
         title: form.title,
         company: form.company,
         location: form.location || null,
+        description: form.description || null,
         company_website: form.company_website || null,
         contract_type: form.contract_type || null,
         remote: form.remote || null,
@@ -150,6 +178,15 @@ export function ManualForm({ onCreated }: { onCreated: (id: string) => void }) {
           </>
         )}
       />
+      <div className="flex flex-col gap-1.5">
+        <Label>Description</Label>
+        <Textarea
+          value={form.description}
+          onChange={(event) => set('description', event.target.value)}
+          placeholder="Description de l’offre"
+          rows={7}
+        />
+      </div>
       <Button type="submit" disabled={isLoading} className="w-full">
         {isLoading ? 'Enregistrement…' : 'Ajouter'}
       </Button>

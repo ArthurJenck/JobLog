@@ -1,5 +1,7 @@
-import type { JobPostingDraft } from '@joblog/shared';
-import { extractCompanyWebsite, injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
+import { injectCaptureButton } from '../../utils/content-script';
+import { getGlassdoorListingIdFromUrl } from '../../utils/job-identities';
+
+const LISTING_ID_PATTERN = /[?&](?:jl|jobListingId)=([^&#]+)/i;
 
 export default defineContentScript({
   matches: [
@@ -11,43 +13,50 @@ export default defineContentScript({
     'https://*.glassdoor.fr/Jobs/*',
   ],
   main() {
-    injectSaveButton(extract);
+    injectCaptureButton({
+      sourceHint: 'glassdoor',
+      shouldShow: () => Boolean(extractListingId()),
+      getNativeJobId: extractListingId,
+      getPreferredRootSelector: getGlassdoorPanelSelector,
+      getCaptureUrl: getGlassdoorCaptureUrl,
+    });
   },
 });
 
-function extract(): JobPostingDraft {
-  const title =
-    document.querySelector<HTMLElement>('[data-test="job-details-header"] h1')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('h1')?.innerText?.trim() ??
-    '';
+function extractListingId() {
+  const fromUrl = getGlassdoorListingIdFromUrl(window.location.href);
+  if (fromUrl) return fromUrl;
 
-  const company =
-    document.querySelector<HTMLElement>('[data-test="job-details-header"] h4')?.innerText?.trim() ??
-    '';
+  const selectedLink = document.querySelector<HTMLAnchorElement>(
+    '[data-test="job-details-header"] a[href*="jl="], li[data-selected="true"] a[href*="jl="], li.selected a[href*="jl="]',
+  );
+  const fromSelectedLink = selectedLink?.getAttribute('href')?.match(LISTING_ID_PATTERN)?.[1];
+  if (fromSelectedLink) return decodeURIComponent(fromSelectedLink);
 
-  const location =
-    document.querySelector<HTMLElement>('[data-test="location"]')?.innerText?.trim() ?? null;
+  const fromDataset = document
+    .querySelector<HTMLElement>('li[data-selected="true"] [data-jobid], li.selected [data-jobid]')
+    ?.getAttribute('data-jobid');
+  if (fromDataset) return fromDataset;
 
-  const description =
-    document.querySelector<HTMLElement>('[class*="JobDetails_jobDescription__"]')?.innerText?.trim() ??
-    null;
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href;
+  return canonical ? getGlassdoorListingIdFromUrl(canonical) : null;
+}
 
-  const metaText = document.body?.innerText ?? '';
-  const contract_type = parseContractType(metaText);
-  const remote = parseRemote(metaText);
+function getGlassdoorPanelSelector() {
+  return firstExistingSelector([
+    '[class*="JobDetails_jobDetails"]',
+    '[data-test="job-details"]',
+    '#JobView',
+  ]);
+}
 
-  return {
-    url: window.location.href,
-    source: 'glassdoor',
-    title,
-    company,
-    location,
-    description,
-    contract_type,
-    remote,
-    salary: null,
-    requirements: null,
-    keywords: null,
-    company_website: extractCompanyWebsite(company),
-  };
+function getGlassdoorCaptureUrl() {
+  const listingId = extractListingId();
+  return listingId
+    ? `${window.location.origin}/job-listing/j?jl=${encodeURIComponent(listingId)}`
+    : undefined;
+}
+
+function firstExistingSelector(selectors: string[]) {
+  return selectors.find((selector) => document.querySelector(selector));
 }

@@ -2,9 +2,11 @@ import { useState } from 'react';
 
 export function EditableEventDate({
   at,
+  disabled,
   onUpdate,
 }: {
   at: string;
+  disabled: boolean;
   onUpdate: (newAt: string) => void;
 }) {
   const [editing, setEditing] = useState(false);
@@ -14,6 +16,7 @@ export function EditableEventDate({
     return (
       <input
         type="date"
+        disabled={disabled}
         defaultValue={at.slice(0, 10)}
         className="text-xs h-5 w-32 border-b border-muted-foreground/50 bg-transparent focus:outline-none focus:border-foreground"
         autoFocus
@@ -29,6 +32,7 @@ export function EditableEventDate({
 
   return (
     <button
+      disabled={disabled}
       className={`text-xs ${isFuture ? 'text-blue-500' : 'text-muted-foreground'} hover:underline text-left`}
       onClick={() => setEditing(true)}
     >

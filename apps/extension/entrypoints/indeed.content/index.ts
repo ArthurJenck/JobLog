@@ -1,47 +1,53 @@
-import type { JobPostingDraft } from '@joblog/shared';
-import { extractCompanyWebsite, injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
+import { injectCaptureButton } from '../../utils/content-script';
+import { getIndeedJobKeyFromUrl } from '../../utils/job-identities';
+
+const JOB_KEY_PATTERN = /[?&](?:jk|vjk)=([^&#]+)/i;
 
 export default defineContentScript({
   matches: ['https://*.indeed.com/viewjob*', 'https://*.indeed.com/jobs*'],
   main() {
-    injectSaveButton(extract);
+    injectCaptureButton({
+      sourceHint: 'indeed',
+      shouldShow: () => Boolean(getIndeedJobKey() || window.location.pathname.includes('/viewjob')),
+      getNativeJobId: getIndeedJobKey,
+      getPreferredRootSelector: getIndeedPanelSelector,
+      getCaptureUrl: getIndeedCaptureUrl,
+    });
   },
 });
 
-function extract(): JobPostingDraft {
-  const title =
-    document.querySelector<HTMLElement>('[data-testid="jobsearch-JobInfoHeader-title"]')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('h1')?.innerText?.trim() ??
-    '';
+function getIndeedJobKey() {
+  const fromUrl = getIndeedJobKeyFromUrl(window.location.href);
+  if (fromUrl) return fromUrl;
 
-  const company =
-    document.querySelector<HTMLElement>('[data-testid="inlineHeader-companyName"]')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.jobsearch-InlineCompanyRating-companyHeader a')?.innerText?.trim() ??
-    '';
+  const selected = document.querySelector<HTMLElement>(
+    '[aria-selected="true"], [aria-current="true"][data-jk], .job_seen_beacon[aria-current="true"]',
+  );
+  const selectedLink = document.querySelector<HTMLAnchorElement>(
+    '[aria-selected="true"] a[href*="jk="], [aria-current="true"] a[href*="jk="], a[aria-current="page"][href*="jk="]',
+  );
+  const fromSelectedLink = selectedLink?.href.match(JOB_KEY_PATTERN)?.[1];
+  if (fromSelectedLink) return decodeURIComponent(fromSelectedLink);
 
-  const location =
-    document.querySelector<HTMLElement>('[data-testid="job-location"]')?.innerText?.trim() ?? null;
+  const selectedContainer = selected?.closest('[data-jk], [data-jobkey]') ?? selected;
+  const fromDataset = selectedContainer?.getAttribute('data-jk') ?? selectedContainer?.getAttribute('data-jobkey');
+  if (fromDataset) return fromDataset;
 
-  const description =
-    document.querySelector<HTMLElement>('#jobDescriptionText')?.innerText?.trim() ?? null;
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href;
+  return canonical ? getIndeedJobKeyFromUrl(canonical) : null;
+}
 
-  const metaText =
-    document.querySelector<HTMLElement>('[data-testid="jobsearch-JobMetadataHeader"]')?.innerText ?? '';
-  const contract_type = parseContractType(metaText);
-  const remote = parseRemote(metaText);
+function getIndeedPanelSelector() {
+  return firstExistingSelector(['#jobsearch-ViewjobPaneWrapper', '.jobsearch-ViewJobLayout', '#viewJobSSRRoot']);
+}
 
-  return {
-    url: window.location.href,
-    source: 'indeed',
-    title,
-    company,
-    location,
-    description,
-    contract_type,
-    remote,
-    salary: null,
-    requirements: null,
-    keywords: null,
-    company_website: extractCompanyWebsite(company),
-  };
+function getIndeedCaptureUrl() {
+  const jobKey = getIndeedJobKey();
+  return jobKey
+    ? `${window.location.origin}/viewjob?jk=${encodeURIComponent(jobKey)}`
+    : undefined;
+}
+
+function firstExistingSelector(selectors: string[]) {
+  return selectors.find((selector) => document.querySelector(selector));
 }

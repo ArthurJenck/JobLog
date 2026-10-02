@@ -19,6 +19,7 @@ const SOURCE_LABELS: Record<JobSource, string> = {
   asfored: 'Asfored',
   livremploi: 'Livremploi',
   profilculture: 'ProfilCulture',
+  custom: 'Autre',
   paste: 'URL',
   manual: 'Manuel',
 };
@@ -42,7 +43,13 @@ const SOURCE_LOGOS: Partial<Record<JobSource, string>> = {
   profilculture: '/icons/profilculture.webp',
 };
 
-export function SourceBadge({ source }: { source: JobSource }) {
+export function SourceBadge({
+  source,
+  label,
+}: {
+  source: JobSource;
+  label?: string | null;
+}) {
   const [imgError, setImgError] = useState(false);
   const logo = SOURCE_LOGOS[source];
 
@@ -58,7 +65,7 @@ export function SourceBadge({ source }: { source: JobSource }) {
           onError={() => setImgError(true)}
         />
       )}
-      {SOURCE_LABELS[source] ?? source}
+      {source === 'custom' && label ? label : SOURCE_LABELS[source] ?? source}
     </Badge>
   );
 }

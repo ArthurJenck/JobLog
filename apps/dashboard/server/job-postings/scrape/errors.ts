@@ -8,6 +8,7 @@ export class UrlScrapeHttpError extends Error {
   code: string;
   usage: UrlUsage;
   extensionUrl: string | null;
+  retryAfter?: number;
 
   constructor({
     status,
@@ -15,18 +16,21 @@ export class UrlScrapeHttpError extends Error {
     message,
     usage,
     extensionUrl,
+    retryAfter,
   }: {
     status: number;
     code: string;
     message: string;
     usage: UrlUsage;
     extensionUrl: string | null;
+    retryAfter?: number;
   }) {
     super(message);
     this.status = status;
     this.code = code;
     this.usage = usage;
     this.extensionUrl = extensionUrl;
+    this.retryAfter = retryAfter;
   }
 }
 

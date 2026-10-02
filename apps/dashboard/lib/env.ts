@@ -85,6 +85,7 @@ const envSchema = z.object({
   JINA_ESTIMATED_TOKEN_ALERT_THRESHOLD: z.string().optional(),
   LOGO_DEV_SECRET_KEY: z.string().optional(),
   VITE_LOGO_DEV_TOKEN: z.string().optional(),
+  ADMIN_USER_ID: z.string().optional(),
   ADMIN_MAIL: z.string().optional(),
   RESEND_FROM: z.string().optional(),
   RESEND_ALERT_FROM: z.string().optional(),

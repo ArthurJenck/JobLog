@@ -4,18 +4,23 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { api } from '@/lib/api';
 import { JobPostingFields } from '@/components/applications/JobPostingFields';
 import type { ApplicationWithJob } from '@joblog/shared';
+import type { JobPostingPatch } from '@/lib/optimistic-application';
 
 interface Props {
   application: ApplicationWithJob;
   open: boolean;
   onClose: () => void;
-  onSaved: () => void;
+  onSave: (patch: JobPostingPatch) => Promise<ApplicationWithJob>;
 }
 
-export function EditJobPostingDialog({ application, open, onClose, onSaved }: Props) {
+export function EditJobPostingDialog({
+  application,
+  open,
+  onClose,
+  onSave,
+}: Props) {
   const jp = application.jobPosting;
 
   const [company, setCompany] = useState(jp?.company ?? '');
@@ -27,7 +32,6 @@ export function EditJobPostingDialog({ application, open, onClose, onSaved }: Pr
     remote: jp?.remote ?? '',
   });
   const [urlError, setUrlError] = useState('');
-  const [loading, setLoading] = useState(false);
 
   function set(field: string, value: string) {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -44,7 +48,7 @@ export function EditJobPostingDialog({ application, open, onClose, onSaved }: Pr
     }
   }
 
-  async function submit(e: React.FormEvent) {
+  function submit(e: React.FormEvent) {
     e.preventDefault();
     if (!form.title.trim() || !company.trim()) return;
 
@@ -54,23 +58,19 @@ export function EditJobPostingDialog({ application, open, onClose, onSaved }: Pr
     }
     setUrlError('');
 
-    setLoading(true);
-    try {
-      await api.applications.patch(application._id, {
-        jobPosting: {
-          title: form.title.trim(),
-          company: company.trim(),
-          location: form.location.trim() || null,
-          contract_type: form.contract_type || null,
-          remote: form.remote || null,
-          url: form.url.trim() || undefined,
-        },
-      });
-      onSaved();
-      onClose();
-    } finally {
-      setLoading(false);
-    }
+    const patch: JobPostingPatch = {
+      title: form.title.trim(),
+      company: company.trim(),
+      location: form.location.trim() || null,
+      contract_type:
+        (form.contract_type as ApplicationWithJob['jobPosting']['contract_type']) ||
+        null,
+      remote:
+        (form.remote as ApplicationWithJob['jobPosting']['remote']) || null,
+    };
+    if (form.url.trim()) patch.url = form.url.trim();
+    void onSave(patch).catch(() => undefined);
+    onClose();
   }
 
   return (
@@ -96,11 +96,11 @@ export function EditJobPostingDialog({ application, open, onClose, onSaved }: Pr
             )}
           />
           <DialogFooter>
-            <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={loading}>
+            <Button type="button" variant="outline" size="sm" onClick={onClose}>
               Annuler
             </Button>
-            <Button type="submit" size="sm" disabled={loading || !form.title.trim() || !company.trim()}>
-              {loading ? 'Enregistrement…' : 'Enregistrer'}
+            <Button type="submit" size="sm" disabled={!form.title.trim() || !company.trim()}>
+              Enregistrer
             </Button>
           </DialogFooter>
         </form>

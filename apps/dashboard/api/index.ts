@@ -51,10 +51,20 @@ const routes: [string, Loader][] = [
   ['job-postings/from-url/retry', () => import('../server/job-postings/from-url-retry.js')],
   ['push/subscribe', () => import('../server/push/subscribe.js')],
   ['reminders/pending', () => import('../server/reminders/pending.js')],
+  ['extension/capture', () => import('../server/extension/capture.js')],
+  ['extension/manual-handoffs/:token/consume', () => import('../server/extension/manual-handoff-consume.js')],
+  ['extension/admin-fixture-session', () => import('../server/extension/admin-fixture-session.js')],
+  ['extension/admin-fixture-session/:id', () => import('../server/extension/admin-fixture-session-by-id.js')],
   ['addresses/search', () => import('../server/addresses/search.js')],
   ['logos/search', () => import('../server/logos/search.js')],
   ['admin/init-db', () => import('../server/admin/init-db.js')],
   ['admin/migrate-ownership', () => import('../server/admin/migrate-ownership.js')],
+  ['admin/migrate-dedup-key-v2', () => import('../server/admin/migrate-dedup-key-v2.js')],
+  ['admin/session', () => import('../server/admin/session.js')],
+  ['admin/extension-recipes', () => import('../server/admin/extension-recipes.js')],
+  ['admin/extension-recipes/:recipeKey', () => import('../server/admin/extension-recipe-by-key.js')],
+  ['admin/extension-recipe-tests', () => import('../server/admin/extension-recipe-tests.js')],
+  ['admin/extension-fixture-sessions', () => import('../server/admin/extension-fixture-sessions.js')],
 ];
 
 function matchRoute(segs: string[], pattern: string): Record<string, string> | null {

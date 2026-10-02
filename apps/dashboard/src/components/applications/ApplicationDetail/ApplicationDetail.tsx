@@ -38,6 +38,7 @@ import { ReminderFields } from './ReminderFields';
 import { api } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { useConfirm } from '@/hooks/useConfirm';
+import { useOptimisticApplication } from '@/hooks/useOptimisticApplication';
 import { getCompanyLogoUrl } from '@/lib/company-logo';
 import { getJobScrapeStatus } from '@/lib/scrape';
 import { toast } from 'sonner';
@@ -67,19 +68,17 @@ import {
   PencilIcon,
   XIcon,
 } from 'lucide-react';
+import {
+  eventControlKey,
+  type ApplicationPatch,
+  type JobPostingPatch,
+} from '@/lib/optimistic-application';
 
 interface Props {
   application: ApplicationWithJob | null;
   open: boolean;
   onClose: () => void;
 }
-
-type ApplicationListPage = {
-  data: ApplicationWithJob[];
-  total: number;
-  page: number;
-  pageSize: number;
-};
 
 function scrapeFailureHint(
   category: ApplicationWithJob['jobPosting']['scrape_error_category'],
@@ -102,6 +101,7 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
   const { confirm, confirmDialog } = useConfirm();
   const [cancelAllOpen, setCancelAllOpen] = useState(false);
   const [editJobOpen, setEditJobOpen] = useState(false);
+  const { run, isPending } = useOptimisticApplication(application);
 
   const cvsQuery = useQuery({
     queryKey: qk.cvs.all,
@@ -118,63 +118,6 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
       qc.invalidateQueries({ queryKey: qk.stats }),
       qc.invalidateQueries({ queryKey: qk.tasks(localDayKey()) }),
     ]);
-
-  const patchMutation = useMutation({
-    mutationFn: (body: Record<string, unknown>) =>
-      api.applications.patch(id, body),
-    onMutate: async (body) => {
-      await qc.cancelQueries({ queryKey: qk.applications.all });
-      const prevDetail = qc.getQueryData<ApplicationWithJob>(
-        qk.applications.detail(id),
-      );
-      qc.setQueryData<ApplicationWithJob>(qk.applications.detail(id), (curr) =>
-        curr ? { ...curr, ...body } : curr,
-      );
-      qc.setQueriesData<ApplicationListPage>(
-        { queryKey: ['applications', 'list'] },
-        (page) =>
-          page
-            ? {
-                ...page,
-                data: page.data.map((a) =>
-                  a._id === id ? { ...a, ...body } : a,
-                ),
-              }
-            : page,
-      );
-      return { prevDetail };
-    },
-    onError: (_err, _body, context) => {
-      playError();
-      toast.error('Impossible de mettre à jour la candidature');
-      if (context?.prevDetail) {
-        qc.setQueryData(qk.applications.detail(id), context.prevDetail);
-      }
-    },
-    onSettled: () => invalidateAll(),
-  });
-
-  const addEventMutation = useMutation({
-    mutationFn: (input: { type: EventType; meta?: Record<string, unknown> }) =>
-      api.applications.addEvent(id, {
-        type: input.type,
-        at: new Date().toISOString(),
-        meta: input.meta,
-      }),
-    onSuccess: () => invalidateAll(),
-  });
-
-  const deleteEventMutation = useMutation({
-    mutationFn: (input: { type: EventType; at: string }) =>
-      api.applications.deleteEvent(id, input),
-    onSuccess: () => invalidateAll(),
-  });
-
-  const updateEventDateMutation = useMutation({
-    mutationFn: (input: { type: EventType; at: string; newAt: string }) =>
-      api.applications.updateEventDate(id, input),
-    onSuccess: () => invalidateAll(),
-  });
 
   const retryScrapeMutation = useMutation({
     mutationFn: () => {
@@ -210,29 +153,70 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
     },
   });
 
-  const isSaving = patchMutation.isPending;
   const isRetryingScrape = retryScrapeMutation.isPending;
 
-  async function patch(body: Record<string, unknown>) {
-    await patchMutation.mutateAsync(body);
-    if (body.status === 'accepted') {
-      setCancelAllOpen(true);
-      playAccepted();
-    } else if (
-      body.status === 'rejected' ||
-      body.status === 'ghosted' ||
-      body.status === 'cancelled'
-    ) {
-      playReject();
+  function patchControlKey(body: ApplicationPatch) {
+    if (body.status !== undefined) return 'status';
+    if (body.cvId !== undefined) return 'cv';
+    if (body.contact !== undefined) return 'contact';
+    if (body.notes !== undefined) return 'notes';
+    return 'application';
+  }
+
+  async function patch(body: ApplicationPatch) {
+    try {
+      await run(
+        {
+          type: 'patchApplication',
+          patch: body,
+          controlKey: patchControlKey(body),
+        },
+        { errorMessage: 'Impossible de mettre à jour la candidature' },
+      );
+      if (body.status === 'accepted') {
+        setCancelAllOpen(true);
+        playAccepted();
+      } else if (
+        body.status === 'rejected' ||
+        body.status === 'ghosted' ||
+        body.status === 'cancelled'
+      ) {
+        playReject();
+      }
+    } catch {
+      return;
     }
   }
 
   async function addEvent(type: EventType, meta?: Record<string, unknown>) {
-    await addEventMutation.mutateAsync({ type, meta });
+    const at = new Date().toISOString();
+    try {
+      await run(
+        {
+          type: 'addEvent',
+          event: { type, at, meta: meta ?? null },
+          controlKey: eventControlKey('add', type),
+        },
+        { errorMessage: "Impossible d'ajouter l'événement" },
+      );
+    } catch {
+      return;
+    }
   }
 
   async function deleteEvent(type: EventType, at: string) {
-    await deleteEventMutation.mutateAsync({ type, at });
+    try {
+      await run(
+        {
+          type: 'deleteEvent',
+          event: { type, at },
+          controlKey: eventControlKey('delete', type, at),
+        },
+        { errorMessage: "Impossible de supprimer l'événement" },
+      );
+    } catch {
+      return;
+    }
   }
 
   async function confirmFuture(type: EventType) {
@@ -247,7 +231,36 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
   }
 
   async function updateEventDate(type: EventType, at: string, newAt: string) {
-    await updateEventDateMutation.mutateAsync({ type, at, newAt });
+    try {
+      await run(
+        {
+          type: 'updateEventDate',
+          event: { type, at, newAt },
+          controlKey: eventControlKey('date', type, at),
+        },
+        { errorMessage: "Impossible de modifier la date de l'événement" },
+      );
+    } catch {
+      return;
+    }
+  }
+
+  function patchReminder(
+    reminder: Partial<ApplicationWithJob['reminder']>,
+  ) {
+    const controlKey =
+      reminder.enabled === undefined ? 'reminder-fields' : 'reminder-toggle';
+    void run(
+      { type: 'patchReminder', patch: reminder, controlKey },
+      { errorMessage: 'Impossible de modifier les relances' },
+    ).catch(() => undefined);
+  }
+
+  function patchJobPosting(patch: JobPostingPatch) {
+    return run(
+      { type: 'patchJobPosting', patch, controlKey: 'jobPosting' },
+      { errorMessage: "Impossible de modifier l'offre" },
+    );
   }
 
   function retryScrape() {
@@ -305,12 +318,14 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <EditJobPostingDialog
-        application={application}
-        open={editJobOpen}
-        onClose={() => setEditJobOpen(false)}
-        onSaved={() => void invalidateAll()}
-      />
+      {editJobOpen && (
+        <EditJobPostingDialog
+          application={application}
+          open
+          onClose={() => setEditJobOpen(false)}
+          onSave={patchJobPosting}
+        />
+      )}
       <Sheet open={open} onOpenChange={(v) => !v && onClose()}>
         <SheetContent
           showCloseButton={false}
@@ -343,7 +358,12 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
                   {jp?.company ?? '—'}
                 </p>
                 <div className="flex items-center gap-2 mt-2 flex-wrap">
-                  {jp?.source && <SourceBadge source={jp.source} />}
+                  {jp?.source && (
+                    <SourceBadge
+                      source={jp.source}
+                      label={jp.source_label}
+                    />
+                  )}
                   {jp?.contract_type && (
                     <span className="text-xs text-muted-foreground">
                       {CONTRACT_LABELS[jp.contract_type as ContractType] ??
@@ -383,7 +403,7 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
                   variant="ghost"
                   size="icon"
                   className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                  disabled={!canEditJob}
+                  disabled={!canEditJob || isPending('jobPosting')}
                   onClick={() => setEditJobOpen(true)}
                   aria-label="Modifier l'offre"
                 >
@@ -437,8 +457,10 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
               </div>
               <Select
                 value={application.status}
-                onValueChange={(v) => patch({ status: v })}
-                disabled={!scrapeReady || isSaving}
+                onValueChange={(v) =>
+                  void patch({ status: v as ApplicationStatus })
+                }
+                disabled={!scrapeReady || isPending('status')}
               >
                 <SelectTrigger className="h-9">
                   <SelectValue />
@@ -454,9 +476,9 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
               {scrapeReady && (
                 <StatusActions
                   status={application.status}
-                  isSaving={isSaving}
-                  onPatch={patch}
-                  onAddEvent={addEvent}
+                  isPending={isPending}
+                  onPatch={(body) => void patch(body)}
+                  onAddEvent={(type) => void addEvent(type)}
                 />
               )}
             </section>
@@ -472,7 +494,7 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
                     onValueChange={(v) =>
                       patch({ cvId: v === '__none__' ? null : v })
                     }
-                    disabled={isSaving}
+                    disabled={isPending('cv')}
                   >
                     <SelectTrigger className="h-9">
                       <SelectValue placeholder="Aucun CV associé" />
@@ -505,8 +527,10 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
             <section className="flex flex-col gap-3">
               <span className="text-sm font-medium">Contact</span>
               <ContactFields
+                key={`${application._id}:${application.contact?.name ?? ''}:${application.contact?.role ?? ''}:${application.contact?.email ?? ''}:${application.contact?.phone ?? ''}`}
                 contact={application.contact}
-                onSave={(contact) => patch({ contact })}
+                disabled={isPending('contact')}
+                onSave={(contact) => void patch({ contact })}
               />
             </section>
 
@@ -521,6 +545,7 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
                   onDeleteEvent={deleteEvent}
                   onConfirmFuture={confirmFuture}
                   onUpdateEventDate={updateEventDate}
+                  isPending={isPending}
                 />
 
                 <Separator />
@@ -530,8 +555,10 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
             <section className="flex flex-col gap-3">
               <span className="text-sm font-medium">Notes</span>
               <NotesField
+                key={`${application._id}:${application.notes ?? ''}`}
                 value={application.notes ?? ''}
-                onSave={(notes) => patch({ notes })}
+                disabled={isPending('notes')}
+                onSave={(notes) => void patch({ notes })}
               />
             </section>
 
@@ -542,11 +569,14 @@ export function ApplicationDetail({ application, open, onClose }: Props) {
                 <section className="flex flex-col gap-3">
                   <span className="text-sm font-medium">Relances</span>
                   <ReminderFields
+                    key={`${application._id}:${application.reminder.enabled}:${application.reminder.frequencyDays}:${application.reminder.at ?? ''}:${application.reminder.snoozedUntil ?? ''}:${application.events.map((event) => `${event.type}:${event.at}`).join('|')}`}
                     reminder={application.reminder}
                     status={application.status}
                     events={application.events}
                     appliedAt={application.appliedAt}
-                    onSave={(r) => patch({ reminder: r })}
+                    togglePending={isPending('reminder-toggle')}
+                    fieldsPending={isPending('reminder-fields')}
+                    onSave={patchReminder}
                   />
                 </section>
 

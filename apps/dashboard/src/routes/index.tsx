@@ -15,6 +15,8 @@ import type { ApplicationWithJob } from '@joblog/shared';
 
 type IndexSearch = {
   applicationId?: string;
+  add?: boolean;
+  handoff?: string;
   snoozeCount?: number;
   snoozeDays?: number;
   toast?: string;
@@ -32,6 +34,8 @@ export const Route = createFileRoute('/')({
       typeof search.applicationId === 'string'
         ? search.applicationId
         : undefined,
+    add: search.add === true || search.add === '1' ? true : undefined,
+    handoff: typeof search.handoff === 'string' ? search.handoff : undefined,
     snoozeCount: numericSearch(search.snoozeCount),
     snoozeDays: numericSearch(search.snoozeDays),
     toast: typeof search.toast === 'string' ? search.toast : undefined,
@@ -100,7 +104,11 @@ export function IndexPage() {
     toast.error('Candidature introuvable', {
       description: 'Le lien ne correspond plus à une candidature accessible.',
     });
-    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId: undefined }) });
+    navigate({
+      to: '/',
+      search: (prev) => ({ ...prev, applicationId: undefined }),
+      resetScroll: false,
+    });
   }, [detailId, detailQuery.isError, detailQuery.data, navigate]);
 
   useEffect(() => {
@@ -133,11 +141,28 @@ export function IndexPage() {
 
   function openDetail(app: ApplicationWithJob) {
     qc.setQueryData(qk.applications.detail(app._id), app);
-    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId: app._id }) });
+    navigate({
+      to: '/',
+      search: (prev) => ({ ...prev, applicationId: app._id }),
+      resetScroll: false,
+    });
   }
 
   function closeDetail() {
-    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId: undefined }) });
+    navigate({
+      to: '/',
+      search: (prev) => ({ ...prev, applicationId: undefined }),
+      resetScroll: false,
+    });
+  }
+
+  function closeAddDialog() {
+    setAddOpen(false);
+    navigate({
+      to: '/',
+      search: (prev) => ({ ...prev, add: undefined, handoff: undefined }),
+      resetScroll: false,
+    });
   }
 
   async function handleCreated(applicationId: string) {
@@ -145,7 +170,16 @@ export function IndexPage() {
     playAdd();
     const created = await api.applications.get(applicationId);
     qc.setQueryData(qk.applications.detail(applicationId), created);
-    navigate({ to: '/', search: (prev) => ({ ...prev, applicationId }) });
+    navigate({
+      to: '/',
+      search: (prev) => ({
+        ...prev,
+        applicationId,
+        add: undefined,
+        handoff: undefined,
+      }),
+      resetScroll: false,
+    });
     if (isScrapeActive(created)) {
       toast.success('Candidature ajoutée', {
         description: "La récupération de l'offre continue en arrière-plan.",
@@ -166,9 +200,10 @@ export function IndexPage() {
       />
 
       <AddApplicationDialog
-        open={addOpen}
-        onClose={() => setAddOpen(false)}
+        open={addOpen || search.add === true || Boolean(search.handoff)}
+        onClose={closeAddDialog}
         onCreated={handleCreated}
+        handoffToken={search.handoff}
       />
     </div>
   );

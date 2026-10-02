@@ -8,17 +8,19 @@ import {
   BanIcon,
 } from 'lucide-react';
 import type { ApplicationStatus, EventType } from '@joblog/shared';
+import { eventControlKey } from '@/lib/optimistic-application';
+import type { ApplicationPatch } from '@/lib/optimistic-application';
 
 interface Props {
   status: ApplicationStatus;
-  isSaving: boolean;
-  onPatch: (body: Record<string, unknown>) => void;
+  isPending: (controlKey: string) => boolean;
+  onPatch: (body: ApplicationPatch) => void;
   onAddEvent: (type: EventType) => void;
 }
 
 export function StatusActions({
   status,
-  isSaving,
+  isPending,
   onPatch,
   onAddEvent,
 }: Props) {
@@ -28,7 +30,7 @@ export function StatusActions({
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'applied' })}
           >
             <SendIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -37,7 +39,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'rejected' })}
           >
             <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -46,7 +48,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'ghosted' })}
           >
             <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -55,7 +57,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'cancelled' })}
           >
             <BanIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -67,7 +69,7 @@ export function StatusActions({
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'interview' })}
           >
             <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -76,7 +78,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'rejected' })}
           >
             <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -85,7 +87,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'ghosted' })}
           >
             <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -94,7 +96,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'cancelled' })}
           >
             <BanIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -107,7 +109,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending(eventControlKey('add', 'interview_scheduled'))}
             onClick={() => onAddEvent('interview_scheduled')}
           >
             <CalendarIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -115,7 +117,7 @@ export function StatusActions({
           </Button>
           <Button
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'offer' })}
           >
             <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -124,7 +126,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'rejected' })}
           >
             <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -133,7 +135,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'ghosted' })}
           >
             <GhostIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -142,7 +144,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'cancelled' })}
           >
             <BanIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -154,7 +156,7 @@ export function StatusActions({
         <div className="flex items-center gap-2 flex-wrap">
           <Button
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'accepted' })}
           >
             <TrophyIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -163,7 +165,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending(eventControlKey('add', 'offer_declined'))}
             onClick={() => onAddEvent('offer_declined')}
           >
             <XCircleIcon className="h-3.5 w-3.5 mr-1.5" />
@@ -172,7 +174,7 @@ export function StatusActions({
           <Button
             variant="outline"
             size="sm"
-            disabled={isSaving}
+            disabled={isPending('status')}
             onClick={() => onPatch({ status: 'ghosted' })}
           >
             <GhostIcon className="h-3.5 w-3.5 mr-1.5" />

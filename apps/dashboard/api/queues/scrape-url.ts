@@ -3,6 +3,10 @@ import {
   UrlScrapeJobMessageSchema,
   processUrlScrapeMessage,
 } from '../../server/job-postings/scrape/index.js';
+import {
+  MIGRATION_RETRY_AFTER_SECONDS,
+  MigrationMaintenanceError,
+} from '../../server/migrations/maintenance.js';
 
 const queue = new QueueClient();
 
@@ -19,6 +23,9 @@ export default queue.handleNodeCallback(
   {
     visibilityTimeoutSeconds: 300,
     retry: (_error, metadata) => {
+      if (_error instanceof MigrationMaintenanceError) {
+        return { afterSeconds: MIGRATION_RETRY_AFTER_SECONDS };
+      }
       if (metadata.deliveryCount > 3) return { acknowledge: true };
       return { afterSeconds: Math.min(300, 2 ** metadata.deliveryCount * 5) };
     },

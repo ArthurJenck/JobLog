@@ -78,7 +78,12 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
     id: 'source',
     header: 'Source',
     accessorFn: (row) => row.jobPosting?.source ?? 'manual',
-    cell: ({ getValue }) => <SourceBadge source={getValue() as JobSource} />,
+    cell: ({ row, getValue }) => (
+      <SourceBadge
+        source={getValue() as JobSource}
+        label={row.original.jobPosting?.source_label}
+      />
+    ),
     enableSorting: false,
   },
   {
@@ -125,23 +130,41 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
         </span>
       );
     },
+    sortDescFirst: true,
   },
   {
     id: 'reminder',
     header: 'Relance',
-    accessorFn: (row) => row.reminder?.at,
-    cell: ({ getValue }) => {
+    accessorFn: (row) =>
+      row.reminder?.enabled === false ? null : row.reminder?.at,
+    cell: ({ row, getValue }) => {
       const v = getValue() as string | null;
-      if (!v) return <span className="text-muted-foreground/40">—</span>;
-      const s = dateStatus(v);
-      return (
-        <span
-          className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}
-        >
-          {fmtDate(v)}
+      if (v) {
+        const s = dateStatus(v);
+        return (
+          <span
+            className={`text-sm ${s === 'past' ? 'text-red-500 font-medium' : s === 'today' ? 'text-amber-500 font-medium' : 'text-muted-foreground'}`}
+          >
+            {fmtDate(v)}
+          </span>
+        );
+      }
+
+      const lastFollowup = row.original.events
+        .filter((event) => event.type === 'followup_sent')
+        .toSorted(
+          (left, right) =>
+            new Date(right.at).getTime() - new Date(left.at).getTime(),
+        )[0];
+      return lastFollowup ? (
+        <span className="text-sm font-medium text-emerald-600">
+          Relancée le {fmtDate(lastFollowup.at)}
         </span>
+      ) : (
+        <span className="text-muted-foreground/40">-</span>
       );
     },
+    sortDescFirst: true,
   },
   {
     id: 'appliedAt',
@@ -155,5 +178,6 @@ export const applicationColumns: ColumnDef<ApplicationWithJob>[] = [
         <span className="text-muted-foreground/40">—</span>
       );
     },
+    sortDescFirst: true,
   },
 ];

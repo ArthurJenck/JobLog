@@ -1,5 +1,6 @@
 import { Link, useRouter, useRouterState } from '@tanstack/react-router';
 import { Fragment } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   Sidebar,
   SidebarContent,
@@ -21,12 +22,15 @@ import {
   SettingsIcon,
   LogOutIcon,
   ExternalLinkIcon,
+  PuzzleIcon,
 } from 'lucide-react';
 import { StreakBadge } from '@/components/streak/StreakBadge';
 import { SidebarSummary } from '@/components/layout/SidebarSummary';
 import { TasksPanel } from '@/components/tasks/TasksPanel';
 import { DailyCelebration } from '@/components/streak/DailyCelebration';
 import { getExtensionStoreUrl } from '@/lib/extension-url';
+import { api } from '@/lib/api';
+import { qk } from '@/lib/query-keys';
 import { localDayKey } from '@joblog/shared';
 import { resetSessionCache } from '@/hooks/queries/use-session';
 import {
@@ -56,6 +60,12 @@ export function AppSidebar() {
   const hasPendingTasks = getPendingTasks(tasks).length > 0;
   const isPerfectToday = streak.lastPerfectDay === localDayKey();
   const extensionUrl = isMobile ? null : getExtensionStoreUrl();
+  const { data: adminSession } = useQuery({
+    queryKey: qk.admin.session,
+    queryFn: () => api.admin.session(),
+    retry: false,
+    staleTime: Infinity,
+  });
 
   return (
     <Sidebar>
@@ -106,6 +116,21 @@ export function AppSidebar() {
                   )}
                 </Fragment>
               ))}
+              {adminSession?.isAdmin && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton asChild isActive={pathname === '/admin/extension-recipes'}>
+                    <Link
+                      to="/admin/extension-recipes"
+                      onClick={() => {
+                        if (isMobile) setOpenMobile(false);
+                      }}
+                    >
+                      <PuzzleIcon className="h-4 w-4" />
+                      <span>Recettes extension</span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

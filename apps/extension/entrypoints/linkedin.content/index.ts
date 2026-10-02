@@ -1,63 +1,74 @@
-import type { JobPostingDraft } from '@joblog/shared';
-import { extractCompanyWebsite, injectSaveButton, parseContractType, parseRemote } from '../../utils/content-script';
+import { injectCaptureButton } from '../../utils/content-script';
+import { getLinkedInJobIdFromUrl } from '../../utils/job-identities';
+
+const LINKEDIN_JOB_PATH = /\/jobs\/view\/(\d+)/i;
 
 export default defineContentScript({
-  matches: ['https://www.linkedin.com/jobs/*'],
+  matches: ['https://linkedin.com/jobs/*', 'https://*.linkedin.com/jobs/*'],
   main() {
-    injectSaveButton(extract, isJobVisible);
+    injectCaptureButton({
+      sourceHint: 'linkedin',
+      shouldShow: () => Boolean(getLinkedInJobId()),
+      getNativeJobId: getLinkedInJobId,
+      getPreferredRootSelector: getLinkedInPanelSelector,
+      getCaptureUrl: getLinkedInCaptureUrl,
+    });
   },
 });
 
-function isJobVisible() {
-  const path = window.location.pathname;
-  if (!path.startsWith('/jobs/')) return false;
-  if (path.startsWith('/jobs/view/')) return true;
-  if (new URLSearchParams(window.location.search).has('currentJobId')) return true;
+function getLinkedInJobId() {
+  const fromUrl = getLinkedInJobIdFromUrl(window.location.href);
+  if (fromUrl) return fromUrl;
 
-  return Boolean(
-    document.querySelector('.job-details-jobs-unified-top-card__job-title, .jobs-unified-top-card__job-title')
+  const selected = document.querySelector<HTMLElement>(
+    '[aria-current="true"][data-occludable-job-id], .jobs-search-results__list-item--active, [data-selected="true"][data-job-id]',
   );
+  const fromAttribute = readLinkedInId(selected);
+  if (fromAttribute) return fromAttribute;
+
+  const selectedLink = document.querySelector<HTMLAnchorElement>(
+    '.jobs-search-results__list-item--active a[href*="/jobs/view/"], [aria-current="true"][href*="/jobs/view/"], [data-selected="true"] a[href*="/jobs/view/"]',
+  );
+  const fromSelectedLink = selectedLink?.href.match(LINKEDIN_JOB_PATH)?.[1];
+  if (fromSelectedLink) return fromSelectedLink;
+
+  const canonical = document.querySelector<HTMLLinkElement>('link[rel="canonical"]')?.href;
+  const fromCanonical = canonical?.match(LINKEDIN_JOB_PATH)?.[1];
+  if (fromCanonical) return fromCanonical;
+
+  const openGraphUrl = document.querySelector<HTMLMetaElement>('meta[property="og:url"]')?.content;
+  return openGraphUrl?.match(LINKEDIN_JOB_PATH)?.[1] ?? null;
 }
 
-function extract(): JobPostingDraft {
-  const title =
-    document.querySelector<HTMLElement>('.job-details-jobs-unified-top-card__job-title h1')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.job-details-jobs-unified-top-card__job-title')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.jobs-unified-top-card__job-title')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('h1')?.innerText?.trim() ??
-    '';
+function readLinkedInId(element: HTMLElement | null) {
+  if (!element) return null;
+  const values = [
+    element.dataset.occludableJobId,
+    element.dataset.jobId,
+    element.dataset.entityUrn,
+    element.getAttribute('data-entity-urn'),
+  ];
+  for (const value of values) {
+    const id = value?.match(/(\d{6,})/)?.[1];
+    if (id) return id;
+  }
+  return null;
+}
 
-  const company =
-    document.querySelector<HTMLElement>('.job-details-jobs-unified-top-card__company-name')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.jobs-unified-top-card__company-name')?.innerText?.trim() ??
-    '';
+function getLinkedInCaptureUrl() {
+  const jobId = getLinkedInJobId();
+  return jobId ? `https://www.linkedin.com/jobs/view/${encodeURIComponent(jobId)}/` : undefined;
+}
 
-  const location =
-    document.querySelector<HTMLElement>('.job-details-jobs-unified-top-card__bullet')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.jobs-unified-top-card__bullet')?.innerText?.trim() ??
-    null;
+function getLinkedInPanelSelector() {
+  return firstExistingSelector([
+    '.jobs-search__job-details--container',
+    '.jobs-details__main-content',
+    '.job-view-layout',
+    'main',
+  ]);
+}
 
-  const description =
-    document.querySelector<HTMLElement>('.jobs-description__content')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.jobs-box__html-content')?.innerText?.trim() ??
-    null;
-
-  const detailsText = document.querySelector<HTMLElement>('.job-details-jobs-unified-top-card__job-insight')?.innerText ?? '';
-  const contract_type = parseContractType(detailsText);
-  const remote = parseRemote(detailsText);
-
-  return {
-    url: window.location.href,
-    source: 'linkedin',
-    title,
-    company,
-    location,
-    description,
-    contract_type,
-    remote,
-    salary: null,
-    requirements: null,
-    keywords: null,
-    company_website: extractCompanyWebsite(company),
-  };
+function firstExistingSelector(selectors: string[]) {
+  return selectors.find((selector) => document.querySelector(selector));
 }

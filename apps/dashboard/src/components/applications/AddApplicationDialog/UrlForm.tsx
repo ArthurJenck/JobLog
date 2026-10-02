@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { api, type FromUrlMeta, type UrlPasteUsage } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { UrlUsageNotice } from './UrlUsageNotice';
+import { JobListUrlNotice } from './JobListUrlNotice';
 import { playError, playLoading } from '@/lib/sound';
 
 // TODO: REMETTRE A true QUAND EXTENSION ACCEPTEE DANS LE CHROME WEB STORE
@@ -16,13 +17,16 @@ const SHOW_URL_USAGE_WARNING = false;
 export function UrlForm({
   open,
   onCreated,
+  onSwitchToManual,
 }: {
   open: boolean;
   onCreated: (id: string) => void;
+  onSwitchToManual: (url: string) => void;
 }) {
   const qc = useQueryClient();
   const [url, setUrl] = useState('');
   const [error, setError] = useState('');
+  const [listUrlMessage, setListUrlMessage] = useState('');
 
   const usageQuery = useQuery({
     queryKey: qk.jobPostings.fromUrlUsage,
@@ -46,6 +50,7 @@ export function UrlForm({
     },
     onError: (err) => {
       const apiErr = err as {
+        code?: string;
         usage?: UrlPasteUsage;
         extensionUrl?: string | null;
       };
@@ -59,6 +64,11 @@ export function UrlForm({
         }));
       }
       const message = err instanceof Error ? err.message : 'Erreur inconnue';
+      if (apiErr.code === 'job_list_url') {
+        setListUrlMessage(message);
+        return;
+      }
+
       setError(message);
       playError();
       toast.error('Récupération impossible', { description: message });
@@ -76,6 +86,7 @@ export function UrlForm({
     }
 
     setError('');
+    setListUrlMessage('');
     playLoading();
     createMutation.mutate(url);
   }
@@ -104,12 +115,22 @@ export function UrlForm({
         <Label>URL de l'offre</Label>
         <Input
           value={url}
-          onChange={(e) => setUrl(e.target.value)}
+          onChange={(e) => {
+            setUrl(e.target.value);
+            setListUrlMessage('');
+          }}
           required
           type="url"
           placeholder="https://www.welcometothejungle.com/…"
         />
       </div>
+      {listUrlMessage && (
+        <JobListUrlNotice
+          message={listUrlMessage}
+          extensionUrl={extensionUrl}
+          onSwitchToManual={() => onSwitchToManual(url)}
+        />
+      )}
       {error && <p className="text-sm text-destructive">{error}</p>}
       <Button type="submit" disabled={createMutation.isPending} className="w-full">
         {createMutation.isPending ? 'Ajout…' : "Récupérer l'offre"}

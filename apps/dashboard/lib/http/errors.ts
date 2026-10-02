@@ -31,6 +31,10 @@ export class ApiError extends Error {
     return new ApiError(401, 'unauthorized', message);
   }
 
+  static forbidden(message = 'Accès interdit'): ApiError {
+    return new ApiError(403, 'forbidden', message);
+  }
+
   static notFound(message = 'Not found'): ApiError {
     return new ApiError(404, 'not_found', message);
   }
@@ -51,5 +55,15 @@ export class ApiError extends Error {
 
   static badRequest(message: string, code = 'bad_request', options?: ApiErrorOptions): ApiError {
     return new ApiError(400, code, message, options);
+  }
+
+  static conflict(message: string, code = 'conflict', options?: ApiErrorOptions): ApiError {
+    return new ApiError(409, code, message, options);
+  }
+
+  static serviceUnavailable(message: string, retryAfter?: number): ApiError {
+    const err = new ApiError(503, 'service_unavailable', message);
+    err.retryAfter = retryAfter;
+    return err;
   }
 }

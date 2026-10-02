@@ -6,6 +6,7 @@ import { defineHandler, method } from '../lib/http/define-handler.js';
 
 export default defineHandler({
   DELETE: method({
+    maintenanceSensitive: true,
     async handle({ req, res, user }) {
       const userId = user.id;
 
@@ -19,6 +20,11 @@ export default defineHandler({
 
       await Promise.all([
         getCollection('applications').then((col) => col.deleteMany({ userId })),
+        getCollection('application_aliases').then((col) => col.deleteMany({ userId })),
+        getCollection('job_posting_aliases').then((col) => col.deleteMany({ userId })),
+        getCollection('job_postings').then((col) => col.deleteMany({ userId })),
+        getCollection('cv_analyses').then((col) => col.deleteMany({ userId })),
+        getCollection('manual_handoffs').then((col) => col.deleteMany({ userId })),
         cvsCol.deleteMany({ userId }),
         getCollection('notification_settings').then((col) => col.deleteMany({ userId })),
         getCollection('extension_tokens').then((col) => col.deleteMany({ userId })),

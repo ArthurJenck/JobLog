@@ -1,5 +1,4 @@
-import type { JobPostingDraft } from '@joblog/shared';
-import { extractCompanyWebsite, injectSaveButton, parseContractType } from '../../utils/content-script';
+import { injectCaptureButton } from '../../utils/content-script';
 
 export default defineContentScript({
   matches: [
@@ -7,47 +6,24 @@ export default defineContentScript({
     'https://www.hellowork.com/fr-fr/emplois/*.html',
   ],
   main() {
-    injectSaveButton(extract);
+    injectCaptureButton({
+      sourceHint: 'hellowork',
+      shouldShow: isJobPage,
+      getNativeJobId: getHelloWorkJobId,
+      getPreferredRootSelector: () => firstExistingSelector(['main', '[data-cy="job-detail"]']),
+    });
   },
 });
 
-function extract(): JobPostingDraft {
-  const title =
-    document.querySelector<HTMLElement>('[data-cy="jobTitle"]')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('h1')?.innerText?.trim() ??
-    '';
+function isJobPage() {
+  return /\/fr-fr\/(?:emploi\/.+\/offre|emplois\/[^/]+\.html)/i.test(window.location.pathname);
+}
 
-  const company =
-    document.querySelector<HTMLElement>('[data-cy="job-company-name"]')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('h1 a[href*="/entreprises/"]')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.company-name')?.innerText?.trim() ??
-    '';
+function getHelloWorkJobId() {
+  const match = window.location.pathname.match(/\/emplois\/([^/]+)\.html/i);
+  return match?.[1] ?? null;
+}
 
-  const location =
-    document.querySelector<HTMLElement>('[data-cy="job-location"]')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('.job-location')?.innerText?.trim() ??
-    document.querySelector<HTMLElement>('[class*="location"]')?.innerText?.trim() ??
-    null;
-
-  const description =
-    document.querySelector<HTMLElement>('.job-description, [data-cy="job-description"], [class*="description"]')?.innerText?.trim() ?? null;
-
-  const contract_type = parseContractType(
-    document.querySelector<HTMLElement>('[data-cy="job-contract-type"]')?.innerText ?? ''
-  );
-
-  return {
-    url: window.location.href,
-    source: 'hellowork',
-    title,
-    company,
-    location,
-    description,
-    contract_type,
-    remote: null,
-    salary: null,
-    requirements: null,
-    keywords: null,
-    company_website: extractCompanyWebsite(company),
-  };
+function firstExistingSelector(selectors: string[]) {
+  return selectors.find((selector) => document.querySelector(selector));
 }

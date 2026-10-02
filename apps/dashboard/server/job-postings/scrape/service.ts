@@ -1,6 +1,6 @@
 import { ObjectId } from 'mongodb';
 import { z } from 'zod';
-import { type ScrapeStatus } from '@joblog/shared';
+import { type ScrapeStatus, type UrlScrapeMessageV1 } from '@joblog/shared';
 import { getCollection } from '../../../lib/db.js';
 import { getEnv } from '../../../lib/env.js';
 import { sha256 } from '../../../lib/hash.js';
@@ -16,9 +16,10 @@ import { enqueueUrlScrapeJob, type UrlScrapeJobMessage } from './queue.js';
 import {
   type ApplicationDoc,
   type JobPostingDoc,
-  copyJobPostingForUser,
+  buildScrapeWriteFilter,
   createOrGetApplication,
   createOrResetQueuedJobPosting,
+  isActiveScrapeStale,
   markScrapeFailed,
   updateScrapeSteps,
 } from './store.js';
@@ -43,8 +44,20 @@ import {
   unreadableUrlMessage,
 } from './content-filters.js';
 import { detectSource } from './normalize.js';
+import {
+  isJobListUrl,
+  isSupportedJobUrl,
+  resolveJobPostingIdentity,
+} from '../url-identity.js';
+import {
+  assertDedupMigrationWritesAllowed,
+  MIGRATION_RETRY_AFTER_SECONDS,
+  MigrationMaintenanceError,
+} from '../../migrations/maintenance.js';
 
-const RequestSchema = z.object({ url: z.string().url() });
+const RequestSchema = z.object({
+  url: z.string().url().refine(isSupportedJobUrl, 'Unsupported job URL'),
+});
 
 const RetrySchema = z.object({ applicationId: z.string() });
 
@@ -64,9 +77,38 @@ export async function getFromUrlMeta(userId: string) {
 }
 
 export async function createApplicationFromUrl(userId: string, url: string) {
+  await assertUrlScrapeWritesAllowed(userId);
+  if (isJobListUrl(url)) {
+    throw new UrlScrapeHttpError({
+      status: 400,
+      code: 'job_list_url',
+      message:
+        "Ce lien mène sur une page de résultats, certains sites ne proposent pas de lien direct vers une offre. Utilise l'extension pour la récupérer, ou saisis-la à la main.",
+      usage: await getUrlUsage(userId),
+      extensionUrl: getExtensionUrl(),
+    });
+  }
+
+  const identity = resolveJobPostingIdentity({ url });
   const url_hash = sha256(url);
   const jobPostings = await getCollection<JobPostingDoc>('job_postings');
-  const cached = await jobPostings.findOne({ userId, url_hash });
+  let cached = await jobPostings.findOne({ userId, dedup_key: identity.dedupKey });
+  cached ??= await jobPostings.findOne({ userId, url_hash });
+  if (cached?._id && !cached.dedup_key) {
+    await jobPostings.updateOne(
+      { _id: cached._id, userId, dedup_key: { $exists: false } },
+      {
+        $set: {
+          dedup_key: identity.dedupKey,
+          dedup_version: 2,
+          source_key: identity.sourceKey,
+          ...(identity.nativeJobId ? { native_job_id: identity.nativeJobId } : {}),
+          url: identity.canonicalUrl,
+        },
+      },
+    );
+    cached = { ...cached, dedup_key: identity.dedupKey, dedup_version: 2 };
+  }
   const currentUsage = await getUrlUsage(userId);
 
   if (cached?._id && isReadyJobPosting(cached)) {
@@ -83,7 +125,8 @@ export async function createApplicationFromUrl(userId: string, url: string) {
 
   if (
     cached?._id &&
-    (cached.scrape_status === 'queued' || cached.scrape_status === 'processing')
+    (cached.scrape_status === 'queued' || cached.scrape_status === 'processing') &&
+    !isActiveScrapeStale(cached)
   ) {
     const applicationId = await createOrGetApplication(userId, cached._id.toString());
     return {
@@ -96,27 +139,8 @@ export async function createApplicationFromUrl(userId: string, url: string) {
     };
   }
 
-  if (!cached) {
-    const donor = await jobPostings.findOne({
-      url_hash,
-      userId: { $ne: userId },
-      scrape_status: 'succeeded',
-    });
-    if (donor?._id && isReadyJobPosting(donor)) {
-      const copyId = await copyJobPostingForUser(donor, userId);
-      const applicationId = await createOrGetApplication(userId, copyId);
-      return {
-        applicationId,
-        jobPostingId: copyId,
-        scrapeStatus: 'succeeded' as ScrapeStatus,
-        cached: true,
-        usage: currentUsage,
-        extensionUrl: getExtensionUrl(),
-      };
-    }
-  }
-
-  if (currentUsage.isBlocked) {
+  const shouldChargeUsage = !cached || cached.scrape_status === 'failed';
+  if (shouldChargeUsage && currentUsage.isBlocked) {
     throw new UrlScrapeHttpError({
       status: 429,
       code: 'url_paste_limit_exceeded',
@@ -126,7 +150,9 @@ export async function createApplicationFromUrl(userId: string, url: string) {
     });
   }
 
-  const usageAfterIncrement = await incrementUrlUsage(userId);
+  const usageAfterIncrement = shouldChargeUsage
+    ? await incrementUrlUsage(userId)
+    : currentUsage;
   if (!usageAfterIncrement) {
     const usage = await getUrlUsage(userId);
     throw new UrlScrapeHttpError({
@@ -141,8 +167,11 @@ export async function createApplicationFromUrl(userId: string, url: string) {
   const { jobPostingId, attempt } = await createOrResetQueuedJobPosting({
     cached,
     userId,
-    url,
+    url: identity.canonicalUrl,
     url_hash,
+    dedup_key: identity.dedupKey,
+    source_key: identity.sourceKey,
+    native_job_id: identity.nativeJobId,
   });
   const applicationId = await createOrGetApplication(userId, jobPostingId);
 
@@ -150,9 +179,10 @@ export async function createApplicationFromUrl(userId: string, url: string) {
     const messageId = await enqueueUrlScrapeJob({
       jobPostingId,
       userId,
-      url,
-      url_hash,
+      url: identity.canonicalUrl,
+      dedup_key: identity.dedupKey,
       attempt,
+      version: 2,
     });
 
     if (messageId) {
@@ -171,11 +201,14 @@ export async function createApplicationFromUrl(userId: string, url: string) {
       extensionUrl: getExtensionUrl(),
     };
   } catch (err) {
-    const usageAfterRelease = await releaseUrlUsage(userId);
+    const usageAfterRelease = shouldChargeUsage
+      ? await releaseUrlUsage(userId)
+      : usageAfterIncrement;
     await markScrapeFailed({
       jobPostingId,
       attempt,
       userId,
+      dedupKey: identity.dedupKey,
       message: queueFailureMessage(err),
       code: 'queue_unavailable',
       releaseUsage: false,
@@ -193,6 +226,7 @@ export async function createApplicationFromUrl(userId: string, url: string) {
 }
 
 export async function retryApplicationFromUrl(userId: string, applicationId: string) {
+  await assertUrlScrapeWritesAllowed(userId);
   if (!ObjectId.isValid(applicationId)) {
     throw new UrlScrapeHttpError({
       status: 400,
@@ -204,7 +238,19 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
   }
 
   const applications = await getCollection<ApplicationDoc>('applications');
-  const app = await applications.findOne({ _id: new ObjectId(applicationId), userId });
+  let resolvedApplicationId = applicationId;
+  let app = await applications.findOne({ _id: new ObjectId(resolvedApplicationId), userId });
+  if (!app) {
+    const alias = await (await getCollection<{
+      userId: string;
+      legacyApplicationId: string;
+      targetApplicationId: string;
+    }>('application_aliases')).findOne({ userId, legacyApplicationId: applicationId });
+    if (alias && ObjectId.isValid(alias.targetApplicationId)) {
+      resolvedApplicationId = alias.targetApplicationId;
+      app = await applications.findOne({ _id: new ObjectId(resolvedApplicationId), userId });
+    }
+  }
   if (!app) {
     throw new UrlScrapeHttpError({
       status: 404,
@@ -226,7 +272,19 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
   }
 
   const jobPostings = await getCollection<JobPostingDoc>('job_postings');
-  const jp = await jobPostings.findOne({ _id: new ObjectId(app.jobPostingId), userId });
+  let resolvedJobPostingId = app.jobPostingId;
+  let jp = await jobPostings.findOne({ _id: new ObjectId(resolvedJobPostingId), userId });
+  if (!jp) {
+    const alias = await (await getCollection<{
+      userId: string;
+      legacyJobPostingId: string;
+      targetJobPostingId: string;
+    }>('job_posting_aliases')).findOne({ userId, legacyJobPostingId: app.jobPostingId });
+    if (alias && ObjectId.isValid(alias.targetJobPostingId)) {
+      resolvedJobPostingId = alias.targetJobPostingId;
+      jp = await jobPostings.findOne({ _id: new ObjectId(resolvedJobPostingId), userId });
+    }
+  }
   if (!jp?._id) {
     throw new UrlScrapeHttpError({
       status: 404,
@@ -238,12 +296,45 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
   }
 
   const status = getScrapeStatus(jp);
+  const identity = resolveJobPostingIdentity({
+    url: jp.url,
+    source: jp.source,
+    sourceKey: jp.source_key,
+    nativeJobId: jp.native_job_id,
+    title: typeof jp.title === 'string' ? jp.title : null,
+    company: typeof jp.company === 'string' ? jp.company : null,
+    location: jp.location,
+  });
+  if (!jp.dedup_key) {
+    await jobPostings.updateOne(
+      { _id: jp._id, userId, dedup_key: { $exists: false } },
+      {
+        $set: {
+          dedup_key: identity.dedupKey,
+          dedup_version: 2,
+          source_key: identity.sourceKey,
+          ...(identity.nativeJobId ? { native_job_id: identity.nativeJobId } : {}),
+        },
+      },
+    );
+    jp.dedup_key = identity.dedupKey;
+  }
   const usage = await getUrlUsage(userId);
   if (status === 'succeeded') {
     return {
-      applicationId,
+      applicationId: resolvedApplicationId,
       jobPostingId: jp._id.toString(),
       scrapeStatus: 'succeeded' as ScrapeStatus,
+      usage,
+      extensionUrl: getExtensionUrl(),
+    };
+  }
+
+  if ((status === 'queued' || status === 'processing') && !isActiveScrapeStale(jp)) {
+    return {
+      applicationId: resolvedApplicationId,
+      jobPostingId: jp._id.toString(),
+      scrapeStatus: status,
       usage,
       extensionUrl: getExtensionUrl(),
     };
@@ -276,8 +367,13 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
 
   const attempt = normalizeCount(jp.scrape_attempts) + 1;
   const now = new Date();
-  await jobPostings.updateOne(
-    { _id: jp._id },
+  const queued = await jobPostings.updateOne(
+    buildScrapeWriteFilter({
+      jobPostingId: jp._id,
+      userId,
+      dedupKey: identity.dedupKey,
+      attempt: normalizeCount(jp.scrape_attempts),
+    }),
     {
       $set: {
         scrape_status: 'queued',
@@ -289,18 +385,30 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
         scrape_message_id: null,
         scrape_started_at: null,
         scrape_finished_at: null,
+        manually_repaired_at: null,
         updated_at: now,
       },
     },
   );
+  if (queued.matchedCount === 0) {
+    const current = await jobPostings.findOne({ _id: jp._id, userId });
+    return {
+      applicationId: resolvedApplicationId,
+      jobPostingId: jp._id.toString(),
+      scrapeStatus: getScrapeStatus(current ?? jp),
+      usage,
+      extensionUrl: getExtensionUrl(),
+    };
+  }
 
   try {
     const messageId = await enqueueUrlScrapeJob({
       jobPostingId: jp._id.toString(),
       userId,
       url: jp.url,
-      url_hash: jp.url_hash,
+      dedup_key: identity.dedupKey,
       attempt,
+      version: 2,
     });
 
     if (messageId) {
@@ -317,13 +425,14 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
       jobPostingId: jp._id.toString(),
       attempt,
       userId,
+      dedupKey: identity.dedupKey,
       message: queueFailureMessage(err),
       code: 'queue_unavailable',
       releaseUsage: false,
     });
 
     return {
-      applicationId,
+      applicationId: resolvedApplicationId,
       jobPostingId: jp._id.toString(),
       scrapeStatus: 'failed' as ScrapeStatus,
       usage: usageAfterRelease,
@@ -332,7 +441,7 @@ export async function retryApplicationFromUrl(userId: string, applicationId: str
   }
 
   return {
-    applicationId,
+    applicationId: resolvedApplicationId,
     jobPostingId: jp._id.toString(),
     scrapeStatus: 'queued' as ScrapeStatus,
     usage: usageAfterIncrement,
@@ -344,14 +453,77 @@ export async function processUrlScrapeMessage(
   message: UrlScrapeJobMessage,
   metadata?: { messageId: string; deliveryCount: number },
 ) {
+  await assertDedupMigrationWritesAllowed();
   if (!ObjectId.isValid(message.jobPostingId)) return;
 
   const jobPostings = await getCollection<JobPostingDoc>('job_postings');
-  const id = new ObjectId(message.jobPostingId);
-  const job = await jobPostings.findOne({ _id: id, url_hash: message.url_hash, userId: message.userId });
+  let id = new ObjectId(message.jobPostingId);
+  let job = await jobPostings.findOne({ _id: id, userId: message.userId });
+  if (!job) {
+    const alias = await (await getCollection<{
+      userId: string;
+      legacyJobPostingId: string;
+      targetJobPostingId: string;
+    }>('job_posting_aliases')).findOne({
+      userId: message.userId,
+      legacyJobPostingId: message.jobPostingId,
+    });
+    if (!alias || !ObjectId.isValid(alias.targetJobPostingId)) return;
+    id = new ObjectId(alias.targetJobPostingId);
+    job = await jobPostings.findOne({ _id: id, userId: message.userId });
+  }
   if (!job?._id) return;
   if (getScrapeStatus(job) === 'succeeded') return;
   if (normalizeCount(job.scrape_attempts) !== message.attempt) return;
+
+  const identity = resolveJobPostingIdentity({
+    url: message.url,
+    source: job.source,
+    sourceKey: job.source_key,
+    nativeJobId: job.native_job_id,
+    title: typeof job.title === 'string' ? job.title : null,
+    company: typeof job.company === 'string' ? job.company : null,
+    location: job.location,
+  });
+  const isV1 = isUrlScrapeMessageV1(message);
+  if (isV1 && sha256(message.url) !== message.url_hash) return;
+  if (!isV1 && identity.dedupKey !== message.dedup_key) return;
+  const dedupKey = isV1 ? identity.dedupKey : message.dedup_key;
+  if (job.dedup_key && job.dedup_key !== dedupKey) return;
+
+  if (!job.dedup_key) {
+    try {
+      const result = await jobPostings.updateOne(
+        { _id: id, userId: message.userId, dedup_key: { $exists: false } },
+        {
+          $set: {
+            dedup_key: dedupKey,
+            dedup_version: 2,
+            source_key: identity.sourceKey,
+            ...(identity.nativeJobId ? { native_job_id: identity.nativeJobId } : {}),
+          },
+        },
+      );
+      if (result.matchedCount === 0) return;
+      job = { ...job, dedup_key: dedupKey, dedup_version: 2 };
+    } catch {
+      return;
+    }
+  }
+
+  if (isV1) {
+    console.info('[queue/scrape-url] v1 delivery', {
+      messageId: metadata?.messageId ?? null,
+      deliveryCount: metadata?.deliveryCount ?? null,
+    });
+  }
+
+  const guard = {
+    jobPostingId: id,
+    userId: message.userId,
+    dedupKey,
+    attempt: message.attempt,
+  };
 
   let steps = job.scrape_steps?.length
     ? job.scrape_steps
@@ -360,8 +532,8 @@ export async function processUrlScrapeMessage(
   try {
     const startedAt = new Date();
     steps = markStep(steps, 'fetch', 'processing', startedAt);
-    await jobPostings.updateOne(
-      { _id: id, scrape_attempts: message.attempt },
+    const started = await jobPostings.updateOne(
+      buildScrapeWriteFilter(guard),
       {
         $set: {
           scrape_status: 'processing',
@@ -376,6 +548,7 @@ export async function processUrlScrapeMessage(
         },
       },
     );
+    if (started.matchedCount === 0) return;
 
     const scrapeResult = await scrapeWithFallback(message.url);
 
@@ -402,7 +575,7 @@ export async function processUrlScrapeMessage(
 
     steps = markStep(steps, 'fetch', 'succeeded', new Date());
     steps = markStep(steps, 'extract', 'processing', new Date());
-    await updateScrapeSteps(id, message.attempt, steps);
+    if (!await updateScrapeSteps(guard, steps)) return;
 
     const geminiApiKey = getEnv('GEMINI_API_KEY');
     if (!geminiApiKey) {
@@ -421,7 +594,7 @@ export async function processUrlScrapeMessage(
 
     steps = markStep(steps, 'extract', 'succeeded', new Date());
     steps = markStep(steps, 'normalize', 'processing', new Date());
-    await updateScrapeSteps(id, message.attempt, steps);
+    if (!await updateScrapeSteps(guard, steps)) return;
 
     const source = detectSource(message.url);
     const locationNormalization = await normalizeLocationForStorage(extraction.location);
@@ -430,11 +603,12 @@ export async function processUrlScrapeMessage(
     steps = markStep(steps, 'complete', 'succeeded', now);
 
     await jobPostings.updateOne(
-      { _id: id, scrape_attempts: message.attempt },
+      buildScrapeWriteFilter(guard),
       {
         $set: {
           url: message.url,
-          url_hash: message.url_hash,
+          dedup_key: dedupKey,
+          dedup_version: 2,
           source,
           title: extraction.title,
           company: extraction.company,
@@ -462,9 +636,10 @@ export async function processUrlScrapeMessage(
   } catch (err) {
     const failure = toScrapeFailure(err, message.url);
     await markScrapeFailed({
-      jobPostingId: message.jobPostingId,
+      jobPostingId: id.toString(),
       attempt: message.attempt,
       userId: message.userId,
+      dedupKey,
       message: failure.message,
       code: failure.code,
       steps,
@@ -473,6 +648,26 @@ export async function processUrlScrapeMessage(
   }
 }
 
+function isUrlScrapeMessageV1(message: UrlScrapeJobMessage): message is UrlScrapeMessageV1 {
+  return !('version' in message);
+}
+
 function getExtensionUrl() {
   return getEnv('PUBLIC_EXTENSION_URL') ?? null;
+}
+
+async function assertUrlScrapeWritesAllowed(userId: string) {
+  try {
+    await assertDedupMigrationWritesAllowed();
+  } catch (error) {
+    if (!(error instanceof MigrationMaintenanceError)) throw error;
+    throw new UrlScrapeHttpError({
+      status: 503,
+      code: 'migration_maintenance',
+      message: 'Maintenance temporaire en cours. Réessaie dans quelques instants.',
+      usage: await getUrlUsage(userId),
+      extensionUrl: getExtensionUrl(),
+      retryAfter: MIGRATION_RETRY_AFTER_SECONDS,
+    });
+  }
 }

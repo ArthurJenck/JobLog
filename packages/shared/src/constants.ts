@@ -15,6 +15,7 @@ export const JOB_SOURCES = [
     'asfored',
     'livremploi',
     'profilculture',
+    'custom',
     'paste',
     'manual',
 ] as const
@@ -148,7 +149,7 @@ const STATUS_PIPELINE_ORDER: Record<ApplicationStatus, number> = {
 }
 
 const FORCED_STATUS_EVENTS: ReadonlySet<EventType> = new Set([
-    'offer_declined', 'rejected', 'ghosted', 'cancelled',
+    'offer_accepted', 'offer_declined', 'rejected', 'ghosted', 'cancelled',
 ])
 
 export function resolveStatusOnEvent(
@@ -158,28 +159,21 @@ export function resolveStatusOnEvent(
     const target = EVENT_AUTO_STATUS[type]
     if (!target) return null
     if (FORCED_STATUS_EVENTS.has(type)) return target === current ? null : target
+    if (TERMINAL_STATUSES.includes(current)) return null
     return STATUS_PIPELINE_ORDER[current] < STATUS_PIPELINE_ORDER[target] ? target : null
 }
 
 export function deriveStatusFromEvents(
     events: Array<{ type: EventType; at: Date | string }>,
 ): ApplicationStatus {
-    let best: ApplicationStatus = 'saved'
-    let bestOrder = 0
-    let terminal: { status: ApplicationStatus; at: number } | null = null
-
-    for (const e of events) {
-        const s = EVENT_AUTO_STATUS[e.type]
-        if (!s) continue
-        if (FORCED_STATUS_EVENTS.has(e.type)) {
-            const t = new Date(e.at).getTime()
-            if (!terminal || t >= terminal.at) terminal = { status: s, at: t }
-        } else if (STATUS_PIPELINE_ORDER[s] > bestOrder) {
-            bestOrder = STATUS_PIPELINE_ORDER[s]
-            best = s
-        }
+    let status: ApplicationStatus = 'saved'
+    const chronological = [...events].sort(
+        (left, right) => new Date(left.at).getTime() - new Date(right.at).getTime(),
+    )
+    for (const event of chronological) {
+        status = resolveStatusOnEvent(status, event.type) ?? status
     }
-    return terminal ? terminal.status : best
+    return status
 }
 
 export const EVENT_PIPELINE: EventType[] = [

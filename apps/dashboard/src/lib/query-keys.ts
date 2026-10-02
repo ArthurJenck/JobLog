@@ -3,16 +3,24 @@ import type { api } from '@/lib/api';
 type ApplicationListParams = NonNullable<Parameters<typeof api.applications.list>[0]>;
 
 export const qk = {
+  admin: {
+    session: ['admin', 'session'] as const,
+    extensionRecipes: ['admin', 'extensionRecipes'] as const,
+  },
   session: ['session'] as const,
   user: ['user'] as const,
   applications: {
     all: ['applications'] as const,
+    lists: ['applications', 'list'] as const,
     list: (params?: ApplicationListParams) => ['applications', 'list', params] as const,
     detail: (id: string) => ['applications', 'detail', id] as const,
   },
   jobPostings: {
     all: ['jobPostings'] as const,
     fromUrlUsage: ['jobPostings', 'from-url', 'usage'] as const,
+  },
+  manualHandoffs: {
+    detail: (token: string) => ['manualHandoffs', token] as const,
   },
   cvs: {
     all: ['cvs'] as const,

@@ -8,6 +8,7 @@ import { getCollection } from '../db.js';
 import { getExtensionJwtSecret } from '../env.js';
 import { checkRateLimit, getClientIp } from '../rate-limit.js';
 import { secretEquals } from '../secret-compare.js';
+import { assertWriteMaintenanceInactive } from '../maintenance.js';
 import { ApiError } from './errors.js';
 
 export interface SessionUser {
@@ -84,12 +85,13 @@ export interface HandlerResult {
   json: unknown;
 }
 
-type ZodType<T> = ZodTypeBase<T, ZodTypeDef, any>;
+type ZodType<T> = ZodTypeBase<T, ZodTypeDef, unknown>;
 
 interface BaseMethodDef<TQuery, TBody> {
   query?: ZodType<TQuery>;
   body?: ZodType<TBody>;
   rateLimit?: RateLimitOption;
+  maintenanceSensitive?: boolean;
 }
 
 export interface SessionMethodDef<TQuery = unknown, TBody = unknown> extends BaseMethodDef<TQuery, TBody> {
@@ -114,7 +116,7 @@ export interface PublicOrCronMethodDef<TQuery = unknown, TBody = unknown> extend
   }): Promise<HandlerResult | void>;
 }
 
-export type MethodDef<TQuery = any, TBody = any> = SessionMethodDef<TQuery, TBody> | PublicOrCronMethodDef<TQuery, TBody>;
+export type MethodDef<TQuery = unknown, TBody = unknown> = SessionMethodDef<TQuery, TBody> | PublicOrCronMethodDef<TQuery, TBody>;
 
 export function method<TQuery = unknown, TBody = unknown>(def: SessionMethodDef<TQuery, TBody>): MethodDef<TQuery, TBody>;
 export function method<TQuery = unknown, TBody = unknown>(def: PublicOrCronMethodDef<TQuery, TBody>): MethodDef<TQuery, TBody>;
@@ -159,6 +161,8 @@ export function defineHandler<T extends MethodTable>(methods: T) {
         }
       }
 
+      if (def.maintenanceSensitive) await assertWriteMaintenanceInactive();
+
       let query: unknown = req.query;
       if (def.query) {
         const parsed = def.query.safeParse(req.query);
@@ -179,6 +183,7 @@ export function defineHandler<T extends MethodTable>(methods: T) {
       return res.status(result.status ?? 200).json(result.json);
     } catch (err) {
       if (err instanceof ApiError) {
+        if (err.retryAfter) res.setHeader('Retry-After', String(err.retryAfter));
         return res.status(err.status).json(err.toBody());
       }
 

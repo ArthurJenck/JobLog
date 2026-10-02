@@ -8,6 +8,7 @@ import { defineHandler, method } from '../lib/http/define-handler.js';
 import { getClientIp } from '../lib/rate-limit.js';
 import { verifySnoozeToken, type SnoozePayload } from '../lib/snooze.js';
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { resolveApplicationIds } from './applications/aliases.js';
 
 interface SnoozeApplicationDoc {
   _id: ObjectId;
@@ -65,15 +66,18 @@ function renderError(res: VercelResponse, status: number, message: string) {
 }
 
 async function loadApplications(payload: SnoozePayload) {
-  const ids = (payload.kind === 'bulk' ? payload.applicationIds : [payload.applicationId]).filter(
-    (id) => ObjectId.isValid(id)
-  );
+  const requestedIds = payload.kind === 'bulk' ? payload.applicationIds : [payload.applicationId];
+  const ids = await resolveApplicationIds(payload.userId, requestedIds);
   if (ids.length === 0) return [];
 
   const col = await getCollection<SnoozeApplicationDoc>('applications');
   return col
     .find(
-      { _id: { $in: ids.map((id) => new ObjectId(id)) }, userId: payload.userId },
+      {
+        _id: { $in: ids },
+        userId: payload.userId,
+        'reminder.enabled': { $ne: false },
+      },
       { projection: { reminder: 1, jobPostingId: 1 } }
     )
     .toArray();
@@ -157,6 +161,7 @@ ${labels.map((label) => `        <li>${escapeHtml(label)}</li>`).join('\n')}
 
   POST: method({
     auth: 'public',
+    maintenanceSensitive: true,
     body: BodySchema,
     rateLimit: { max: 10, windowMs: 60_000, scope: rateLimitScope('snooze-confirm') },
     async handle({ body, res }) {

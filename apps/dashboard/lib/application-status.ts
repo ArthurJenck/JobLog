@@ -4,7 +4,7 @@ interface StatusChangeSource {
   status: ApplicationStatus;
   appliedAt?: Date | null;
   events?: Array<{ type: EventType; at: Date; meta: unknown }>;
-  reminder?: { at?: Date | null; frequencyDays?: number } | null;
+  reminder?: { enabled?: boolean; at?: Date | null; frequencyDays?: number } | null;
 }
 
 export function buildStatusChangeUpdates(
@@ -20,7 +20,12 @@ export function buildStatusChangeUpdates(
 
   if (TERMINAL_STATUSES.includes(newStatus)) {
     updates['reminder.at'] = null;
-  } else if (REMINDER_ELIGIBLE_STATUSES.includes(newStatus) && !app.reminder?.at) {
+    updates['reminder.snoozedUntil'] = null;
+  } else if (
+    REMINDER_ELIGIBLE_STATUSES.includes(newStatus) &&
+    app.reminder?.enabled !== false &&
+    !app.reminder?.at
+  ) {
     const frequencyDays = app.reminder?.frequencyDays ?? defaultFrequencyDays;
     updates['reminder.at'] = new Date(Date.now() + frequencyDays * 24 * 60 * 60 * 1000);
     updates['reminder.frequencyDays'] = frequencyDays;

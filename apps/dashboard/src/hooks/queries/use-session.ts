@@ -15,6 +15,7 @@ export async function fetchSession(): Promise<boolean> {
 
 export function resetSessionCache() {
   queryClient.removeQueries({ queryKey: qk.session });
+  queryClient.removeQueries({ queryKey: qk.admin.session });
 }
 
 export function useSession(): boolean {

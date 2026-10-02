@@ -20,6 +20,7 @@ export function PrivacyPage() {
             <ul className="list-disc list-inside mt-2 flex flex-col gap-1">
               <li>Adresse email et nom (via Google OAuth ou magic link)</li>
               <li>Candidatures et offres d'emploi que vous saisissez</li>
+              <li>Contenu utile des pages d'offres que vous choisissez d'envoyer depuis l'extension</li>
               <li>Contenu textuel de vos CVs (extrait côté client — le fichier PDF n'est pas stocké)</li>
               <li>Préférences de notifications</li>
             </ul>
@@ -32,11 +33,19 @@ export function PrivacyPage() {
               <li>Afficher et gérer vos candidatures</li>
               <li>Envoyer des rappels de relance (email ou push)</li>
               <li>Analyser la correspondance CV / offre via l'API Gemini de Google (le texte de votre CV est transmis à Google à chaque analyse)</li>
+              <li>Extraire les informations d'une offre enregistrée depuis l'extension</li>
             </ul>
             <p className="mt-3">
-              Les données collectées par l'extension sont utilisées uniquement pour fournir et améliorer
-              les fonctionnalités JobLog. Elles ne sont pas vendues, ne sont pas transférées à des fins
-              publicitaires, et ne sont pas utilisées pour de la publicité personnalisée.
+              Après votre consentement, l'extension envoie uniquement lors de votre action un extrait nettoyé
+              et limité de la page, ses métadonnées et ses données structurées. Les scripts, formulaires,
+              champs cachés et attributs sensibles sont retirés. L'extrait peut être transmis à Gemini en
+              dernier recours lorsque les règles déterministes ne suffisent pas.
+            </p>
+            <p className="mt-3">
+              Le snapshot brut n'est pas conservé lors d'une sauvegarde normale. Une fixture de test peut être
+              stockée temporairement pendant 24 heures lorsqu'un administrateur ouvre explicitement une session
+              de test. Les données collectées par l'extension ne sont ni vendues, ni utilisées à des fins
+              publicitaires ou de publicité personnalisée.
             </p>
           </section>
 

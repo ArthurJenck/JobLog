@@ -23,6 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { api } from '@/lib/api';
+import type { ApplicationListParams } from '@/lib/api';
 import { qk } from '@/lib/query-keys';
 import { isScrapeActive } from '@/lib/scrape';
 import {
@@ -62,31 +63,46 @@ export function ApplicationsTable({ onRowClick, onAdd }: Props) {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
-  const [sortId, setSortId] = useState('appliedAt');
-  const [sortDesc, setSortDesc] = useState(true);
+  const [sorting, setSorting] = useState<SortingState>([]);
   const [page, setPage] = useState(1);
   const [rowSelection, setRowSelection] = useState<RowSelectionState>({});
 
   useEffect(() => {
-    const t = window.setTimeout(() => setDebouncedSearch(searchText), 300);
+    const t = window.setTimeout(
+      () => setDebouncedSearch(searchText.trim()),
+      300,
+    );
     return () => window.clearTimeout(t);
   }, [searchText]);
 
-  const listParams = useMemo(
+  const isSearchActive = debouncedSearch.length > 0;
+  const activeSort = sorting[0];
+
+  const listParams = useMemo<ApplicationListParams>(
     () => ({
       status:
-        statuses.size === 0 || statuses.size === APPLICATION_STATUSES.length
+        isSearchActive ||
+        statuses.size === 0 ||
+        statuses.size === APPLICATION_STATUSES.length
           ? undefined
           : [...statuses].join(','),
       search: debouncedSearch || undefined,
-      dateFrom: dateFrom || undefined,
-      dateTo: dateTo || undefined,
-      sort: sortId,
-      dir: (sortDesc ? 'desc' : 'asc') as 'asc' | 'desc',
+      dateFrom: isSearchActive ? undefined : dateFrom || undefined,
+      dateTo: isSearchActive ? undefined : dateTo || undefined,
+      sort: activeSort?.id,
+      dir: activeSort ? (activeSort.desc ? 'desc' : 'asc') : undefined,
       page,
       pageSize: PAGE_SIZE,
     }),
-    [statuses, debouncedSearch, dateFrom, dateTo, sortId, sortDesc, page],
+    [
+      statuses,
+      debouncedSearch,
+      dateFrom,
+      dateTo,
+      activeSort,
+      isSearchActive,
+      page,
+    ],
   );
 
   const listQuery = useQuery({
@@ -151,14 +167,6 @@ export function ApplicationsTable({ onRowClick, onAdd }: Props) {
     setPage(1);
   }
 
-  function handleSortChange(id: string, desc: boolean) {
-    setSortId(id);
-    setSortDesc(desc);
-    setPage(1);
-  }
-
-  const sorting: SortingState = [{ id: sortId, desc: sortDesc }];
-
   const columns = useMemo(() => applicationColumns, []);
 
   const table = useReactTable({
@@ -168,14 +176,15 @@ export function ApplicationsTable({ onRowClick, onAdd }: Props) {
     manualSorting: true,
     manualFiltering: true,
     manualPagination: true,
+    enableSortingRemoval: true,
+    enableMultiSort: false,
     enableRowSelection: true,
     getRowId: (row) => row._id,
     onRowSelectionChange: setRowSelection,
     onSortingChange: (updater) => {
       const next = typeof updater === 'function' ? updater(sorting) : updater;
-      if (next.length > 0) {
-        handleSortChange(next[0].id, next[0].desc);
-      }
+      setSorting(next.slice(0, 1));
+      setPage(1);
     },
     getCoreRowModel: getCoreRowModel(),
   });
@@ -199,6 +208,7 @@ export function ApplicationsTable({ onRowClick, onAdd }: Props) {
           searchText={searchText}
           dateFrom={dateFrom}
           dateTo={dateTo}
+          filtersIgnored={isSearchActive}
           onStatusesChange={handleStatusesChange}
           onSearchChange={handleSearchChange}
           onDateFromChange={handleDateFromChange}

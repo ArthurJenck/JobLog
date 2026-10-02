@@ -21,7 +21,9 @@ export function getSuggestion(app: ApplicationWithJob): string | null {
   const has = (type: string) => events.some((e) => e.type === type);
   const now = new Date();
   const reminderDue =
-    app.reminder?.at != null && new Date(app.reminder.at) <= now;
+    app.reminder?.enabled !== false &&
+    app.reminder?.at != null &&
+    new Date(app.reminder.at) <= now;
   const relancesExhausted =
     (app.reminder?.sentCount ?? 0) >= (app.reminder?.maxCount ?? 3);
 

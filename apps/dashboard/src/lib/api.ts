@@ -1,4 +1,10 @@
-import type { ApplicationWithJob, Cv, TaskRecurrence, TaskDetectionSignal } from '@joblog/shared';
+import type {
+  ApplicationWithJob,
+  Cv,
+  EventType,
+  TaskRecurrence,
+  TaskDetectionSignal,
+} from '@joblog/shared';
 
 const BASE = '/api';
 
@@ -96,6 +102,65 @@ export interface AnalysisResult {
   cached?: boolean;
 }
 
+export interface ManualHandoffDraft {
+  url: string;
+  source: string;
+  source_key?: string | null;
+  source_label?: string | null;
+  native_job_id?: string | null;
+  title?: string | null;
+  company?: string | null;
+  location?: string | null;
+  description?: string | null;
+  contract_type?: string | null;
+  remote?: string | null;
+  salary?: {
+    min: number | null;
+    max: number | null;
+    currency: string | null;
+    period: 'month' | 'year' | null;
+  } | null;
+  requirements?: string[] | null;
+  keywords?: string[] | null;
+}
+
+export interface ManualHandoffInput {
+  url?: string;
+  title: string;
+  company: string;
+  location?: string | null;
+  description?: string | null;
+  contract_type?: string | null;
+  remote?: string | null;
+  company_website?: string | null;
+  cvId?: string | null;
+}
+
+export interface ExtensionRecipeRecord extends Record<string, unknown> {
+  recipeKey: string;
+  source: string;
+  enabled: boolean;
+  version: number;
+}
+
+export interface ApplicationListParams {
+  status?: string;
+  search?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  sort?: string;
+  dir?: 'asc' | 'desc';
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ApplicationListPage {
+  data: ApplicationWithJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 async function request<T>(url: string, options?: RequestInit): Promise<T> {
   const res = await fetch(BASE + url, {
     ...options,
@@ -117,17 +182,41 @@ async function request<T>(url: string, options?: RequestInit): Promise<T> {
 }
 
 export const api = {
+  admin: {
+    session(): Promise<{ isAdmin: boolean }> {
+      return request('/admin/session');
+    },
+    extensionRecipes: {
+      list(): Promise<{ data: ExtensionRecipeRecord[] }> {
+        return request('/admin/extension-recipes');
+      },
+      createFixtureSession(): Promise<{ sessionId: string; acceptsUntil: string; expiresAt: string }> {
+        return request('/admin/extension-fixture-sessions', {
+          method: 'POST',
+          body: JSON.stringify({}),
+        });
+      },
+      test(recipe: ExtensionRecipeRecord, fixtureSessionId: string): Promise<{
+        proof: string;
+        recipeHash: string;
+        expiresAt: string;
+        extraction: { nativeJobId: string | null; fields: Record<string, string | null> };
+      }> {
+        return request('/admin/extension-recipe-tests', {
+          method: 'POST',
+          body: JSON.stringify({ recipe, fixtureSessionId }),
+        });
+      },
+      save(recipe: ExtensionRecipeRecord, proof: string): Promise<{ ok: boolean; recipeKey: string; recipeHash: string }> {
+        return request(`/admin/extension-recipes/${encodeURIComponent(recipe.recipeKey)}`, {
+          method: 'PUT',
+          body: JSON.stringify({ recipe, proof }),
+        });
+      },
+    },
+  },
   applications: {
-    list(params?: {
-      status?: string;
-      search?: string;
-      dateFrom?: string;
-      dateTo?: string;
-      sort?: string;
-      dir?: 'asc' | 'desc';
-      page?: number;
-      pageSize?: number;
-    }): Promise<{ data: ApplicationWithJob[]; total: number; page: number; pageSize: number }> {
+    list(params?: ApplicationListParams): Promise<ApplicationListPage> {
       const qs = new URLSearchParams();
       if (params?.status) qs.set('status', params.status);
       if (params?.search) qs.set('search', params.search);
@@ -145,16 +234,16 @@ export const api = {
     create(body: { jobPostingId: string; status?: string; cvId?: string | null }): Promise<{ applicationId: string }> {
       return request('/applications', { method: 'POST', body: JSON.stringify(body) });
     },
-    patch(id: string, body: Record<string, unknown>): Promise<{ ok: boolean }> {
+    patch(id: string, body: Record<string, unknown>): Promise<ApplicationWithJob> {
       return request(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
     },
-    addEvent(id: string, event: { type: string; at?: string; meta?: Record<string, unknown> | null }): Promise<{ ok: boolean }> {
+    addEvent(id: string, event: { type: EventType; at: string; meta?: Record<string, unknown> | null }): Promise<ApplicationWithJob> {
       return request(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ event }) });
     },
-    deleteEvent(id: string, event: { type: string; at: string }): Promise<{ ok: boolean }> {
+    deleteEvent(id: string, event: { type: EventType; at: string }): Promise<ApplicationWithJob> {
       return request(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ deleteEvent: event }) });
     },
-    updateEventDate(id: string, event: { type: string; at: string; newAt: string }): Promise<{ ok: boolean }> {
+    updateEventDate(id: string, event: { type: EventType; at: string; newAt: string }): Promise<ApplicationWithJob> {
       return request(`/applications/${id}`, { method: 'PATCH', body: JSON.stringify({ updateEventDate: event }) });
     },
     delete(id: string): Promise<{ ok: boolean }> {
@@ -185,6 +274,17 @@ export const api = {
     },
     retryFromUrl(applicationId: string): Promise<FromUrlApplicationResponse> {
       return request('/job-postings/from-url/retry', { method: 'POST', body: JSON.stringify({ applicationId }) });
+    },
+  },
+  manualHandoffs: {
+    get(token: string): Promise<{ draft: ManualHandoffDraft; expiresAt: string }> {
+      return request(`/extension/manual-handoffs/${encodeURIComponent(token)}/consume`);
+    },
+    consume(token: string, body: ManualHandoffInput): Promise<ApplicationWithJob> {
+      return request(`/extension/manual-handoffs/${encodeURIComponent(token)}/consume`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      });
     },
   },
   cvs: {

@@ -8,11 +8,13 @@ import { defineHandler, method } from '../../lib/http/define-handler.js';
 import { sendEmail, sendEmails } from '../../lib/resend.js';
 import { FIRECRAWL_MONTHLY_SOFT_CAP, getJinaAlertThreshold } from '../usage/provider-usage.js';
 import { buildPushPayload, groupDueReminders, type ReminderGroup } from './reminders-digest.js';
+import { isDedupMigrationMaintenanceActive } from '../migrations/maintenance.js';
 
 interface ReminderApplicationDoc {
   userId: string;
   jobPostingId: string;
   reminder?: {
+    enabled?: boolean;
     frequencyDays?: number;
     sentCount?: number;
     maxCount?: number;
@@ -201,6 +203,7 @@ export async function runReminders() {
   const now = new Date();
 
   const dueFilter: Filter<ReminderApplicationDoc> = {
+    'reminder.enabled': { $ne: false },
     'reminder.at': { $lte: now },
     $expr: { $lt: ['$reminder.sentCount', '$reminder.maxCount'] },
     $or: [
@@ -332,6 +335,9 @@ export async function runReminders() {
 const remindersMethod = method({
   auth: 'cron',
   async handle() {
+    if (await isDedupMigrationMaintenanceActive()) {
+      return { json: { skipped: 'migration_maintenance' } };
+    }
     return { json: await runReminders() };
   },
 });

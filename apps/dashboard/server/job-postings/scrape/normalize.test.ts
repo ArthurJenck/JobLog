@@ -16,9 +16,13 @@ describe('detectSource', () => {
     expect(detectSource('https://www.linkedin.com/jobs/1')).toBe('linkedin');
     expect(detectSource('https://welcometothejungle.com/x')).toBe('wttj');
     expect(detectSource('https://www.glassdoor.fr/job/1')).toBe('glassdoor');
+    expect(detectSource('https://jobboard.asfored.org/offres/1')).toBe('asfored');
+    expect(detectSource('https://www.livremploi.fr/offre/1')).toBe('livremploi');
+    expect(detectSource('https://www.profilculture.com/annonce/1')).toBe('profilculture');
   });
   test('falls back to paste', () => {
     expect(detectSource('https://acme.example/careers')).toBe('paste');
+    expect(detectSource('https://acme.example/?redirect=linkedin.com')).toBe('paste');
   });
 });
 
