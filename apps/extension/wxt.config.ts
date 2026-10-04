@@ -3,7 +3,7 @@ import { defineConfig } from 'wxt';
 
 const isProd = process.env.NODE_ENV === 'production';
 const mode = process.env.NODE_ENV ?? 'development';
-const apiUrl = process.env.VITE_API_URL ?? readEnvValue('VITE_API_URL');
+const apiUrl = isProd ? undefined : process.env.VITE_API_URL ?? readEnvValue('VITE_API_URL');
 
 const apiHostPermission = apiUrl
   ? toExtensionMatchPattern(apiUrl)
