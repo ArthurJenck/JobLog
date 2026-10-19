@@ -130,6 +130,7 @@ export default defineHandler({
           : null;
         const jobValues: Record<string, unknown> = {
           url: identity.canonicalUrl,
+          url_hash: typeof existingJob?.url_hash === 'string' ? existingJob.url_hash : sha256(url),
           dedup_key: identity.dedupKey,
           dedup_version: 2,
           source: identity.source,

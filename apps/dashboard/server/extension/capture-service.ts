@@ -10,6 +10,7 @@ import {
 import { ObjectId } from 'mongodb';
 import { getCollection } from '../../lib/db.js';
 import { getEnv } from '../../lib/env.js';
+import { sha256 } from '../../lib/hash.js';
 import { normalizeLocationForStorage } from '../../lib/addresses.js';
 import { getReminderDefaultDays } from '../../lib/notification-settings.js';
 import { identifyJobPosting, isJobListUrl } from '../job-postings/url-identity.js';
@@ -151,6 +152,7 @@ export async function captureExtensionPage(userId: string, snapshot: ExtensionSn
     return {
       ...mutableFields,
       url: identity.canonicalUrl,
+      url_hash: typeof document?.url_hash === 'string' ? document.url_hash : sha256(snapshot.url),
       dedup_key: identity.dedupKey,
       dedup_version: 2,
       source: identity.source,
