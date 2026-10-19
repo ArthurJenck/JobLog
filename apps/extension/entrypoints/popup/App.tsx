@@ -81,22 +81,22 @@ export default function App() {
   }, [authToken]);
 
   const captureCurrentPage = async (target: 'save' | 'fixture', skipConsentCheck = false) => {
-    const authStatus = await browser.runtime.sendMessage({ type: 'JOBLOG_GET_AUTH_STATUS' }) as
-      | { authenticated?: boolean }
-      | undefined;
-    if (!authToken || !authStatus?.authenticated) {
-      await browser.runtime.sendMessage({ type: 'JOBLOG_OPEN_AUTH' });
-      window.close();
-      return;
-    }
-
-    if (!consentAccepted && !skipConsentCheck) {
-      setConsentIntent(target);
-      return;
-    }
-
-    setAction({ kind: 'working', label: 'Préparation de la page…' });
     try {
+      const authStatus = await browser.runtime.sendMessage({ type: 'JOBLOG_GET_AUTH_STATUS' }) as
+        | { authenticated?: boolean }
+        | undefined;
+      if (!authToken || !authStatus?.authenticated) {
+        await browser.runtime.sendMessage({ type: 'JOBLOG_OPEN_AUTH' });
+        window.close();
+        return;
+      }
+
+      if (!consentAccepted && !skipConsentCheck) {
+        setConsentIntent(target);
+        return;
+      }
+
+      setAction({ kind: 'working', label: 'Préparation de la page…' });
       const payload = await captureActiveTab();
       setAction({ kind: 'working', label: target === 'fixture' ? 'Envoi au test admin…' : 'Sauvegarde…' });
 

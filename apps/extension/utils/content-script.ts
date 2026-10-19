@@ -80,7 +80,7 @@ function createCaptureButton(options: CaptureButtonOptions): HTMLElement {
       font: 500 13px/1.2 system-ui, -apple-system, sans-serif;
       max-width: 220px;
       padding: 11px 16px;
-      white-space: nowrap;
+      white-space: normal;
     }
     button:disabled { cursor: default; opacity: .78; }
   `;
@@ -89,6 +89,7 @@ function createCaptureButton(options: CaptureButtonOptions): HTMLElement {
   button.type = 'button';
   button.textContent = '💼 Sauvegarder dans JobLog';
   button.addEventListener('click', async () => {
+    let failed = false;
     button.disabled = true;
     button.textContent = 'Préparation…';
 
@@ -137,12 +138,14 @@ function createCaptureButton(options: CaptureButtonOptions): HTMLElement {
         window.setTimeout(() => host.remove(), 2200);
       }
     } catch (error) {
+      failed = true;
+      console.error('[JobLog] Capture failed', error);
       button.textContent = formatButtonError(error);
     } finally {
       if (host.isConnected) {
         window.setTimeout(() => {
           button.disabled = false;
-          button.textContent = '💼 Sauvegarder dans JobLog';
+          if (!failed) button.textContent = '💼 Sauvegarder dans JobLog';
         }, 2400);
       }
     }
@@ -175,8 +178,8 @@ function getResultLabel(status: 'saved' | 'already_exists' | 'manual_required') 
 
 function formatButtonError(error: unknown) {
   const message = error instanceof Error ? error.message : '';
-  if (/connect|session|auth/i.test(message)) return 'Connexion requise';
-  return 'Erreur, réessayer';
+  if (/^(?:connectez-vous|votre session|non authentifié)/i.test(message)) return 'Connexion requise';
+  return message.slice(0, 120) || 'Erreur, réessayer';
 }
 
 function normalizeCaptureUrl(rawUrl?: string) {
