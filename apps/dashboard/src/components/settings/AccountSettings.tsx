@@ -6,6 +6,7 @@ import { isSoundEnabled, setSoundEnabled } from '@/lib/sound';
 import { useUser } from '@/hooks/use-user';
 import { useConfirm } from '@/hooks/useConfirm';
 import { ProfileForm } from './ProfileForm';
+import { AutomationAccess } from './AutomationAccess';
 
 export function AccountSettings() {
   const [isDeleting, setIsDeleting] = useState(false);
@@ -68,6 +69,7 @@ export function AccountSettings() {
           </p>
         </div>
       </div>
+      <AutomationAccess />
       <div className="rounded-lg border border-destructive/30 p-4 flex flex-col gap-3">
         <div>
           <p className="text-sm font-medium text-destructive">Zone de danger</p>

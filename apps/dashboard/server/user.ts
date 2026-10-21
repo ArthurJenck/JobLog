@@ -28,6 +28,7 @@ export default defineHandler({
         cvsCol.deleteMany({ userId }),
         getCollection('notification_settings').then((col) => col.deleteMany({ userId })),
         getCollection('extension_tokens').then((col) => col.deleteMany({ userId })),
+        getCollection('automation_tokens').then((col) => col.deleteMany({ userId })),
         getCollection('token_revocations').then((col) => col.insertOne({ userId, revokedAt: new Date() })),
         cvHashes.length
           ? getCollection('cv_analyses').then((col) => col.deleteMany({ userId, cvHash: { $in: cvHashes } }))
